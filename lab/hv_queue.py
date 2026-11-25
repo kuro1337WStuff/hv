@@ -22,6 +22,7 @@ LAB = Path(__file__).resolve().parent
 ROOT = LAB.parent
 RUNS = ROOT / 'build' / 'runs'
 DEFAULT_PROFILES = ('l2', 'cpuid', 'npt-write', 'npt-remap', 'npt-cross')
+STANDALONE_PROFILES = ('l1-handoff', 'l1-l2', 'l1-cpuid', 'l1-npt-write', 'l1-npt-remap')
 TERMINAL = {'COMPLETE', 'STOPPED', 'ATTENTION', 'ERROR'}
 
 
@@ -302,7 +303,9 @@ def run(args):
         raise ValueError('This lab requires Windows and Hyper-V.')
     manifest = read_limited(LAB / 'hv-profiles.json', 32768)
     registry = profile_registry(manifest)
-    profiles = args.profiles or DEFAULT_PROFILES
+    if args.suite and args.profiles:
+        raise ValueError('Choose either a suite or explicit profiles, not both.')
+    profiles = STANDALONE_PROFILES if args.suite == 'standalone' else (args.profiles or DEFAULT_PROFILES)
     if len(set(profiles)) != len(profiles) or any(not registry.get(p) for p in profiles):
         raise ValueError('Use each supported profile at most once: ' + ', '.join(p for p in registry if registry[p]))
     path = RUNS / uuid.uuid4().hex
@@ -361,6 +364,7 @@ def main():
     sub = parser.add_subparsers(dest='action', required=True)
     start = sub.add_parser('run', help='Stage and run profiles in order; stop on the first non-PASS.')
     start.add_argument('profiles', nargs='*', help='Ordered firmware profiles from lab/hv-profiles.json (default: ' + ', '.join(DEFAULT_PROFILES) + ').')
+    start.add_argument('--suite', choices=('standalone',), help='Run the ordered post-handoff regression batch: ' + ', '.join(STANDALONE_PROFILES))
     start.add_argument('--rebuild', action='store_true', help='Rebuild the selected firmware profiles before elevation.')
     mode = start.add_mutually_exclusive_group()
     mode.add_argument('--stage-only', action='store_true', help='Freeze the batch without starting a worker; print the command for an existing administrator PowerShell window.')
