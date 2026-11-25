@@ -4,7 +4,7 @@ Development host: Ryzen 9 9950X. Firmware runs use the `HV-SVM-L1` Hyper-V VM; h
 
 **Start here:** [Current status, feature trials and integration order](status.md). The entries below describe the integrated baseline through 041. Later feature evidence is published on `main` independently of its implementation; see [how trials are published](project-workflow.md).
 
-Latest: [073 · UART merge preview identity not established](trials/073.md), [074 · host lane preflight controls](trials/074.md), [075 · host fencing and STOP controls](trials/075.md). None booted a VM. [072 · PIC formatter diagnosis](trials/072.md) does not change the failed 068 guest result.
+Latest: [076 · UART EFI differences by field](trials/076.md). This host diagnosis retained both files and did not boot a VM. Prior: [073 · UART identity gate](trials/073.md), [074 · host lane preflight](trials/074.md), [075 · host fencing and STOP](trials/075.md). [072 · PIC formatter diagnosis](trials/072.md) does not change 068.
 
 ## 041 · 2026-11-25 · State, bounded exits, and timer wake after firmware handoff
 
