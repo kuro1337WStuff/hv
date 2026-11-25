@@ -3,6 +3,7 @@
 #include "fixed_vmcb.h"
 #include "linux_layout.h"
 #include "linux_media.h"
+#include "linux_input_gate.h"
 #include "fetch_walk.h"
 
 /* Reservation indices are L1 pages, not GPAs. Only LinuxRamFirst..LinuxStageFirst-1
@@ -99,7 +100,7 @@ static void linux_fetch_vmcb(UINT8 *vmcb, UINT64 entry)
 
 #include "fetch_fixture.h"
 
-static const char *linux_admit(UINT8 *base)
+static const char *linux_verified_admit(UINT8 *base, enum LinuxInput *bad)
 {
     enum { RsiSlot=4 };
     UINT8 *vmcb=base, *ram=base+LinuxRamFirst*LinuxPage, *media=linux_stage(base);
@@ -107,6 +108,8 @@ static const char *linux_admit(UINT8 *base)
     UINT64 frame[14];
     LinuxLayout layout;
     int cpu[4], precision;
+    *bad=linux_bad_input(media);
+    if (*bad!=LinuxInputOK) return "STAGED INPUT SHA256";
     __cpuid(cpu,(int)0x80000001u);
     if (!(cpu[3]&(1u<<20)) || !(__readmsr(MSR_EFER)&(1u<<11))) return "NX REQUIRED";
     __stosb(base+LinuxIoFirst*LinuxPage,0xff,5*LinuxPage);
@@ -149,5 +152,20 @@ static const char *linux_admit(UINT8 *base)
     for (UINTN i=0; i<14; ++i)
         if (frame[i]!=(UINT64)(i==RsiSlot ? LinuxParams : 0)) return "ADMIT GPR STATE";
     return NULL;
+}
+
+#ifdef HV_INPUT_TEST
+extern volatile unsigned linux_vmrun_count; /* incremented immediately before VMRUN */
+#include "linux_input_trial.h"
+#endif
+
+static const char *linux_admit(UINT8 *base)
+{
+#ifdef HV_INPUT_TEST
+    return linux_input_trial(base);
+#else
+    enum LinuxInput bad;
+    return linux_verified_admit(base,&bad);
+#endif
 }
 #endif

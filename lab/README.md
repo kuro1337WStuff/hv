@@ -55,6 +55,8 @@ Before `ExitBootServices`, L1 reads the fixed guest files from its own boot volu
 
 The admission image first measures fault-address precision using three fresh VMCBs and nonidentity guest mappings. Two instruction offsets share a page, then the first offset is used on a different page. L1 independently walks the guest tables; raw `EXITINFO2` must consistently be either the exact walked byte GPA or exactly its 4 KiB page base in all three arms. A different offset on the right page is not accepted. The Linux arm must match the independently established mode, retain its exact entry RIP and satisfy the original fault-cause, register, full-NPT and guard checks. This is a nested configuration measurement, not a universal AMD reporting rule.
 
+`l1-linux-inputs` tests the post-handoff integrity gate with the same pinned media. Run `python lab/hv_queue.py run --session --rebuild l1-linux-inputs`. L1 flips one bit in its private staging buffer for the kernel, initramfs and command line in turn, restoring that byte before touching the next input. Each trial calls the real SHA-256 admission path and must identify the modified file (IDs 1, 2, 3) without issuing `VMRUN`. The restored set (ID 0) must reach the three control fetches and the Linux-entry fetch, all NX, for exactly four attempts. Neither the ISO nor any host file is modified by L1. This checks staged data against pins compiled into this firmware; it does not attest the firmware itself.
+
 For a host-only layout check, use an x64 Visual Studio Developer Command Prompt at the repository root:
 
 ```cmd

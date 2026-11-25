@@ -1,5 +1,11 @@
 option casemap:none
 
+IFDEF HV_INPUT_TEST
+.data
+PUBLIC linux_vmrun_count
+linux_vmrun_count DWORD 0
+ENDIF
+
 .code
 PUBLIC RunGprGuest
 ; Microsoft x64: RCX = VMCB PA, RDX = UINT64 frame[14]. VMRUN switches
@@ -41,6 +47,9 @@ RunGprGuest PROC FRAME
     mov r14, [rdx+12*8]
     mov r15, [rdx+13*8]
     mov rdx, [rdx+2*8]           ; load last: RDX was the frame pointer
+IFDEF HV_INPUT_TEST
+    inc linux_vmrun_count        ; BSP-only trial: count attempts at the instruction site
+ENDIF
     vmrun rax
     mov rax, [rsp]               ; VMRUN restored host RSP; guest RAX is in VMCB
     mov [rax+0*8], rbx

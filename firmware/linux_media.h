@@ -35,8 +35,8 @@ static const char *linux_read_file(EFI_FILE_PROTOCOL *root, CHAR16 *name,
     return error;
 }
 
-/* Boot-services phase only. Content is pinned by linux_media.py; this assumes
- * its frozen read-only ISO, not arbitrary mutable media of the same lengths. */
+/* Boot-services phase: stage exact file lengths. linux_verified_admit hashes
+ * the retained bytes again after handoff, before any guest entry. */
 static const char *linux_read_media(EFI_HANDLE image, EFI_SYSTEM_TABLE *st, UINT8 *stage)
 {
     EFI_GUID image_guid = EFI_LOADED_IMAGE_PROTOCOL_GUID;

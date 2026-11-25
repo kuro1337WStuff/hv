@@ -11,6 +11,10 @@ set "CPUID_OBJ="
 set "CROSS_PROFILE="
 set "EXTRA_ASM="
 set "EXTRA_OBJS="
+set "EXTRA_ASM_FLAGS="
+set "LINUX_MEDIA="
+if /i "%~1"=="l1-linux-admission" set "LINUX_MEDIA=1"
+if /i "%~1"=="l1-linux-inputs" set "LINUX_MEDIA=1"
 if /i "%~1"=="l2" (
   set "SRC=l2_smoke"
   set "EFI=L2SMOKE"
@@ -58,7 +62,7 @@ if /i "%~1"=="l2" (
   set "ASM_OBJ=build\l1_package_handoff.obj"
   set "ASM_SRC=firmware\l1_handoff.asm"
   set "EXTRA_ASM=vcpu_fpstate cpuid_resume exception_ud vcpu_gpr pkg_devices"
-) else if /i "%~1"=="l1-linux-admission" (
+) else if defined LINUX_MEDIA (
   set "SRC=l1_handoff"
   set "EFI=L1LXADMIT"
   set "ISO=hv-l1-linux-admission"
@@ -66,6 +70,12 @@ if /i "%~1"=="l2" (
   set "ASM_OBJ=build\linux_handoff.obj"
   set "ASM_SRC=firmware\l1_handoff.asm"
   set "EXTRA_ASM=vcpu_gpr"
+  if /i "%~1"=="l1-linux-inputs" (
+    set "EFI=L1LXINPUT"
+    set "ISO=hv-l1-linux-inputs"
+    set "CASE_FLAGS=/DHV_STANDALONE_L2 /DHV_LINUX_ADMISSION /DHV_INPUT_TEST"
+    set "EXTRA_ASM_FLAGS=/DHV_INPUT_TEST"
+  )
 ) else if /i "%~1"=="cpuid" (
   set "SRC=l2_smoke"
   set "EFI=CPUIDRES"
@@ -179,7 +189,7 @@ if defined CPUID_OBJ (
 for %%s in (%EXTRA_ASM%) do call :extra_asm %%s || exit /b 1
 cl /nologo /c /TC /std:c11 /O1 /GS- /Zl /W4 /WX %CASE_FLAGS% /I"%INC_EDK%\X64" /I"%INC_EDK%" /Fobuild\%EFI%.obj firmware\%SRC%.c || exit /b 1
 link /nologo /nodefaultlib /incremental:no /machine:x64 /subsystem:efi_application /entry:EfiMain /out:build\%EFI%.EFI build\%EFI%.obj %ASM_OBJ% %CPUID_OBJ% %EXTRA_OBJS% || exit /b 1
-if /i "%~1"=="l1-linux-admission" (
+if defined LINUX_MEDIA (
   "%PACK%" firmware\linux_media.py build\%EFI%.EFI build\%ISO%.iso || exit /b 1
 ) else (
   "%PACK%" firmware\pack_iso.py build\%EFI%.EFI build\%ISO%.iso || exit /b 1
@@ -192,6 +202,6 @@ echo Built build\%ISO%.iso
 popd
 exit /b 0
 :extra_asm
-ml64 /nologo /c /I"%~dp0." /Fo"build\pkg_%1.obj" "firmware\%1.asm" || exit /b 1
+ml64 /nologo /c %EXTRA_ASM_FLAGS% /I"%~dp0." /Fo"build\pkg_%1.obj" "firmware\%1.asm" || exit /b 1
 set "EXTRA_OBJS=%EXTRA_OBJS% build\pkg_%1.obj"
 exit /b 0

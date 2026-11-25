@@ -26,6 +26,9 @@ static UINT32 width, height, pitch;
 #ifdef HV_PACKAGE
 #define LOG_ROWS 42u
 #define LOG_Y(i) (80u + 16u * (i))
+#elif defined(HV_INPUT_TEST)
+#define LOG_ROWS 33u /* run 044 rows plus bad input ID and entry count for four arms */
+#define LOG_Y(i) (80u + 16u * (i))
 #elif defined(HV_LINUX_ADMISSION)
 #define LOG_ROWS 25u /* handoff, three five-field controls, nine Linux observations */
 #elif defined(HV_STANDALONE_L2) && defined(HV_NPT_WRITE)
@@ -199,6 +202,8 @@ __declspec(noreturn) static void fail(const char *reason)
     L1DisableInterrupts();
 #ifdef HV_PACKAGE
     screen("L1 PACKAGE FAIL", reason, 0xff00ff);
+#elif defined(HV_INPUT_TEST)
+    screen("L1 STAGED INPUT FAIL", reason, 0xff00ff);
 #elif defined(HV_LINUX_ADMISSION)
     screen("L1 LINUX ADMISSION FAIL", reason, 0xff00ff);
 #elif defined(HV_STANDALONE_L2) && defined(HV_NPT_WRITE)
@@ -259,7 +264,11 @@ __declspec(noreturn) void L1OwnedMain(void)
 #ifdef HV_LINUX_ADMISSION
     const char *reason=run_standalone_l2(reservation);
     if (reason) fail(reason);
+#ifdef HV_INPUT_TEST
+    screen("L1 STAGED INPUT PASS", "FETCH DENIED: NO LINUX BOOT", 0x00ff00);
+#else
     screen("L1 LINUX ADMISSION PASS", "FETCH DENIED: NO LINUX BOOT", 0x00ff00);
+#endif
 #else
     StandaloneSample sample;
     const char *reason = run_standalone_l2(reservation, &sample);
