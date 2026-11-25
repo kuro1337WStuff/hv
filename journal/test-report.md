@@ -281,3 +281,16 @@ The L1 bootstrap processor entered on its own stack after `ExitBootServices`. It
 The framebuffer reported `L1 L2 PASS`: `EXITCODE=0x78`, `RIP=0x1003`, `RAX=0x4C32`. All three match the predeclared acceptance criteria. The VMCB started with an invalid exit code and zero RAX: a boot or an immediate exit before the MOV would not satisfy the test. AMD64 APM Vol. 2 §§15.5.1, 15.6 and Appendix B describe the entry, exit and saved guest fields.
 
 Scope: one fixed real-mode guest, one `VMRUN`, no guest stack access, device I/O, resume, or physical deployment. Evidence is the returned framebuffer, not a guest serial message. The original UEFI `l2` profile was separately rebuilt against the shared VMCB setup but not booted in this run.
+
+### 038 · 2026-11-25 local · Standalone L1 CPUID resume
+
+**Firmware PASS; queue ATTENTION for first-time screen review.** `python lab/hv_queue.py run --session --rebuild l1-cpuid` on the Ryzen 9 9950X nested Hyper-V lab. Source `3e7c65f571`; batch `95b14e7287ef42c78c218c550afecd16`; ISO SHA-256 `D8F7DBD2DF86F8CEE6D93CC13F03D60B2ED228CD999DAEE836D29444DC6F14C7`. The worker checkpointed the run 037 `l1-l2` PASS and captured the [new framebuffer](images/l1-cpuid-038.png). It did not report queue COMPLETE.
+
+| Entry | Observed exit | Saved RIP | Guest result |
+| --- | --- | --- | --- |
+| 1 | CPUID `0x72` | `0x100C` | Leaf `0x400000FE`, subleaf `7`; reported next RIP `0x100E` |
+| 2 | HLT `0x78` | `0x1037` | RAX `0x50415353` at the success halt |
+
+L1 supplied EAX=`0x11223344`, EBX=`0x55667788`, ECX=`0x99AABBCC`, EDX=`0xDDEEFF00` without changing the guest mapping or ASID. The guest compared all four 32-bit registers after resume. A mismatch would set `0x4641494C` and halt at a different address; L1 requires the success address **and** marker. The framebuffer reported two entries. AMD64 APM Vol. 2 §15.7.1 describes the exit state used here.
+
+Scope: one fixed request on one post-handoff vCPU using the reported next RIP. No general CPUID policy, no test of the no-nRIP fallback, and no physical 9950X3D boot. The original UEFI `cpuid` profile rebuilt against the shared handler but was not booted in this run.

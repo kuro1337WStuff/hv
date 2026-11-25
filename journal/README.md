@@ -2,6 +2,14 @@
 
 Development host: Ryzen 9 9950X. Firmware runs use the `HV-SVM-L1` Hyper-V VM; host-only checks are labeled separately. Neither qualifies the 9950X3D deployment target on bare metal.
 
+## 038 · 2026-11-25 · L2 consumes a CPUID reply after standalone L1 resumes it
+
+**Passed in `HV-SVM-L1`.** After `ExitBootServices`, L1 intercepted the guest's fixed CPUID request at `0x100C` and used the reported next RIP, `0x100E`, to resume the same vCPU. L2 compared EAX, EBX, ECX and EDX against four distinct constants. Only the matching path could set the `PASS` marker and reach the halt at `0x1037`; seeing a second exit alone was not enough.
+
+![Standalone L1 framebuffer showing the CPUID request, two entries, and the guest's success halt](images/l1-cpuid-038.png)
+
+The [test record](test-report.md#038--2026-11-25-local--standalone-l1-cpuid-resume) includes the command, media hash and both exits. The fixed-length fallback for CPUs without next-RIP reporting was not exercised.
+
 ## 037 · 2026-11-25 · The standalone L1 launches its first L2 guest
 
 **Passed in `HV-SVM-L1`.** After leaving UEFI boot services, L1 used its own arena to build the VMCB and nested page tables. It mapped just one read-only guest page at `0x1000`. L2 set AX to `0x4C32` and halted. L1 regained control and read the marker from the VMCB, with the saved RIP pointing at the `HLT` instruction itself.
