@@ -52,3 +52,14 @@ Source: [`ff5f1867c8`](https://github.com/kuro1337WStuff/hv/commit/ff5f1867c85f8
 | Same frame, read-only | Final-data write protection fault at the store; target remains `0x5A` | Exit `0x400`, RIP `0x1000`, `EXITINFO1=0x100000007`, `EXITINFO2=0x2000`, byte `0x5A` |
 
 L1 restored the initial byte, cleared the data leaf's write bit and requested a full TLB flush before the second entry. The code page remained read-only in both arms. [Console capture](images/npt-write-007.png). This tests a permission change on one vCPU, not frame replacement, remote invalidation or bare metal.
+
+### 008 · 2026-11-24 · Replace the backing frame at a fixed GPA
+
+**PASS · nested SVM, Hyper-V on Ryzen 9 9950X.** Source [`152f15cc21`](https://github.com/kuro1337WStuff/hv/commit/152f15cc21ae0b937cad1503cf4a9d941781aaad); tested `hv-npt-remap.iso` SHA-256 `5188b63f9b155176e9971dcb3588f1410bcb77102541227eb85bcbf6c856d248`. Build `firmware\build.cmd npt-remap`; with the isolated VM off, run `.\lab\Boot-HvProbe.ps1 -NptRemap` in elevated PowerShell.
+
+| Read from GPA `0x2000` | Expected guest RAX | Observed guest RAX | Observed exit / RIP |
+| --- | --- | --- | --- |
+| Before remap: frame A | `0xA11A` | `0xA11A` | HLT `0x78` / `0x1003` |
+| After remap: frame B | `0xB22B` | `0xB22B` | HLT `0x78` / `0x1003` |
+
+The guest instruction, ASID, nested root and read-only permissions stayed fixed. Both markers were initialized before entry; guest RAX was cleared before each load. L1 requested the conservative full flush (`TLB_CONTROL=1`) on entry. [VM console](images/npt-remap-008.png). This does not test a selective flush, cross-vCPU invalidation or the physical 9950X3D.
