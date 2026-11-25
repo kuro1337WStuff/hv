@@ -4,6 +4,10 @@
 #include <string.h>
 #include "../../firmware/pit_pic.h"
 
+/* The guest IDT gate and the queued interrupt both use this alias; they
+ * could agree on the wrong chip's vector. Pin the IRQ0 wire value here. */
+_Static_assert(PIT_PIC_VECTOR == 0x30, "IRQ0 must use master vector 0x30");
+
 #define CHECK(expr) do { if (!(expr)) { \
     fprintf(stderr, "line %d: %s\n", __LINE__, #expr); exit(EXIT_FAILURE); \
 } } while (0)
