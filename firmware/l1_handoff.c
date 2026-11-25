@@ -215,6 +215,8 @@ __declspec(noreturn) static void fail(const char *reason)
     screen("L1 CR4 GP FAIL", reason, 0xff00ff);
 #elif defined(HV_CPU_CONTRACT)
     screen("L1 CPU CONTRACT FAIL", reason, 0xff00ff);
+#elif defined(HV_UART_THRE)
+    screen("L1 UART THRE FAIL", reason, 0xff00ff);
 #elif defined(HV_SERIAL_CONTRACT)
     screen("L1 SERIAL CONTRACT FAIL", reason, 0xff00ff);
 #elif defined(HV_TICK_CONTRACT)
@@ -303,7 +305,9 @@ __declspec(noreturn) void L1OwnedMain(void)
 #elif defined(HV_STANDALONE_CONTRACT)
     const char *reason=run_standalone_l2(reservation);
     if (reason) fail(reason);
-#ifdef HV_SERIAL_CONTRACT
+#ifdef HV_UART_THRE
+    screen("L1 UART THRE PASS", "MODELED IRQ4 LINE: NO DELIVERY", 0x00ff00);
+#elif defined(HV_SERIAL_CONTRACT)
     screen("L1 SERIAL CONTRACT PASS", "POLLED COM1: FIXED GUEST", 0x00ff00);
 #elif defined(HV_TICK_CONTRACT)
     screen("L1 PIT IRQ0 PASS", "TWO IRQ0: SPECIFIC PIC EOI", 0x00ff00);

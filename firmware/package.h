@@ -42,6 +42,9 @@ static void pkg_reset(UINT8 *vmcb)
 #define HV_GUEST_IDT
 #include "long_guest.h"
 #include "cr4_gp.h"
+#elif defined(HV_UART_THRE)
+#include "long_guest.h"
+#include "uart_thre.h"
 #elif defined(HV_SERIAL_CONTRACT)
 #include "long_guest.h"
 #include "serial_contract.h"
