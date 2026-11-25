@@ -39,6 +39,16 @@ static void ud_run(UINT8 *vmcb, UdTrace *trace)
     __svm_vmrun((UINTN)vmcb); /* RIP still names UD2, never the instruction after it. */
 }
 
+static BOOLEAN ud_passed(UINT8 *vmcb, const UdTrace *trace)
+{
+    volatile UdEvidence *e=(volatile UdEvidence *)(vmcb+GuestStack*EFI_PAGE_SIZE);
+    return trace->injection==0x80000306u && e->count==1 && e->fault_ip==trace->first_ip &&
+           e->phase==3 && FIELD(UINT64,ExitCode)==UdHltExit &&
+           FIELD(UINT64,Rip)==FixedGuestGpa+UdLayout.pass && FIELD(UINT64,Rsp)==LongInitialRsp &&
+           FIELD(UINT64,Rax)==0x50415353;
+}
+
+#ifndef HV_PACKAGE
 static void ud_report(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *out, UINT8 *vmcb, const UdTrace *trace)
 {
     volatile UdEvidence *e=(volatile UdEvidence *)(vmcb+GuestStack*EFI_PAGE_SIZE);
@@ -52,14 +62,12 @@ static void ud_report(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *out, UINT8 *vmcb, const U
     hex(out,L"Final RIP: ",FIELD(UINT64,Rip));
     hex(out,L"Final RSP: ",FIELD(UINT64,Rsp));
     hex(out,L"Final RAX: ",FIELD(UINT64,Rax));
-    if (trace->injection==0x80000306u && e->count==1 && e->fault_ip==trace->first_ip &&
-        e->phase==3 && FIELD(UINT64,ExitCode)==UdHltExit &&
-        FIELD(UINT64,Rip)==FixedGuestGpa+UdLayout.pass && FIELD(UINT64,Rsp)==LongInitialRsp &&
-        FIELD(UINT64,Rax)==0x50415353) {
+    if (ud_passed(vmcb,trace)) {
         out->OutputString(out,L"PASS: #UD delivered once; IRETQ resumed after UD2.\r\n");
     } else {
         out->OutputString(out,L"FAIL: #UD intercept, exception frame or return mismatch.\r\n");
     }
 }
+#endif
 
 #endif

@@ -23,7 +23,10 @@ static UINTN arena_used;
 static __declspec(align(16)) UINT8 map_storage[128 * 1024];
 static volatile UINT32 *pixels;
 static UINT32 width, height, pitch;
-#if defined(HV_STANDALONE_L2) && defined(HV_NPT_WRITE)
+#ifdef HV_PACKAGE
+#define LOG_ROWS 42u
+#define LOG_Y(i) (80u + 16u * (i))
+#elif defined(HV_STANDALONE_L2) && defined(HV_NPT_WRITE)
 #define LOG_ROWS 11u  /* HANDOFF and ten sampled values */
 #define NPT_INFO_LABEL "EXITINFO1 "
 #elif defined(HV_STANDALONE_L2) && defined(HV_NPT_REMAP)
@@ -34,7 +37,9 @@ static UINT32 width, height, pitch;
 #else
 #define LOG_ROWS 4u
 #endif
+#ifndef LOG_Y
 #define LOG_Y(i) (80u + 20u * (i))
+#endif
 static const char *log_lines[LOG_ROWS];
 static unsigned logged;
 
@@ -96,7 +101,9 @@ static int use_gop(EFI_GRAPHICS_OUTPUT_PROTOCOL *gop)
     EFI_GRAPHICS_OUTPUT_MODE_INFORMATION *i = m->Info;
     if (i->Version != 0 || (i->PixelFormat != PixelBlueGreenRedReserved8BitPerColor &&
         i->PixelFormat != PixelRedGreenBlueReserved8BitPerColor)) return 0;
-#if defined(HV_STANDALONE_L2) && defined(HV_NPT_WRITE)
+#ifdef HV_PACKAGE
+    if (i->HorizontalResolution < 20u + 12u * 32u) return 0;
+#elif defined(HV_STANDALONE_L2) && defined(HV_NPT_WRITE)
     if (i->HorizontalResolution < 20u + 12u * (sizeof(NPT_INFO_LABEL) - 1u + 16u)) return 0;
 #elif defined(HV_STANDALONE_L2) && defined(HV_NPT_REMAP)
     if (i->HorizontalResolution < 20u + 12u * (sizeof(REMAP_BACKING_LABEL) - 1u + 16u)) return 0;
@@ -188,7 +195,9 @@ static void log_hex(char *line, const char *label, UINT64 value)
 __declspec(noreturn) static void fail(const char *reason)
 {
     L1DisableInterrupts();
-#if defined(HV_STANDALONE_L2) && defined(HV_NPT_WRITE)
+#ifdef HV_PACKAGE
+    screen("L1 PACKAGE FAIL", reason, 0xff00ff);
+#elif defined(HV_STANDALONE_L2) && defined(HV_NPT_WRITE)
     screen("L1 NPT WRITE FAIL", reason, 0xff00ff);
 #elif defined(HV_STANDALONE_L2) && defined(HV_NPT_REMAP)
     screen("L1 NPT REMAP FAIL", reason, 0xff00ff);
@@ -203,6 +212,23 @@ __declspec(noreturn) static void fail(const char *reason)
 #endif
     L1Halt();
 }
+
+#ifdef HV_PACKAGE
+static void pkg_observe(const char *label, UINT64 value)
+{
+    static char lines[LOG_ROWS][12 + 16 + 1];
+    UINTN len=0;
+    while (label[len] && len<12) ++len;
+    if (label[len] || logged>=LOG_ROWS) fail("OBSERVATION LIMIT");
+    log_hex(lines[logged],label,value);
+}
+
+static void pkg_text(const char *text)
+{
+    if (logged>=LOG_ROWS) fail("OBSERVATION LIMIT");
+    log_lines[logged++]=text;
+}
+#endif
 
 /* Only whole pages from the reserved arena; the adjacent stack is excluded.
  * A rejected request cannot change the cursor, including for huge counts. */
@@ -226,7 +252,11 @@ __declspec(noreturn) void L1OwnedMain(void)
     if (!reservation || (UINTN)reservation != owned_base || arena_used != ARENA_PAGES) fail("ARENA");
     StandaloneSample sample;
     const char *reason = run_standalone_l2(reservation, &sample);
-#ifdef HV_NPT_WRITE
+#ifdef HV_PACKAGE
+    pkg_observe("COMPLETED ", sample.completed);
+    if (reason) fail(reason);
+    screen("L1 PACKAGE PASS", NULL, 0x00ff00);
+#elif defined(HV_NPT_WRITE)
     static char lines[LOG_ROWS - 1][sizeof(NPT_INFO_LABEL) + 16];
     unsigned n = 0;
     log_hex(lines[n++], "RW EXIT ", sample.rw_exit);

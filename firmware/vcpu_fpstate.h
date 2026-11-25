@@ -169,6 +169,7 @@ static void fp_run(UINT8 *vmcb, FpTrace *t)
     }
 }
 
+#ifndef HV_PACKAGE
 /* Fixed-width hex, no formatting library or full-bank console dump. */
 static void fp_word(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *out, UINT64 v, UINTN digits)
 {
@@ -210,4 +211,5 @@ static void fp_report(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *out, UINT8 *vmcb, const F
         out->OutputString(out,L"FAIL: legacy vCPU context or checkpoint mismatch.\r\n");
     }
 }
+#endif /* !HV_PACKAGE */
 #endif

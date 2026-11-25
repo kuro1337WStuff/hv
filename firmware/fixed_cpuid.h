@@ -27,19 +27,22 @@ static UINT64 cpuid_ip(const UINT8 *label)
     return FixedGuestGpa+((UINTN)label-(UINTN)L2Start);
 }
 
+static const char cpuid_bad_request[]="CPUID REQUEST";
+
 /* Caller owns host save/restore. No loops, no native CPUID forwarding. */
 static const char *fixed_cpuid_run(UINT8 *vmcb, CpuidSample *s)
 {
     CpuidFrame frame={0,0,0};
+    s->entries=0;
     RunCpuidGuest((UINTN)vmcb,&frame);
-    s->entries=1;
+    ++s->entries;
     s->first_exit=s->exitcode=FIELD(UINT64,ExitCode);
     s->first_rip=s->rip=FIELD(UINT64,Rip);
     s->leaf=s->rax=FIELD(UINT64,Rax);
     s->subleaf=frame.cx;
     if (s->first_exit!=0x72) return "EXPECTED CPUID";
     if (s->first_rip!=cpuid_ip(L2Cpuid)) return "CPUID RIP";
-    if (s->leaf!=0x400000fe || s->subleaf!=7) return "CPUID REQUEST";
+    if (s->leaf!=0x400000fe || s->subleaf!=7) return cpuid_bad_request;
     s->resume_rip=s->nrips ? FIELD(UINT64,NextRip) : s->first_rip+2;
     if (s->resume_rip!=cpuid_ip(L2AfterCpuid)) return "CPUID RESUME RIP";
 
@@ -49,7 +52,7 @@ static const char *fixed_cpuid_run(UINT8 *vmcb, CpuidSample *s)
     FIELD(UINT8,TlbControl)=0; /* same ASID and unchanged mappings */
     FIELD(UINT64,ExitCode)=~0ull;
     RunCpuidGuest((UINTN)vmcb,&frame);
-    s->entries=2;
+    ++s->entries;
     s->exitcode=FIELD(UINT64,ExitCode);
     s->rip=FIELD(UINT64,Rip);
     s->rax=FIELD(UINT64,Rax);

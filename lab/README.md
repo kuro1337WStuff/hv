@@ -42,6 +42,13 @@ For a manual handoff instead, `run --stage-only` builds/stages without starting 
 
 `l1-npt-remap` tests a backing-frame change after `ExitBootServices`. Run `python lab/hv_queue.py run --session --rebuild l1-npt-remap`. On the same vCPU, the same load from GPA `0x2000` must return `0xA11A` from frame A, then `0xB22B` from frame B after remapping and requesting a full local translation flush. Both entries must reach the same `HLT`; both backing words must remain intact. The mapping stays read-only throughout.
 
+`l1-package` runs four dependent checks after firmware handoff in one boot. Use `python lab/hv_queue.py run --session --rebuild l1-package`. A fresh VMCB and guest mappings separate each fixture; the first mismatch prevents the next fixture from running. Require all four, not just the title:
+
+1. A 64-bit guest changes its integer and legacy FP state at `VMMCALL`. After resume, guest SSE and x87 calculations must return 1 and 12; L1's independent register bank must survive both exits. No AVX/XSAVE claim.
+2. An unsupported CPUID request must stop at the CPUID instruction on the first entry. A separate `UD2` guest must take one injected fault, return past `UD2`, and reach a success HLT.
+3. An L2 store at `0x2FFF` must succeed; the next at `0x3000` must fault without modifying the adjacent private backing. L1 checks the entire four-level NPT against the allowed frame list before and after entry.
+4. Check deferred and priority-masked interrupts, virtual timer expiry following HLT, and byte-at-a-time output from L2 to a virtual UART. The captured guest marker must accompany the independent post-wake guest halt; there is no host port passthrough. This fixture's interrupt acknowledgement is not a PC interrupt-controller implementation.
+
 `npt-cross` uses its own two-processor L1 payload. Rebuild with `firmware\build.cmd npt-cross`, then run `python lab/hv_queue.py run npt-cross`. The builder caches hash-pinned Limine v8 UEFI loader/header and Zig 0.13 tools under `build/tools`; first build needs network access. Other profiles remain UEFI applications. The cross test is read-only with respect to guest disks: it exits boot services via Limine, measures both local APIC IDs, runs four fixed L2 loads and halts on its evidence screen. Do not install this lab image as a host bootloader.
 
 `npt-broadcast` is opt-in. It uses the two-processor L1 harness to request one synchronous Hyper-V flush of nested GPA translations for the selected NPT root across all processors. This is not a native `INVLPGB` test. Run `python lab/hv_queue.py run --rebuild npt-broadcast` to build and boot it. Only the [reviewed PASS screen](../journal/images/npt-broadcast-017.png) is accepted; the worker stops for inspection on any other display.

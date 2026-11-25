@@ -2,7 +2,9 @@
 #define HV_STANDALONE_L2_H
 #include "fixed_vmcb.h"
 
-#ifdef HV_NPT_WRITE
+#ifdef HV_PACKAGE
+#include "package.h"
+#elif defined(HV_NPT_WRITE)
 #include "fixed_npt_write.h"
 enum { StandaloneGuestPages=Data+1 };
 typedef struct {
@@ -65,7 +67,9 @@ static const char *run_standalone_l2(void *reservation, StandaloneSample *sample
     UINTN base=(UINTN)reservation;
     UINT8 *vmcb=(UINT8 *)reservation;
     int r[4];
-#ifdef HV_NPT_WRITE
+#ifdef HV_PACKAGE
+    sample->completed=0;
+#elif defined(HV_NPT_WRITE)
     __stosb((UINT8 *)sample,0,sizeof(*sample));
     sample->rw_exit=sample->ro_exit=~0ull;
 #elif defined(HV_NPT_REMAP)
@@ -105,6 +109,9 @@ static const char *run_standalone_l2(void *reservation, StandaloneSample *sample
     UINT64 efer=__readmsr(MSR_EFER);
     if (efer & SVME) return "SVM IN USE";
 
+#ifdef HV_PACKAGE
+    __stosb(vmcb+HostSave*EFI_PAGE_SIZE,0,EFI_PAGE_SIZE);
+#else
     __stosb(vmcb,0,Iopm*EFI_PAGE_SIZE);
     __stosb(vmcb+Iopm*EFI_PAGE_SIZE,0xff,(Pages-Iopm)*EFI_PAGE_SIZE);
     build_fixed_npt((FixedNpt *)(vmcb+Pml4*EFI_PAGE_SIZE),base+Pml4*EFI_PAGE_SIZE,base+Code*EFI_PAGE_SIZE);
@@ -124,13 +131,16 @@ static const char *run_standalone_l2(void *reservation, StandaloneSample *sample
     FIELD(UINT32,Intercepts)|=1u<<18;
 #endif
     fixed_real_mode_state(vmcb);
+#endif
 
     UINT64 cr2=__readcr2(), dr6=__readdr(6), dr7=__readdr(7);
     __writemsr(MSR_EFER,efer|SVME);
     UINT64 hsave=__readmsr(MSR_HSAVE);
     __svm_clgi();
     __writemsr(MSR_HSAVE,base+HostSave*EFI_PAGE_SIZE);
-#ifdef HV_CPUID_RESUME
+#ifdef HV_PACKAGE
+    const char *error=pkg_run(vmcb,sample);
+#elif defined(HV_CPUID_RESUME)
     const char *error=fixed_cpuid_run(vmcb,sample);
 #elif defined(HV_NPT_WRITE)
     const char *error=standalone_store_run(vmcb,sample);
@@ -146,7 +156,7 @@ static const char *run_standalone_l2(void *reservation, StandaloneSample *sample
     __svm_stgi();
     __writemsr(MSR_EFER,efer);
 
-#if defined(HV_CPUID_RESUME) || defined(HV_NPT_WRITE) || defined(HV_NPT_REMAP)
+#if defined(HV_PACKAGE) || defined(HV_CPUID_RESUME) || defined(HV_NPT_WRITE) || defined(HV_NPT_REMAP)
     return error;
 #else
     sample->exitcode=FIELD(UINT64,ExitCode);
