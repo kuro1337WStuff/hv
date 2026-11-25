@@ -24,6 +24,14 @@ cl /nologo /std:c11 /W4 /WX /TC lab\tests\pit_pic_test.c /Fo"%TEMP%\pit_pic_test
 
 [065](../journal/runs/065-l1-pit-irq0.md) observed two IRQ0 entries and EOIs and one wake on the earlier guest fixture, **not** a guest ICW sequence on this tree. [068](https://github.com/kuro1337WStuff/hv/blob/3dc7e8b23103bfddcf568c708104f88660d5920a/journal/trials/068.md) remains FAIL/ATTENTION: the final refusal receipts for both chip states, cookie and entry count were not visible. [072](https://github.com/kuro1337WStuff/hv/blob/3dc7e8b23103bfddcf568c708104f88660d5920a/journal/trials/072.md) isolated label width, not row exhaustion, using host-supplied values. None of these host controls supplies the missing guest receipts or shows Linux selected a PIC.
 
+### Shared input pulses for PIT channels 0 and 2
+
+[`PitShared`](../firmware/pit_shared.h) accepts the same absolute count of completed PIT pulses for both channels. Reads and writes never advance time. The [host test](tests/pit_shared_test.c) interleaves channel-2 calibration reads and gate changes with channel-0 clockevents; it does not execute Linux, measure TSC frequency or inject interrupts. From the same Developer Command Prompt:
+
+```bat
+cl /nologo /O2 /std:c11 /W4 /WX /TC lab\tests\pit_shared_test.c /Fo"%TEMP%\pit_shared_test.obj" /Fe"%TEMP%\pit_shared_test.exe" && "%TEMP%\pit_shared_test.exe"
+```
+
 ### One launch for a supervised session
 
 From the checkout, run **once** and approve the Windows elevation prompt:
