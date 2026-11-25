@@ -1,0 +1,10 @@
+/build/
+/Vault
+/lab/machines/
+/lab/media/
+*.log
+*.iso
+*.vhd
+*.vhdx
+*.avhdx
+__pycache__/
