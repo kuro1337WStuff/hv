@@ -2,6 +2,14 @@
 
 Development host: Ryzen 9 9950X. Firmware runs use the `HV-SVM-L1` Hyper-V VM; host-only checks are labeled separately. Neither qualifies the 9950X3D deployment target on bare metal.
 
+## 028 · 2026-11-25 · Host and guest retain separate XMM registers
+
+**Run 028 passed in `HV-SVM-L1`.** L2 checked both halves of XMM0–XMM15 on entry, wrote a different pattern, and exited through `VMMCALL`. On resume it found its own updated values, not the host's values or its initial pattern. It then wrote a third pattern and reached its success HLT. L1 sampled its live registers after each return: all 32 lanes matched its own pattern for that entry.
+
+![VM console showing the VMMCALL and HLT exits with distinct guest and restored host values for XMM15.high](images/vcpu-xmm-028.png)
+
+Reproduce with `python lab/hv_queue.py run --rebuild vcpu-xmm`. The [test record](test-report.md#028--2026-11-25-local--legacy-xmm-register-preservation) includes the measured lane values and the scope of the result.
+
 ## 027 · 2026-11-24 · The guest handles an invalid opcode and returns
 
 **Run 027 passed in `HV-SVM-L1`.** L2 executed `UD2` at `0x100C`. L1 intercepted `#UD` and delivered vector 6 without advancing the guest RIP. The guest handler ran once and found `0x100C` on its exception stack, not the address after the fault. Only the handler moved that saved address past the two-byte `UD2`. After `IRETQ`, L2 checked its restored stack and reached the success halt at `0x104F`.

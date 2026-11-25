@@ -202,3 +202,16 @@ The only interrupt-control change on resume was the priority threshold. AMD64 AP
 | Return past the fixed two-byte opcode | Guest continuation runs with the original stack and reaches its success HLT | Phase 3, RSP `0x7FF0`, HLT exit `0x78` at `0x104F`, RAX `0x50415353` |
 
 All exception intercepts remained enabled on re-entry. The guest validated its exception frame and the `0F 0B` bytes before advancing the saved RIP to `0x100E`. Skipping the fault in L1 would leave the handler count at zero; returning to the fault unchanged would produce another `#UD` exit instead of HLT. Reference: AMD64 APM Vol. 2, §§8.2.7 and 15.20. This covers one no-error-code fault on a single nested vCPU, not page faults, nested exceptions, or bare-metal delivery.
+
+### 028 · 2026-11-25 local · Legacy XMM register preservation
+
+**Firmware PASS; queue ATTENTION for first-time screen review.** Ryzen 9 9950X, nested `HV-SVM-L1`; source `88ce1bc39a`. `python lab/hv_queue.py run --rebuild vcpu-xmm`, batch `999f4edb3b0042febe33f8b2c09f8409`, ISO SHA-256 `B04E550134C016D04E8553D2CD02254557D3AB898AB8CDCB649CA8B8D0AB4842`. The launcher timed out after READY, before any recorded VM operation. The elevated `lab/Invoke-HvQueue.ps1` worker used the same frozen run directory, checkpointed the prior `exception-ud` PASS and booted the staged image once. It stopped for review of the [console capture](images/vcpu-xmm-028.png); it did not report COMPLETE.
+
+| L2 exit | Exit code / RIP | Restored live L1 XMM15.high | Captured L2 XMM15.high |
+| --- | --- | --- | --- |
+| VMMCALL | `0x81` / `0x1110` | `0x4853001FB1C7001F` | `0x4753011FA6E9011F` |
+| Success HLT after resume | `0x78` / `0x1228` | `0x4853011FB1C7011F` | `0x4753021FA6E9021F` |
+
+The displayed lane is one example. PASS required **all 32 64-bit lanes** to match in each entry's guest snapshot, captured guest exit frame, host save frame, and live host sample after restore. Values varied by owner, register, lane and entry, so reloading an initial guest frame on resume could not pass. L2 also checked its own incoming registers before replacing them. Its success HLT required the expected RIP, RSP and RAX marker.
+
+This is an explicit legacy XMM0–15 switch on one nested vCPU, not a full extended-state implementation. It does not cover MXCSR, x87, upper AVX lanes, vCPU migration or bare metal. References: AMD64 APM Vol. 2, §§11.4.1, 15.5–15.6.
