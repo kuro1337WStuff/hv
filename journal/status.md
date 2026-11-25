@@ -11,7 +11,7 @@
 | [Device integration #16](https://github.com/kuro1337WStuff/hv/issues/16) | Fixed device controls only | Review UART #6 before #8, PIC #11 before #12; PIT #5 is independent. Requalify changed integration trees before merging. |
 | [Test supervisor #17](https://github.com/kuro1337WStuff/hv/issues/17) | [070 COMPLETE](trials/070.md) → [071 COMPLETE](trials/071.md); lane B retained at IRQ0 | Review dedicated lanes #7 before supervisor #18. After 071: 12 open board cards; 2 manual, 10 dependency-blocked, none eligible. A stopped scheduler is expected here. |
 
-**Merge routing:** [open PRs](https://github.com/kuro1337WStuff/hv/pulls). #2 targets `main` for host CI. #3–#7, #9 and #11 target `feature/l1-handoff`, not `main`. #8 is stacked on #6; #10 on #4; #12 on #11; #18 on #7. Check each live PR's base and reviewed SHA before merging. A completed regression or publication of this page does not authorize a stack merge. [Project workflow](project-workflow.md) covers rollbacks and dependent PR retargeting.
+**Merge routing:** [Dated PR-by-PR merge audit and maintenance queue](merge-audit-072.md) · [live open PRs](https://github.com/kuro1337WStuff/hv/pulls). The host formatter test #21 targets the held PIC branch #12; it is not a reason to merge #12. Check the actual base, scope and source revision before each integration. [Project workflow](project-workflow.md) covers rollback and dependent PR retargeting.
 
 ## Feature evidence before the separate trial ledger
 
