@@ -1,4 +1,5 @@
 """Build the fixed SysV ELF and its UEFI-only optical image on Windows x64."""
+import argparse
 import hashlib
 from pathlib import Path
 import shutil
@@ -51,7 +52,7 @@ def verified(path: Path, url: str, expected: str) -> Path:
     return path
 
 
-def build_elf(wheel: Path, elf: Path) -> None:
+def build_elf(wheel: Path, elf: Path, broadcast: bool) -> None:
     # Only the native clang/lld driver and builtin C headers are needed. Use a
     # fresh extraction of the verified wheel, not executables from PATH or WSL.
     with TemporaryDirectory(dir=TOOLS) as tmp:
@@ -66,6 +67,8 @@ def build_elf(wheel: Path, elf: Path) -> None:
                   '-mgeneral-regs-only', '-fno-stack-protector', '-fno-unwind-tables',
                   '-fno-asynchronous-unwind-tables', '-Wall', '-Wextra', '-Werror',
                   '-nostdinc', '-isystem', zig.parent / 'lib/include', '-I', LIMINE_DIR]
+        if broadcast:
+            cflags.append('-DHV_NPT_BROADCAST')
         objects = []
         for name in ('main', 'svm'):
             obj = work / (name + '.o')
@@ -77,12 +80,16 @@ def build_elf(wheel: Path, elf: Path) -> None:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('profile', nargs='?', choices=('npt-cross', 'npt-broadcast'), default='npt-cross')
+    profile = parser.parse_args().profile
+    broadcast = profile == 'npt-broadcast'
     for name, digest in LIMINE_HASHES.items():
         verified(LIMINE_DIR / name, LIMINE_URL + name, digest)
     wheel = verified(TOOLS / WHEEL, WHEEL_URL, WHEEL_HASH)
-    elf = BUILD / 'cross.elf'
-    build_elf(wheel, elf)
-    loader = BUILD / 'NPTCROSS.EFI'
+    elf = BUILD / ('broadcast.elf' if broadcast else 'cross.elf')
+    build_elf(wheel, elf, broadcast)
+    loader = BUILD / ('NPTBROADCAST.EFI' if broadcast else 'NPTCROSS.EFI')
     shutil.copyfile(LIMINE_DIR / 'BOOTX64.EFI', loader)
 
     # Both libraries consult the wall clock (including in the final ISO write).
@@ -91,7 +98,7 @@ def main() -> None:
     time.time = lambda: epoch
     time.localtime = lambda seconds=epoch: time.gmtime(seconds)
     DosDateTime.now = staticmethod(lambda tz=None: DosDateTime(2000, 1, 1))
-    pack(loader, BUILD / 'hv-npt-cross.iso', (
+    pack(loader, BUILD / f'hv-{profile}.iso', (
         ('limine.conf', CROSS / 'limine.conf'), ('cross.elf', elf),
         ('limine.txt', LIMINE_DIR / 'LICENSE'),
     ))

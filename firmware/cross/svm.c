@@ -1,5 +1,8 @@
 #include "svm.h"
 #include "../fixed_npt.h"
+#ifdef HV_NPT_BROADCAST
+#include <limine.h>
+#endif
 
 /* AMD64 APM volume 2, appendix B: offsets from the VMCB page base. */
 enum {
@@ -81,6 +84,113 @@ int cross_supported(void)
     return !(rdmsr(MSR_VM_CR) & (1u << 4)) && !(rdmsr(MSR_EFER) & SVME);
 }
 
+#ifdef HV_NPT_BROADCAST
+enum {
+    HvGuestOsId = 0x40000000, HvHypercall = 0x40000001, HvNestedFeatures = 0x4000000a,
+    HvEnlightenedNpt = 1u << 22, HvAccessHypercallMsrs = 1u << 5,
+    HvEnabled = 1, HvLocked = 2, EnlightenmentsControl = 0x3e0
+};
+
+uint32_t cross_broadcast_caps(void)
+{
+    if (!(cpuid(1).c & (1u << 31)) || cpuid(0x40000000).a < HvNestedFeatures ||
+        cpuid(0x40000001).a != 0x31237648)
+        return 0;
+    return cpuid(HvNestedFeatures).a;
+}
+
+int cross_broadcast_available(void)
+{
+    /* AMD's bit 22 advertises both EnlightenedNptTlb and the GPA flush hypercalls. */
+    return cross_supported() && (cross_broadcast_caps() & HvEnlightenedNpt) &&
+           (cpuid(0x40000003).a & HvAccessHypercallMsrs);
+}
+
+__attribute__((used, section(".limine_requests")))
+static volatile struct limine_hhdm_request hhdm = { .id = LIMINE_HHDM_REQUEST };
+
+/* Reserve one entire RX page in the Limine-loaded ELF. Only L0 supplies its code;
+ * no guest writes, adjacent functions, or copied hypercall instructions. */
+__asm__(".pushsection .text.hypercall_page,\"ax\",@progbits\n"
+        ".balign 4096\n"
+        "broadcast_page: .zero 4096\n"
+        ".popsection");
+extern const uint8_t broadcast_page[NptPageBytes];
+
+typedef uint64_t (__attribute__((ms_abi)) *hypercall_fn)(uint64_t, uint64_t, uint64_t);
+static hypercall_fn call_page;
+/* A naturally padded pair of qwords, never straddling a page or sharing the overlay. */
+_Alignas(16) static struct { uint64_t address_space, flags; } flush_input;
+
+/* Walk Limine's four-level BSP tables read-only through the HHDM. Do not assume
+ * that firmware's previous overlay is mapped, executable, or identity mapped. */
+static int executable_mapping(uint64_t direct, uint64_t va, uint64_t gpa)
+{
+    const uint64_t frame = UINT64_C(0x000ffffffffff000);
+    uint64_t table;
+    int user = 1;
+    __asm__ volatile ("mov %%cr3,%0" : "=r"(table));
+    for (unsigned shift = 39; ; shift -= 9) {
+        const uint64_t *entries = (const uint64_t *)(direct + (table & frame));
+        uint64_t entry = entries[(va >> shift) & 511];
+        if (!(entry & 1) || (entry >> 63)) return 0;
+        user = user && (entry & 4);
+        if (shift == 12 || (shift != 39 && (entry & (1u << 7)))) {
+            uint64_t offset = (UINT64_C(1) << shift) - 1;
+            return !user && ((entry & frame & ~offset) | (va & offset)) == gpa;
+        }
+        table = entry;
+    }
+}
+
+int cross_broadcast_setup(void)
+{
+    if (!hhdm.response) return 0;
+    uint64_t direct = hhdm.response->offset;
+    uint64_t control = rdmsr(HvHypercall), os_id = rdmsr(HvGuestOsId);
+    uint64_t gpa = pa(broadcast_page), va = (uintptr_t)broadcast_page;
+    const uint64_t low = NptPageBytes - 1;
+    if (control & HvEnabled) {
+        if (!os_id) return 0;
+        /* A live interface is never relocated, even if the MSR is unlocked. */
+        if ((control & ~low) != gpa) {
+            gpa = control & ~low;
+            if (gpa > UINT64_MAX - direct) return 0;
+            va = direct + gpa;
+        }
+    } else if (control & HvLocked) {
+        return 0;
+    }
+    if ((gpa & low) || !executable_mapping(direct, va, gpa)) return 0;
+    if (!(control & HvEnabled)) {
+        if (!os_id) {
+            /* Generic open-source guest, build 1. Never replace firmware's ID. */
+            uint64_t id = (UINT64_C(1) << 63) | 1;
+            wrmsr(HvGuestOsId, id);
+            if (rdmsr(HvGuestOsId) != id) return 0;
+        }
+        wrmsr(HvHypercall, gpa | (control & low) | HvEnabled); /* preserve RsvdP */
+        uint64_t installed = rdmsr(HvHypercall);
+        if ((installed & (~low | HvEnabled)) != (gpa | HvEnabled)) {
+            if (!os_id && !(installed & HvEnabled)) wrmsr(HvGuestOsId, 0);
+            return 0;
+        }
+    }
+    call_page = (hypercall_fn)(uintptr_t)va;
+    flush_input.address_space = pa(&pages.npt); /* identical nCR3 in both VMCBs */
+    flush_input.flags = 0;
+    return 1;
+}
+
+uint16_t cross_broadcast_flush(void)
+{
+    /* Publish the replacement PTE before L0 invalidates all VPs. Slow/simple
+     * call: RCX=0xAF, RDX=input GPA, R8=no output, RAX[15:0]=HV_STATUS. */
+    __atomic_thread_fence(__ATOMIC_SEQ_CST);
+    return (uint16_t)call_page(0x00af, pa(&flush_input), 0);
+}
+#endif
+
 void cross_init(uint64_t kernel_va, uint64_t kernel_pa)
 {
     pa_offset = kernel_pa - kernel_va;
@@ -108,6 +218,11 @@ void cross_init(uint64_t kernel_va, uint64_t kernel_pa)
         FIELD(uint32_t, IntControl) = 1u << 24; /* V_INTR_MASKING */
         FIELD(uint64_t, NpEnable) = 1;
         FIELD(uint64_t, NestedCr3) = pa(&pages.npt);
+#ifdef HV_NPT_BROADCAST
+        /* The clean bits (including bit 31) remain zero for both VMCBs. */
+        FIELD(uint32_t, EnlightenmentsControl) = 1u << 2;
+        FIELD(uint8_t, TlbControl) = 1; /* first entry on this CPU only */
+#endif
         for (unsigned seg = Es; seg <= Ds; seg += 16) {
             FIELD(uint16_t, seg + 2) = seg == Cs ? 0x9b : 0x93;
             FIELD(uint32_t, seg + 4) = 0xffff;
@@ -140,6 +255,15 @@ struct cross_sample cross_read(unsigned slot)
     FIELD(uint64_t, Rip) = FixedGuestGpa;
     FIELD(uint64_t, Rax) = 0;
     FIELD(uint64_t, ExitCode) = UINT64_MAX;
+#ifdef HV_NPT_BROADCAST
+    /* No other owner of SVM on either dedicated VP. Do not tear down the ASID
+     * context, or change HSAVE, between the two epochs. */
+    if (FIELD(uint8_t, TlbControl)) {
+        wrmsr(MSR_EFER, rdmsr(MSR_EFER) | SVME);
+        wrmsr(MSR_HSAVE, pa(cpu->hsave));
+    }
+    __asm__ volatile ("clgi" : : : "memory");
+#else
     FIELD(uint8_t, TlbControl) = 1; /* full local flush on every entry, even for epoch A */
 
     uint64_t efer = rdmsr(MSR_EFER);
@@ -147,13 +271,19 @@ struct cross_sample cross_read(unsigned slot)
     __asm__ volatile ("clgi" : : : "memory");
     uint64_t hsave = rdmsr(MSR_HSAVE);
     wrmsr(MSR_HSAVE, pa(cpu->hsave));
+#endif
     /* Host RAX is restored by VMEXIT. The immutable guest changes only guest AX. */
     __asm__ volatile ("vmrun" : : "a"(pa(vmcb)) : "memory", "cc");
     __asm__ volatile ("mov %0,%%cr2; mov %1,%%dr6; mov %2,%%dr7"
                       : : "r"(cr2), "r"(dr6), "r"(dr7) : "memory");
+#ifdef HV_NPT_BROADCAST
+    FIELD(uint8_t, TlbControl) = 0;
+    __asm__ volatile ("stgi" : : : "memory");
+#else
     wrmsr(MSR_HSAVE, hsave);
     __asm__ volatile ("stgi" : : : "memory");
     wrmsr(MSR_EFER, efer);
+#endif
     /* Limine's IF=0 stays clear. Never enable interrupts as a side effect of STGI. */
     __asm__ volatile ("pushq %0; popfq" : : "r"(flags) : "memory", "cc");
 

@@ -10,7 +10,7 @@ $root = Split-Path -Parent $PSScriptRoot
 $runs = Join-Path $root 'build\runs'
 $media = Join-Path $PSScriptRoot 'media'
 $store = Join-Path $PSScriptRoot "machines\$vmName"
-$stems = @{ l2='hv-l2-smoke'; cpuid='hv-cpuid-resume'; 'npt-write'='hv-npt-write'; 'npt-remap'='hv-npt-remap'; 'npt-cross'='hv-npt-cross' }
+$stems = @{ l2='hv-l2-smoke'; cpuid='hv-cpuid-resume'; 'npt-write'='hv-npt-write'; 'npt-remap'='hv-npt-remap'; 'npt-cross'='hv-npt-cross'; 'npt-broadcast'='hv-npt-broadcast' }
 $images = @{}
 $events = $null
 $mutex = $null
@@ -88,7 +88,7 @@ function Read-Worklist {
     } finally { $stream.Dispose() }
     if (!$json.StartsWith('[')) { throw 'Expected a JSON array.' }
     $items = ConvertFrom-Json -InputObject $json
-    if (!$items -or $items.Count -gt $stems.Count) { throw 'Expected one to five reviewed profiles.' }
+    if (!$items -or $items.Count -gt $stems.Count) { throw 'Invalid number of queued profiles.' }
     $seen = @{}
     foreach ($item in $items) {
         Assert-QueueActive

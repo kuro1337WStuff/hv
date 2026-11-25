@@ -15,7 +15,9 @@ LAB = Path(__file__).resolve().parent
 ROOT = LAB.parent
 RUNS = ROOT / 'build' / 'runs'
 PROFILES = {'l2': 'hv-l2-smoke', 'cpuid': 'hv-cpuid-resume', 'npt-write': 'hv-npt-write',
-            'npt-remap': 'hv-npt-remap', 'npt-cross': 'hv-npt-cross'}
+            'npt-remap': 'hv-npt-remap', 'npt-cross': 'hv-npt-cross',
+            'npt-broadcast': 'hv-npt-broadcast'}
+DEFAULT_PROFILES = ('l2', 'cpuid', 'npt-write', 'npt-remap', 'npt-cross')
 TERMINAL = {'COMPLETE', 'STOPPED', 'ATTENTION', 'ERROR'}
 
 
@@ -110,7 +112,7 @@ def prepare(path, profiles, rebuild):
 def run(args):
     if os.name != 'nt':
         raise ValueError('This lab requires Windows and Hyper-V.')
-    profiles = args.profiles or list(PROFILES)
+    profiles = args.profiles or DEFAULT_PROFILES
     if len(set(profiles)) != len(profiles) or any(p not in PROFILES for p in profiles):
         raise ValueError('Use each supported profile at most once: ' + ', '.join(PROFILES))
     path = RUNS / uuid.uuid4().hex

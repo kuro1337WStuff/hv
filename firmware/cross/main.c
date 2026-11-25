@@ -80,10 +80,21 @@ static void install_idt(unsigned slot) {
 static unsigned request, completed;
 static uint32_t peer_id;
 static int peer_supported;
+#ifdef HV_NPT_BROADCAST
+static int peer_broadcast;
+static uint32_t native_broadcast_bit(void) {
+    uint32_t a=0x80000008,b,c,d;
+    __asm__ volatile("cpuid" : "+a"(a), "=b"(b), "=c"(c), "=d"(d) : "c"(0));
+    return (b>>3)&1;
+}
+#endif
 static struct cross_sample peer_read;
 static void peer(struct limine_smp_info *info) {
     install_idt(1);
     peer_id=local_id(); peer_supported=(peer_id==info->lapic_id && cross_supported());
+#ifdef HV_NPT_BROADCAST
+    peer_broadcast=peer_supported && cross_broadcast_available();
+#endif
     __atomic_store_n(&completed,1,__ATOMIC_RELEASE);
     for (unsigned seq=2;seq<=3;++seq) {
         while (__atomic_load_n(&request,__ATOMIC_ACQUIRE)!=seq) __asm__ volatile("pause");
@@ -113,7 +124,11 @@ void cross_main(void) {
         volatile uint32_t *p=(volatile uint32_t *)((char *)fb->address+row*fb->pitch);
         for (uint64_t col=0;col<fb->width;++col) p[col]=0;
     }
+#ifdef HV_NPT_BROADCAST
+    text("AMD SVM    HYPER V NPT BROADCAST\n");
+#else
     text("AMD SVM    L1 NPT CROSS CPU\n");
+#endif
     if (!image.response || !cross_supported()) fail("L1 LAB OR SVM UNAVAILABLE");
     struct limine_smp_response *mp=smp.response;
     if (!mp || mp->cpu_count!=2) fail("NEED TWO STARTED PROCESSORS");
@@ -128,15 +143,38 @@ void cross_main(void) {
     wait_peer(1);
     text("L1 LOCAL APIC IDS   BSP "); hex(bsp); text("   AP "); hex(peer_id); put('\n');
     if (!peer_supported || peer_id!=ap->lapic_id || peer_id==bsp) fail("AP ID OR SVM UNAVAILABLE");
+#ifdef HV_NPT_BROADCAST
+    text("BSP AMD INVLPGB BIT "); hex(native_broadcast_bit());
+    text("   HV NESTED EAX "); hex(cross_broadcast_caps()); put('\n');
+    if (!peer_broadcast || !cross_broadcast_available()) {
+        text("SKIP   NESTED FLUSH NOT EXPOSED"); halt();
+    }
+#endif
     cross_init(image.response->virtual_base,image.response->physical_base);
+#ifdef HV_NPT_BROADCAST
+    if (!cross_broadcast_setup()) { text("SKIP   HYPERCALL PAGE UNAVAILABLE"); halt(); }
+#endif
     for (unsigned epoch=0;epoch<2;++epoch) {
         text(epoch?"FRAME B   GPA 2000\n":"FRAME A   GPA 2000\n");
         cross_map(epoch);
+#ifdef HV_NPT_BROADCAST
+        if (epoch) {
+            text("BSP HVCALL 00AF   STATUS ");
+            uint16_t status=cross_broadcast_flush();
+            hex(status); put('\n');
+            if (status) fail("NESTED GPA FLUSH REJECTED");
+            text("REENTER BOTH   TLB CONTROL 0\n");
+        }
+#endif
         verify(local_id(),bsp,epoch,cross_read(0));
         __atomic_store_n(&request,epoch+2,__ATOMIC_RELEASE);
         wait_peer(epoch+2);
         verify(peer_id,ap->lapic_id,epoch,peer_read);
     }
+#ifdef HV_NPT_BROADCAST
+    text("PASS   BOTH CPUS READ B AFTER ONE HYPER V FLUSH\n");
+#else
     text("PASS   BOTH CPUS READ A THEN B AFTER LOCAL FLUSHES\n");
+#endif
     halt();
 }
