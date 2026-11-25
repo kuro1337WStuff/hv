@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from hashlib import sha256
 import json
 from pathlib import Path
+import re
 
 
 @dataclass(frozen=True)
@@ -77,3 +78,58 @@ def verify_guest_tx(directory: Path, requested: Attempt, review: ReviewedStop | 
     if review.overflow or len(raw) != review.count or sha256(raw).hexdigest() != review.tx_sha256:
         raise ValueError('incomplete or different guest TX')
     return relevant[-1]['state']
+
+
+@dataclass(frozen=True)
+class InitMilestones:
+    """Bound wire observations: line-start byte offsets and both raw uptime values."""
+    disposition: str
+    user_offset: int
+    timer_offset: int
+    shutdown_offset: int
+    before: bytes
+    after: bytes
+
+
+# /proc/uptime prints two decimals; init's x86-64 BusyBox test compares signed seconds.
+_UPTIME = rb'((?:0|[1-9][0-9]{0,18})\.[0-9]{2})'
+_TIMER = re.compile(rb'HV:P5:TIMER before=' + _UPTIME + rb' after=' + _UPTIME)
+
+
+def observe_init_milestones(directory: Path, requested: Attempt, review: ReviewedStop | None,
+                            raw: bytes) -> InitMilestones:
+    """Check one reviewed TX for the three ordered lines emitted by lab/linux/init.
+
+    Example: obs = observe_init_milestones(run_dir, frozen_attempt, reviewed_stop, raw_tx)
+    obs.disposition remains the broker's disposition, including ATTENTION. The
+    offsets and timer readings describe bytes, not proof of boot or poweroff.
+    Missing bindings or malformed/missing milestones do not yield observations.
+    """
+    disposition = verify_guest_tx(directory, requested, review, raw)
+    records = []
+    start = 0
+    while start < len(raw):
+        lf = raw.find(b'\n', start)
+        if lf < 0:
+            raise ValueError(f'incomplete wire line at byte {start}')
+        if raw.startswith(b'HV:P5:', start):
+            if len(records) == 3:
+                raise ValueError(f'extra HV:P5: record at byte {start}')
+            end = lf - 1 if raw[lf - 1] == 13 else lf
+            records.append((start, raw[start:end]))
+        start = lf + 1
+
+    if len(records) != 3:
+        raise ValueError('expected three HV:P5: records')
+    (user_offset, user), (timer_offset, timer), (shutdown_offset, shutdown) = records
+    if user != b'HV:P5:USER pid=1 kernel=6.18.60-0-virt':
+        raise ValueError(f'expected pinned USER record at byte {user_offset}')
+    match = _TIMER.fullmatch(timer)
+    if not match:
+        raise ValueError(f'expected TIMER record at byte {timer_offset}')
+    before, after = match.groups()
+    if not (int(before[:-3]) < int(after[:-3]) <= (1 << 63) - 1):
+        raise ValueError('TIMER seconds did not advance within the signed 64-bit range')
+    if shutdown != b'HV:P5:SHUTDOWN':
+        raise ValueError(f'expected SHUTDOWN record at byte {shutdown_offset}')
+    return InitMilestones(disposition, user_offset, timer_offset, shutdown_offset, before, after)

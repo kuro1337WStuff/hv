@@ -1,15 +1,19 @@
 """Run from the lab checkout: python -m unittest lab.tests.guest_tx_evidence_test
 
-The terminal tests need the retained private run 047. Do not generate a substitute
-if unavailable; the journal frame alone cannot establish a fresh broker boot.
+Only the retained-run tests need private run 047. The milestone tests use
+temporary host fixtures to exercise the offline API; they are not boot evidence.
 """
 from dataclasses import replace
+from hashlib import sha256
+import json
 from pathlib import Path
 from shutil import copyfile
 from tempfile import TemporaryDirectory
 import unittest
 
-from lab.guest_tx_evidence import Attempt, ReviewedStop, line_offsets, verify_guest_tx
+from lab.guest_tx_evidence import (
+    Attempt, InitMilestones, ReviewedStop, line_offsets, observe_init_milestones, verify_guest_tx,
+)
 
 
 # Independent positive from the reviewed 047 frame: HLT RIP 1172, 44 entries;
@@ -71,6 +75,107 @@ class SerialEvidenceTest(unittest.TestCase):
             (candidate / 'events.jsonl').write_bytes(b'')
             with self.assertRaisesRegex(ValueError, 'not the reviewed broker record'):
                 verify_guest_tx(candidate, A047, STOP047, TX047)
+
+
+class InitMilestonesTest(unittest.TestCase):
+    user = b'HV:P5:USER pid=1 kernel=6.18.60-0-virt'
+    timer = b'HV:P5:TIMER before=9.99 after=10.00'
+    shutdown = b'HV:P5:SHUTDOWN'
+    prefix = b'\xff\x00\r\nboot quoted: HV:P5:SHUTDOWN\n'
+    between = b'\nkernel: unrelated output\r\n'
+    raw = prefix + user + b'\r\n' + between + timer + b'\n' + shutdown + b'\r\n'
+
+    def setUp(self):
+        tmp = TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.attempt = Attempt('test-run', 'test-profile', 'AB' * 32)
+        self.directory = Path(tmp.name) / self.attempt.run_id
+        self.directory.mkdir()
+        (self.directory / 'queue.json').write_text(json.dumps([
+            {'profile': self.attempt.profile, 'sha256': self.attempt.media_sha256},
+        ]))
+        self.frame = b'opaque test-only frame fixture'
+        (self.directory / (self.attempt.profile + '.png')).write_bytes(self.frame)
+        self.review = self.stage_stop('ATTENTION')
+
+    def stage_stop(self, disposition):
+        a = self.attempt
+        events = [{'state': 'CHECKPOINT', 'detail': f"Saving prior state as 'HvQueue before {a.run_id}'."},
+                  {'state': 'MOUNT', 'profile': a.profile,
+                   'detail': f'Mounting reviewed {a.profile} media; SHA256={a.media_sha256}'},
+                  {'state': 'BOOT', 'profile': a.profile}, {'state': 'WATCHING', 'profile': a.profile},
+                  {'state': disposition, 'profile': a.profile}]
+        record = b''.join(json.dumps(row).encode() + b'\n' for row in events)
+        (self.directory / 'events.jsonl').write_bytes(record)
+        return ReviewedStop(a, sha256(record).hexdigest(), sha256(self.frame).hexdigest(),
+                            len(self.raw), sha256(self.raw).hexdigest(), False)
+
+    def test_offsets_values_and_unchanged_disposition(self):
+        user_at = len(self.prefix)
+        timer_at = user_at + len(self.user) + 2 + len(self.between)
+        shutdown_at = timer_at + len(self.timer) + 1
+        for state in ('ATTENTION', 'COMPLETE'):
+            with self.subTest(state=state):
+                review = self.stage_stop(state)
+                self.assertEqual(observe_init_milestones(self.directory, self.attempt, review, self.raw),
+                                 InitMilestones(state, user_at, timer_at, shutdown_at, b'9.99', b'10.00'))
+
+    def assert_bound_but_invalid(self, raw):
+        # Bind this deliberately malformed fixture so rejection tests the
+        # milestone grammar, not an unrelated digest or count mismatch.
+        review = replace(self.review, count=len(raw), tx_sha256=sha256(raw).hexdigest())
+        with self.assertRaises(ValueError):
+            observe_init_milestones(self.directory, self.attempt, review, raw)
+
+    def test_invalid_milestones_despite_matching_review(self):
+        u, t, s = self.user, self.timer, self.shutdown
+        for lines in ((u, t), (u, s), (t, s), (t, u, s), (u, s, t), (u, t, t, s),
+                      (u, t, s, u), (u, t, s, u, t, s), (u, t, b'HV:P5:OTHER', s),
+                      (u.replace(b'pid=1', b'pid=10'), t, s), (u + b'x', t, s), (u, t, s + b' '),
+                      (b'prefix ' + u, t, s), (u, b'\v' + t, s), (u, t, b'noise\r' + s),
+                      (u, t, s + b'\r\r')):
+            with self.subTest(lines=lines):
+                self.assert_bound_but_invalid(b'\n'.join(lines) + b'\n')
+        for raw in (self.raw[:-1], self.raw + b'HV:P5:', self.raw + s + b'\r'):
+            with self.subTest(tail=raw[-16:]):
+                self.assert_bound_but_invalid(raw)
+
+    def test_timer_matches_proc_uptime_and_shell_integer_comparison(self):
+        last = b'9223372036854775807.00'
+        raw = self.raw.replace(self.timer, b'HV:P5:TIMER before=9223372036854775806.99 after=' + last)
+        review = replace(self.review, count=len(raw), tx_sha256=sha256(raw).hexdigest())
+        self.assertEqual(observe_init_milestones(self.directory, self.attempt, review, raw).after, last)
+        for before, after in ((b'9.00', b'9.99'), (b'10.00', b'9.99'), (b'9', b'10'),
+                              (b'9.9', b'10.00'), (b'9.99', b'10.000'), (b'09.99', b'10.00'),
+                              (b'-1.00', b'0.00'), (b'9.99', b'+10.00'), (b'9e0', b'10.00'),
+                              (b'9.99', b'10.0\xff'), (last, b'9223372036854775808.00'),
+                              (b'9.99', b'10000000000000000000.00')):
+            with self.subTest(before=before, after=after):
+                bad = b'HV:P5:TIMER before=' + before + b' after=' + after
+                self.assert_bound_but_invalid(self.raw.replace(self.timer, bad))
+
+    def test_no_observations_without_original_binding(self):
+        # Never derive a replacement review from the substituted input.
+        for review, raw, reason in (
+                (None, self.raw, 'no independently reviewed'),
+                (None, b'invalid TX', 'no independently reviewed'),
+                (replace(self.review, attempt=replace(self.attempt, run_id='other')), self.raw, 'wrong attempt'),
+                (replace(self.review, overflow=True), self.raw, 'incomplete'),
+                (replace(self.review, count=len(self.raw) + 1), self.raw, 'incomplete'),
+                (self.review, self.raw.replace(b'9.99', b'8.99'), 'different guest TX')):
+            with self.subTest(reason=reason), self.assertRaisesRegex(ValueError, reason):
+                observe_init_milestones(self.directory, self.attempt, review, raw)
+
+        for name, reason in (('events.jsonl', 'not the reviewed broker record'),
+                             (self.attempt.profile + '.png', 'not the reviewed L1 stop frame'),
+                             ('queue.json', 'wrong frozen worklist')):
+            with self.subTest(name=name):
+                path = self.directory / name
+                original = path.read_bytes()
+                path.write_bytes(b'[]')
+                with self.assertRaisesRegex(ValueError, reason):
+                    observe_init_milestones(self.directory, self.attempt, self.review, self.raw)
+                path.write_bytes(original)
 
 
 if __name__ == '__main__':
