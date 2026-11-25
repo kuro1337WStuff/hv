@@ -183,10 +183,16 @@ function Get-LabView([string]$ExpectedState, [string]$ExpectedPath) {
         @(Get-VMNetworkAdapter -VM $vm).Count -ne 0 -or $drives.Count -ne 1) {
         Request-Attention 'Expected two nested vCPUs, no network adapters and exactly one DVD.'
     }
-    if ($dedicatedLane -and ($vm.MemoryStartup -ne 2GB -or $vm.DynamicMemoryEnabled -ne $false -or
-        @(Get-VMHardDiskDrive -VM $vm).Count -ne 0 -or
-        @(Get-VMComPort -VM $vm | Where-Object { $_.Path }).Count -ne 0)) {
-        Request-Attention 'Lane VMs require fixed 2 GiB RAM, no hard disks and no forwarded COM ports.'
+    if ($dedicatedLane) {
+        if ($vm.MemoryStartup -ne 2GB -or $vm.DynamicMemoryEnabled -ne $false -or
+            @(Get-VMHardDiskDrive -VM $vm).Count -ne 0 -or
+            @(Get-VMComPort -VM $vm | Where-Object { $_.Path }).Count -ne 0) {
+            Request-Attention 'Lane VMs require fixed 2 GiB RAM, no hard disks and no forwarded COM ports.'
+        }
+        if ($vm.AutomaticStartAction -ne 'Nothing') { Request-Attention 'Lane AutomaticStartAction must be Nothing.' }
+        if ($vm.AutomaticCheckpointsEnabled -ne $false) { Request-Attention 'Lane automatic checkpoints must be disabled.' }
+        if ($vm.CheckpointType -ne 'Standard') { Request-Attention 'Lane CheckpointType must be Standard.' }
+        if ((Get-VMFirmware -VM $vm).SecureBoot -ne 'Off') { Request-Attention 'Lane Secure Boot must be Off.' }
     }
     $state = [string]$vm.State
     $path = [string]$drives[0].Path
