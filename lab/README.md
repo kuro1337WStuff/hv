@@ -32,6 +32,16 @@ cl /nologo /std:c11 /W4 /WX /TC lab\tests\pit_pic_test.c /Fo"%TEMP%\pit_pic_test
 cl /nologo /O2 /std:c11 /W4 /WX /TC lab\tests\pit_shared_test.c /Fo"%TEMP%\pit_shared_test.obj" /Fe"%TEMP%\pit_shared_test.exe" && "%TEMP%\pit_shared_test.exe"
 ```
 
+### Host-only PIT fallback calibration (097)
+
+[`pit_fallback_test.c`](tests/pit_fallback_test.c) replays the legacy-PIC-present branch of [`pit_calibrate_tsc()` in Linux v6.18.60](https://github.com/gregkh/linux/blob/v6.18.60/arch/x86/kernel/tsc.c#L414-L491), not the outer retry/reference selection. From this worktree's root in an x64 MSVC Developer Command Prompt:
+
+```bat
+cl /nologo /std:c11 /W4 /WX /TC lab\tests\pit_fallback_test.c /Fo"%TEMP%\pit_fallback_test.obj" /Fe"%TEMP%\pit_fallback_test.exe" && "%TEMP%\pit_fallback_test.exe"
+```
+
+At a fixed 2.5 GHz **virtual** rate, 10 µs polls observe 1,000 and 5,000 low samples for the 11,931 and 59,659 reloads. The sample at 10 or 50 ms is still low; the next port read is high and supplies no cycle sample. Both estimates should be 2,500,000 virtual kHz. A missing poll (999 lows) and a gap strictly over ten times the minimum should be Linux rejections. A frozen same-time sequence exhausts the harness budget with OUT2 still low: Linux's loop has **not** returned a failure or a rate. These are synthetic schedules, not measurements of a host or observations from an OS.
+
 ### One launch for a supervised session
 
 From the checkout, run **once** and approve the Windows elevation prompt:
