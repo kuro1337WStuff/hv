@@ -27,6 +27,13 @@ function Get-TextDigest([string]$Text) {
     try { return [BitConverter]::ToString($sha.ComputeHash($utf8.GetBytes($Text))).Replace('-', '').ToLowerInvariant() }
     finally { $sha.Dispose() }
 }
+function Open-StageReadiness([string]$StageDirectory) {
+    # The caller owns the protected root and its session lock. Publish only
+    # in this newly verified stage. The write handle, not the file, is proof;
+    # after normal exit or a crash the zero-byte file is merely history.
+    return [IO.File]::Open([IO.Path]::Combine($StageDirectory,'ready.lease'),
+            [IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::Read)
+}
 function Assert-Plain([string]$Path) {
     for ($p = $Path; $p; $p = [IO.Path]::GetDirectoryName($p)) {
         if ([IO.File]::GetAttributes($p) -band [IO.FileAttributes]::ReparsePoint) { throw 'Linked paths are not accepted.' }
@@ -166,6 +173,7 @@ $lock = [IO.File]::Open((Join-Path $sessionRoot 'active.lock'),'OpenOrCreate','W
 $private = Join-Path $sessionRoot ([guid]::NewGuid().ToString('N'))
 $directoryLocks = [Collections.Generic.List[IDisposable]]::new()
 $listener = $null
+$stageReadiness = $null
 try {
     $vm = Get-VM -Name $vmName -ErrorAction Stop
     if (@($vm).Count -ne 1 -or $vm.Name -ne $vmName -or $vm.Generation -ne 2) {
@@ -216,6 +224,7 @@ public static class HvSessionDirectory {
     $token = [guid]::NewGuid().ToString('N')
     $data = @{port=$listener.LocalEndpoint.Port;token=$token;pid=$PID;handoffSerial=[int]($vmName -eq 'HV-SVM-L1')} | ConvertTo-Json -Compress
     [IO.File]::WriteAllText($descriptor,$data,$utf8)
+    if ($vmName -ne 'HV-SVM-L1') { $stageReadiness = Open-StageReadiness $private }
     Write-Host "LAB SESSION READY: $($vm.Name) / $($vm.Id). Press Q or close this window to revoke."
     while ($true) {
         if ([Console]::KeyAvailable -and [Console]::ReadKey($true).Key -eq 'Q') { break }
@@ -240,6 +249,7 @@ public static class HvSessionDirectory {
     [IO.File]::WriteAllText((Join-Path $sessionRoot 'startup-error.txt'),$_.ToString(),$utf8)
     throw
 } finally {
+    if ($null -ne $stageReadiness) { $stageReadiness.Dispose() }
     if ($listener) { $listener.Stop() }
     [IO.File]::Delete($descriptor)
     foreach ($handle in $directoryLocks) { $handle.Dispose() }
