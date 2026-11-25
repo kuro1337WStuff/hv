@@ -4,6 +4,8 @@ Development host: Ryzen 9 9950X. Firmware runs use the `HV-SVM-L1` Hyper-V VM; h
 
 **Start here:** [Current status, feature trials and integration order](status.md). The entries below describe the integrated baseline through 041. Later feature evidence is published on `main` independently of its implementation; see [how trials are published](project-workflow.md).
 
+**[099 · Legacy serial existence probe](trials/099.md):** COM1 returned `0/f` across the two IER reads. COM2–4 returned `f/f` and never touched COM1. This was a host replay, not guest serial discovery.
+
 **[098 · ACPI event through the PIC cascade](trials/098.md):** enabled GBL status produced IRQ9. The virtual controllers accepted vector `0x39`; both specific EOIs were needed before another acceptance. No CPU handler ran.
 
 **[097 · Linux fallback PIT calibration replay](trials/097.md):** both synthetic intervals returned 2,500,000 virtual kHz using the last low sample. Too few samples and excessive gaps were rejected; a frozen clock exhausted the test budget without returning a calibration result.

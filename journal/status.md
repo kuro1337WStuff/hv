@@ -1,4 +1,4 @@
-# Project status · through 098
+# Project status · through 099
 
 **On `main`:** firmware baseline [041](README.md), plus CI-only [#2](https://github.com/kuro1337WStuff/hv/pull/2) at `735c8b56` after both hosted checks passed on `54bace3b`. **On `feature/l1-handoff` only:** [#4](https://github.com/kuro1337WStuff/hv/pull/4) merged at `95abe46c`; [#10](https://github.com/kuro1337WStuff/hv/pull/10) retargeted, then squashed at `44fb6247`. The resulting firmware trees matched the source trees used in 060 and 063 respectively. Revert #10 first if both must be undone; #4 is a merge commit. No ordinary Linux boot or bare-metal qualification.
 
@@ -15,7 +15,7 @@
 
 **Merge routing:** [Dated PR-by-PR audit](merge-audit-072.md) · [live open PRs](https://github.com/kuro1337WStuff/hv/pulls) · [workflow and rollback](project-workflow.md). #21's test merge did not promote #12. Check the actual base, scope and source revision before each integration.
 
-**Clock and platform work:** [097](trials/097.md) replayed the fallback calibration using synthetic time. [098](trials/098.md) observed an enabled PM1 event reach both legacy interrupt controllers, not a CPU handler. Both implementations are on `feature/l1-handoff` (`f0776108`), not `main`. Next host tests: [#85 · distinguish present COM1 from absent COM2–4](https://github.com/kuro1337WStuff/hv/issues/85) and [#86 · byte access to the PM1a event block](https://github.com/kuro1337WStuff/hv/issues/86). No bench was admitted.
+**Platform work:** [099](trials/099.md) distinguished a present COM1 UART from absent COM2–4 in the host model. Trial [097](trials/097.md) covered fallback calibration; [098](trials/098.md) reached PIC acceptance, not CPU delivery. [#88](https://github.com/kuro1337WStuff/hv/pull/88) also landed on `feature/l1-handoff`; its [PM1a byte-access card](https://github.com/kuro1337WStuff/hv/issues/86) has a separate trial reservation. No VM was admitted.
 
 ## Feature evidence before the separate trial ledger
 
