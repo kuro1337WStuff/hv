@@ -271,3 +271,13 @@ AMD64 APM Vol. 2 §§2.5.12 and 11.4.4 describe the format. The profile requires
 The COM1 capture contained exactly `HV:HANDOFF`, `HV:OWNED`, `HV:EXPECTED_OOM`, `HV:HALT`, in that order, each terminated by CRLF. Captured bytes SHA-256: `b21bb1e384b4d30b9e603a9921f8acf6b4a777d5bae44321295b78c8a49a9f40`. The [1024×768 framebuffer](images/l1-handoff-036.png) showed `L1 HANDOFF PASS` with the same four markers. The unreviewed framebuffer timed out as designed; this was not a queue COMPLETE or a second boot.
 
 The pass path requires successful `ExitBootServices`, a stack address inside the four reserved stack pages, and readback at both ends of the first arena page. Rejecting a nine-page request did not consume any of the seven remaining pages: the next successful allocation was page two. This verifies the bounded bootstrap arena with inherited address mappings, not a general physical allocator, a forced stale map-key retry, an L2 launch, or operation on the physical 9950X3D.
+
+### 037 · 2026-11-25 local · One L2 entry from the standalone L1
+
+**Firmware PASS; queue ATTENTION for first-time screen review.** `python lab/hv_queue.py run --session --rebuild l1-l2` on the nested Ryzen 9 9950X lab. Source `54d03398fd`; batch `d40ba15cd9a24bb68b9dfb921e071046`; ISO SHA-256 `AFC1E7E51E2DE58AADB596D289FF7F761FA46A8B9813AE57DE033447B3345682`. The worker checkpointed the prior `l1-handoff` PASS and captured the [new framebuffer](images/l1-l2-037.png); it did not report queue COMPLETE.
+
+The L1 bootstrap processor entered on its own stack after `ExitBootServices`. Its 12-page arena held one VMCB, one host-save page, four NPT pages, one L2 code page, three I/O permission-map pages and two MSR permission-map pages. The separate four-page L1 stack was not mapped into L2. The only guest mapping was the read-only page at GPA `0x1000`, beginning with `B8 32 4C F4` (`MOV AX,0x4C32; HLT`).
+
+The framebuffer reported `L1 L2 PASS`: `EXITCODE=0x78`, `RIP=0x1003`, `RAX=0x4C32`. All three match the predeclared acceptance criteria. The VMCB started with an invalid exit code and zero RAX: a boot or an immediate exit before the MOV would not satisfy the test. AMD64 APM Vol. 2 §§15.5.1, 15.6 and Appendix B describe the entry, exit and saved guest fields.
+
+Scope: one fixed real-mode guest, one `VMRUN`, no guest stack access, device I/O, resume, or physical deployment. Evidence is the returned framebuffer, not a guest serial message. The original UEFI `l2` profile was separately rebuilt against the shared VMCB setup but not booted in this run.

@@ -2,6 +2,14 @@
 
 Development host: Ryzen 9 9950X. Firmware runs use the `HV-SVM-L1` Hyper-V VM; host-only checks are labeled separately. Neither qualifies the 9950X3D deployment target on bare metal.
 
+## 037 · 2026-11-25 · The standalone L1 launches its first L2 guest
+
+**Passed in `HV-SVM-L1`.** After leaving UEFI boot services, L1 used its own arena to build the VMCB and nested page tables. It mapped just one read-only guest page at `0x1000`. L2 set AX to `0x4C32` and halted. L1 regained control and read the marker from the VMCB, with the saved RIP pointing at the `HLT` instruction itself.
+
+![Post-handoff L1 framebuffer showing HLT exit 0x78, RIP 0x1003 and RAX 0x4C32](images/l1-l2-037.png)
+
+This was one guest entry and one exit, not a guest resume. The [test record](test-report.md#037--2026-11-25-local--one-l2-entry-from-the-standalone-l1) includes the exact image, run command and memory layout.
+
 ## 036 · 2026-11-25 · L1 reports an allocation failure after UEFI handoff
 
 **Passed in `HV-SVM-L1`.** After `ExitBootServices`, L1 switched to its private stack and verified a page from its own arena. It rejected a nine-page request without advancing the allocator: the next one-page allocation returned exactly the second arena page. The worker received all four expected lines on COM1, and the VM framebuffer independently displayed the terminal below.
