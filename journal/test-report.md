@@ -503,3 +503,9 @@ For each of the six new profiles, the offline classifier accepted its actual fra
 ### 057 · Publish guest-owned ACPI tables without granting execute
 
 **Pre-boot contract:** pinned Linux NX staging, three old fetch controls. Materialize six E820 regions; RSDP at `90000h` on read-only/NX guest backing, FACS at `91000h` in writable/NX NVS. Substitute an RSDP in the PC hole and, separately, mark NVS as free RAM: distinct rejections and zero *new* VMRUNs. Restore both: one final-fetch NPF on the original pinned entry, expected raw GPA/walk and intact private guard. ACPI graph must still validate. No kernel discovery or AML execution is inferred.
+
+**2026-11-25 · [057 FAIL](images/l1-acpi-map-057.png), not an ACPI pass.** `12fc8072d9`, `firmware\build.cmd l1-acpi-map` then `python lab/hv_queue.py run --session l1-acpi-map`. Batch `42eb432cb1ec453dadb48e1087cc3431`, frozen ISO `FB72771955B22FD6BA83FE2F51F043DAF216DD5A4A0D3F12A7C52093D83A0C3E`, boot 18:18:24 UTC; `HvQueue before 42eb432cb1ec453dadb48e1087cc3431` retained the reviewed 056 terminal. The three fetch controls and `BAD ROOT 13h` were visible. The next label, `ROOT ENTRIES `, has 13 characters, while `pkg_observe` allowed only 12. Its `OBSERVATION LIMIT` stop prevented the remaining observations. Root entry delta, NVS refusal and restored pinned fetch **were not observed**. First-capture ATTENTION. Failed pixels were not added to the pass manifest. The independent host publisher test passed; it cannot replace this VM result.
+
+### 058 · ACPI observation-width correction
+
+Reserved, **not run**. The host formatter accepts the previously rejected 13-character label; the firmware must still satisfy the unchanged 057 guest oracle through the final guarded fetch. Candidate ISO `c99f522905d8c038dd16fbf647a339d71278b97e053db3d92dc304c6b53f1cb6`. Recovery of the original VM stopped after the failed-state checkpoint request and before restore; do not claim 056 was restored or 058 passed.
