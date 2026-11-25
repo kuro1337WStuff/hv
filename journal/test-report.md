@@ -215,3 +215,18 @@ All exception intercepts remained enabled on re-entry. The guest validated its e
 The displayed lane is one example. PASS required **all 32 64-bit lanes** to match in each entry's guest snapshot, captured guest exit frame, host save frame, and live host sample after restore. Values varied by owner, register, lane and entry, so reloading an initial guest frame on resume could not pass. L2 also checked its own incoming registers before replacing them. Its success HLT required the expected RIP, RSP and RAX marker.
 
 This is an explicit legacy XMM0–15 switch on one nested vCPU, not a full extended-state implementation. It does not cover MXCSR, x87, upper AVX lanes, vCPU migration or bare metal. References: AMD64 APM Vol. 2, §§11.4.1, 15.5–15.6.
+
+### 029 · 2026-11-25 local · MXCSR build stopped before VM staging
+
+**BUILD ERROR; no guest result.** `python lab/hv_queue.py run --rebuild vcpu-mxcsr`, batch `a862179ffe624de099f17cbce3146cee`. MSVC `/WX` rejected a signed/unsigned comparison (`C4389`) between the saved 32-bit guest MXCSR and the expected exit value. No image was staged and the VM was not changed. The correction gives the expected literals unsigned types; the required register values are unchanged.
+
+### 030 · 2026-11-25 local · MXCSR rounding and status preservation
+
+**Firmware PASS; queue ATTENTION for first-time screen review.** Ryzen 9 9950X, nested `HV-SVM-L1`; firmware source `d70cac84e8`. `python lab/hv_queue.py run --rebuild vcpu-mxcsr`, batch `316e65031d88475b93555d45a7fc6eaa`, ISO SHA-256 `990A9D737822DE1C38829789027874F59A5E8A8D43C98F09853AC15503A3C970`. The worker checkpointed the prior `vcpu-xmm` PASS before booting. The [console capture](images/vcpu-mxcsr-030.png) was reviewed after the batch stopped; the queue did not report COMPLETE.
+
+| Exit / guest RIP | L1 seed, saved and restored live | L2 entry | Integer result for 1.5 | L2 after conversion | L2 at exit |
+| --- | --- | --- | --- | --- | --- |
+| VMMCALL `0x81` / `0x1034` | `0x1F81` | `0x3F80` (down) | 1 | `0x3FA0` | `0x5F80` |
+| HLT `0x78` / `0x1069` | `0x7F84` | `0x5F80` (up) | 2 | `0x5FA0` | `0x5FA0` |
+
+L2 explicitly cleared the precision flag when selecting round-up before `VMMCALL`. Its next entry had to recover that captured value, not the initial round-down value. `CVTSS2SI` set just the precision flag (`0x20`) in both conversions. L1 used different status flags and rounding controls on each entry; `STMXCSR` sampled the restored live register separately from its save slot. Final guest RAX was `0x50415353`. Reference: AMD64 APM Vol. 1 §4.2.2. This covers masked exceptions and the tested MXCSR values on one nested vCPU, not unmasked SIMD exceptions, x87 state, or bare metal.

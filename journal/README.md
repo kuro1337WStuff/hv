@@ -2,6 +2,14 @@
 
 Development host: Ryzen 9 9950X. Firmware runs use the `HV-SVM-L1` Hyper-V VM; host-only checks are labeled separately. Neither qualifies the 9950X3D deployment target on bare metal.
 
+## 029–030 · 2026-11-25 · Guest rounding mode survives a VM exit
+
+**Run 030 passed in `HV-SVM-L1`.** L2 rounded `1.5` down to integer `1`, changed its mode to round up, and executed `VMMCALL`. After resume, the same conversion produced `2`. Each conversion set only the precision flag. L1 read its own live MXCSR after each exit and found its original rounding mode and status flags, not the guest's.
+
+![VM console showing both integer results, MXCSR samples for L1 and L2, and the success halt](images/vcpu-mxcsr-030.png)
+
+Reproduce with `python lab/hv_queue.py run --rebuild vcpu-mxcsr`. The [test record](test-report.md#030--2026-11-25-local--mxcsr-rounding-and-status-preservation) includes both exits; run 029 stopped during compilation without changing the VM.
+
 ## 028 · 2026-11-25 · Host and guest retain separate XMM registers
 
 **Run 028 passed in `HV-SVM-L1`.** L2 checked both halves of XMM0–XMM15 on entry, wrote a different pattern, and exited through `VMMCALL`. On resume it found its own updated values, not the host's values or its initial pattern. It then wrote a third pattern and reached its success HLT. L1 sampled its live registers after each return: all 32 lanes matched its own pattern for that entry.
