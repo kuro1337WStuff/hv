@@ -21,6 +21,7 @@ The [journal](README.md) records these console observations on a Ryzen 9 9950X u
 | All-processor nested GPA invalidation | `npt-broadcast`, opt-in on AMD Hyper-V | Both measured processor IDs must first read A through the same NPT root. With both L2s stopped, change the leaf, require success from one BSP `HvCallFlushGuestPhysicalAddressSpace` on that root, then require both L2s to read B at the original GPA and HLT site with no entry flush. Missing capability is SKIP, not PASS. No claim about which instruction L0 used. |
 | 64-bit integer state | `vcpu-gpr`, one L2 vCPU | Two ordered CPUID exits at distinct known instructions. On each resume L2 must check four zero-extended replies, all other GPRs (including high halves), and its round-specific stack pointer. Third exit must be HLT at the success label with a guest-generated PASS marker; a failure HLT is not interchangeable. |
 | Virtual HLT wake | `irq-wake`, fixed 64-bit L2 | Intercept the waiting HLT while IF is set and handler count and progress are zero. Queue one vector `0x41`. Require one handler entry, the post-HLT return RIP, restored stack pointer, guest progress, and the success marker at a separate terminal HLT. Do not credit a skipped HLT as a delivered interrupt. |
+| Deferred virtual IRQ | `irq-shadow`, fixed 64-bit L2 | Queue one vector before entry with IF clear. At the masked checkpoint require IF=0, pending=1, phase=1, count=0. Resume without reasserting the IRQ; the handler must observe phase=2 and save the RIP immediately following the shadow instruction. Require one entry, pending=0, and post-IRETQ phase=3 at the success HLT. |
 
 **Target qualification:** No bare-metal Ryzen 9 9950X3D run is recorded here. Host-side checks and nested runs on the 9950X do not qualify that target.
 
@@ -157,3 +158,23 @@ L1 compared all 16 integer-register values against the input pattern on each CPU
 The [console](images/irq-wake-022.png) shows the first intercepted HLT at `0x1002`: IF=1, interrupt shadow=0, count=0, progress=0. L1 advanced past the fixed HLT and set `V_IRQ` with priority 4 and vector `0x41` for the second VMRUN. Only the guest IDT handler increments the count and reads the return address from the CPU-built stack frame. Count was `1`, stacked RIP `0x1003`, continuation progress `1`, final RIP `0x1039`, and final RAX `0x50415353`. PASS also required a cleared `V_IRQ`, restored RSP `0x7FF0`, IF set, and the final HLT intercept. Clearing `V_IRQ` alone is not proof that the handler ran: AMD APM Vol. 2 §15.21.4 states the processor clears it before accessing the IDT.
 
 The queue did not auto-advance or report COMPLETE. This covers one eligible maskable interrupt and return on one virtual CPU; it does not cover deferred delivery with IF clear, APIC timer/EOI emulation, or bare metal.
+
+### 023 · 2026-11-24 local · Masked interrupt build stopped before staging
+
+**BUILD ERROR; no guest result.** `python lab/hv_queue.py run --rebuild irq-shadow`, batch `29cd80b782c743a7945c2d69ddb081a0`. MSVC rejected an unterminated header guard (`C1070`). No image was staged and the VM was unchanged. The corrected build keeps the same guest acceptance criteria.
+
+### 024 · 2026-11-24 local · Masked interrupt image failed to link
+
+**BUILD ERROR; no guest result.** Same command, batch `b42a199d3f744c1ab708e3be6c2b5e08`. Zero-initializing the expanded trace emitted a `memset` reference, unavailable in this freestanding EFI build (`LNK2019`). No VM changes. The runner writes every trace field it reads, so the unused initialization was removed rather than adding a C runtime.
+
+### 025 · 2026-11-24 local · Pending vector delivered after the STI shadow
+
+**Firmware PASS; queue ATTENTION for first-time screen review.** Ryzen 9 9950X, nested `HV-SVM-L1`; source `32283ef88d`; `python lab/hv_queue.py run --rebuild irq-shadow`; batch `310148b1bd304056a6f86c739a83962a`. ISO SHA-256 `B3A4F6BEF38B1E9FC405A41BD93D6517B2462B3FD58920830C3385B221576DDA`. The worker checkpointed the preceding `irq-wake` PASS and captured the [live console](images/irq-shadow-025.png). The queue did not report COMPLETE.
+
+| Observation | Result |
+| --- | --- |
+| Masked checkpoint, `VMMCALL` at `0x100C` | IF=0, V_IRQ=1, phase=1, handler count=0 |
+| Handler for vector `0x41` | Observed phase=2, stacked return RIP=`0x1018` immediately after the shadowed `INC` |
+| Success HLT at `0x1059` | IF=1, V_IRQ=0, handler count=1, phase=3, RSP=`0x7FF0`, RAX=`0x50415353` |
+
+L1 did not reassert the IRQ or set IF at the checkpoint. Guest `STI` set IF, the next instruction incremented the phase, and only then did the handler run. Checking both phase and stacked RIP distinguishes delivery at the shadow boundary from merely seeing the handler eventually. Reference: AMD64 APM Vol. 2, §§15.21.4–5, p. 557. This is one maskable vector on one nested vCPU; no timer, priority arbitration or physical target was tested.

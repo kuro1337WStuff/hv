@@ -46,6 +46,7 @@ function Get-HvConsoleVerdict {
         'forensic-write' { 'cf64cac4363291a8d1cab01816d3d854a99eb02adf6351bfdd2ba125abd3a24c' } # forensic-write-018.png
         'vcpu-gpr' { 'deb4feb5f6706e8ce0f31a17e00deee2ad7f48792ad7a497981d63b2b5928d4f' } # vcpu-gpr-020.png
         'irq-wake'  { 'dd0cd66333528c1938541b88a921ad6e05d823446d9fbc3213ed2c8c4a856862' } # irq-wake-022.png
+        'irq-shadow' { 'b12003240f8b92fc92ea2dc7ad572ff0b94f86e617f03c2e3080d1dcc2280883' } # irq-shadow-025.png
         'npt-remap' { 'b8a89c55ff3785983d41f30855c7af3e04fc0d5e87cb6122ab62a2c23affc061' } # npt-remap-008.png
         'npt-cross' { 'b4e0ee475d7add3a84c8294c3f69800fdf0244f315ba16375a645c1aa8f95d9e' } # npt-cross-015.png
         'npt-broadcast' { '7812af2f7444f89ad7c52b68fc8e72a202ce23c8a39e5a2eb98bf0a18863da7c' } # npt-broadcast-017.png

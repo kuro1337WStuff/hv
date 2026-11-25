@@ -2,6 +2,14 @@
 
 Development host: Ryzen 9 9950X. Firmware runs use the `HV-SVM-L1` Hyper-V VM; host-only checks are labeled separately. Neither qualifies the 9950X3D deployment target on bare metal.
 
+## 023–025 · 2026-11-24 · A pending IRQ waits for the STI shadow
+
+**Run 025 passed in `HV-SVM-L1`.** L1 queued vector `0x41` once. At a guest checkpoint with interrupts disabled, the IRQ was still pending and the handler count was zero. L1 resumed L2 without requeuing it. The instruction after `STI` incremented a phase counter. The interrupt handler saw the increment and recorded `0x1018` as its return address: exactly the next instruction.
+
+![VM console showing the IRQ pending with IF clear, one handler entry after the shadow, and a cleared pending bit](images/irq-shadow-025.png)
+
+After `IRETQ`, the guest reached phase 3 and halted with its PASS marker. Run `python lab/hv_queue.py run --rebuild irq-shadow` to reproduce. The [ledger](test-report.md#025--2026-11-24-local--pending-vector-delivered-after-the-sti-shadow) records the image, registers, and two earlier build errors that did not touch the VM.
+
 ## 021–022 · 2026-11-24 · One interrupt wakes a virtual CPU
 
 **Run 022 passed in `HV-SVM-L1`.** L2 reached HLT at `0x1002` with interrupts enabled, no handler entries, and no progress past HLT. L1 queued vector `0x41`. The guest handler ran once and recorded `0x1003` on its interrupt stack: the instruction immediately after HLT. After `IRETQ`, the guest checked its stack pointer, recorded forward progress and reached the success HLT at `0x1039`.
