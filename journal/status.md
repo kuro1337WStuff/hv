@@ -1,4 +1,4 @@
-# Project status · through 099
+# Project status · through 100
 
 **On `main`:** firmware baseline [041](README.md), plus CI-only [#2](https://github.com/kuro1337WStuff/hv/pull/2) at `735c8b56` after both hosted checks passed on `54bace3b`. **On `feature/l1-handoff` only:** [#4](https://github.com/kuro1337WStuff/hv/pull/4) merged at `95abe46c`; [#10](https://github.com/kuro1337WStuff/hv/pull/10) retargeted, then squashed at `44fb6247`. The resulting firmware trees matched the source trees used in 060 and 063 respectively. Revert #10 first if both must be undone; #4 is a merge commit. No ordinary Linux boot or bare-metal qualification.
 
@@ -15,7 +15,7 @@
 
 **Merge routing:** [Dated PR-by-PR audit](merge-audit-072.md) · [live open PRs](https://github.com/kuro1337WStuff/hv/pulls) · [workflow and rollback](project-workflow.md). #21's test merge did not promote #12. Check the actual base, scope and source revision before each integration.
 
-**Platform work:** [099](trials/099.md) distinguished a present COM1 UART from absent COM2–4 in the host model. Trial [097](trials/097.md) covered fallback calibration; [098](trials/098.md) reached PIC acceptance, not CPU delivery. [#88](https://github.com/kuro1337WStuff/hv/pull/88) also landed on `feature/l1-handoff`; its [PM1a byte-access card](https://github.com/kuro1337WStuff/hv/issues/86) has a separate trial reservation. No VM was admitted.
+**Platform work:** [099](trials/099.md) distinguished a present COM1 from absent COM2–4. [100](trials/100.md) verified four ACPI event-register byte lanes, without interrupt delivery or shutdown. Both are host results, integrated on `feature/l1-handoff` at `17c5a001`. Next release checks: [#90 · linked kernel entry page](https://github.com/kuro1337WStuff/hv/issues/90) and [#91 · pinned initramfs interpreter chain](https://github.com/kuro1337WStuff/hv/issues/91). Neither grants VM admission.
 
 ## Feature evidence before the separate trial ledger
 
