@@ -6,6 +6,7 @@ set "EFI=BOOTX64"
 set "ISO=hv-probe"
 set "CASE_FLAGS="
 set "ASM_OBJ="
+set "ASM_SRC="
 set "CROSS_PROFILE="
 if /i "%~1"=="l2" (
   set "SRC=l2_smoke"
@@ -17,6 +18,14 @@ if /i "%~1"=="l2" (
   set "ISO=hv-cpuid-resume"
   set "CASE_FLAGS=/DHV_CPUID_RESUME"
   set "ASM_OBJ=build\cpuid_resume.obj"
+  set "ASM_SRC=firmware\cpuid_resume.asm"
+) else if /i "%~1"=="vcpu-gpr" (
+  set "SRC=l2_smoke"
+  set "EFI=VCPUGPR"
+  set "ISO=hv-vcpu-gpr"
+  set "CASE_FLAGS=/DHV_VCPU_GPR"
+  set "ASM_OBJ=build\vcpu_gpr.obj"
+  set "ASM_SRC=firmware\vcpu_gpr.asm"
 ) else if /i "%~1"=="npt-write" (
   set "SRC=l2_smoke"
   set "EFI=NPTWRITE"
@@ -39,7 +48,7 @@ if /i "%~1"=="l2" (
 ) else if /i "%~1"=="npt-broadcast" (
   set "ISO=hv-npt-broadcast"
   set "CROSS_PROFILE=npt-broadcast"
-) else if not "%~1"=="" (echo Usage: build.cmd [l2 or cpuid or npt-write or npt-remap or npt-cross or npt-broadcast or forensic-write] & exit /b 1)
+) else if not "%~1"=="" (echo Usage: build.cmd [l2 or cpuid or vcpu-gpr or npt-write or npt-remap or npt-cross or npt-broadcast or forensic-write] & exit /b 1)
 set "TOOLS=build\tools"
 set "INC_EDK=%TOOLS%\edk2\MdePkg\Include"
 set "PACK=%TOOLS%\packenv\Scripts\python.exe"
@@ -59,7 +68,7 @@ for /f "usebackq delims=" %%v in (`"%VSWHERE%" -latest -products * -requires Mic
 if not defined VCVARS (echo x64 MSVC build tools not found. & exit /b 1)
 call "%VCVARS%" >nul || exit /b 1
 if defined ASM_OBJ (
-  ml64 /nologo /c /Fo"%ASM_OBJ%" firmware\cpuid_resume.asm || exit /b 1
+  ml64 /nologo /c /Fo"%ASM_OBJ%" "%ASM_SRC%" || exit /b 1
 )
 cl /nologo /c /TC /std:c11 /O1 /GS- /Zl /W4 /WX %CASE_FLAGS% /I"%INC_EDK%\X64" /I"%INC_EDK%" /Fobuild\%EFI%.obj firmware\%SRC%.c || exit /b 1
 link /nologo /nodefaultlib /incremental:no /machine:x64 /subsystem:efi_application /entry:EfiMain /out:build\%EFI%.EFI build\%EFI%.obj %ASM_OBJ% || exit /b 1

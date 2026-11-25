@@ -7,11 +7,13 @@ enum {
     Exceptions=0x008, Intercepts=0x00c, SvmIntercepts=0x010, IopmPa=0x040,
     MsrpmPa=0x048, Asid=0x058, TlbControl=0x05c, IntControl=0x060,
     ExitCode=0x070, Info1=0x078, Info2=0x080, NpEnable=0x090, NestedCr3=0x0b0, NextRip=0x0c8,
-    Es=0x400, Cs=0x410, Ss=0x420, Ds=0x430, GuestEfer=0x4d0, Cr0=0x558,
+    Es=0x400, Cs=0x410, Ss=0x420, Ds=0x430, GuestEfer=0x4d0, Cr4=0x548, Cr3=0x550, Cr0=0x558,
     Dr7=0x560, Dr6=0x568, Flags=0x570, Rip=0x578, Rsp=0x5d8, Rax=0x5f8, Pat=0x668
 };
 enum { Vmcb, HostSave, Pml4, Code=Pml4+NptTableCount, Iopm, Msrpm=Iopm+3, Pages=Msrpm+2 };
-#ifdef HV_NPT_WRITE
+#ifdef HV_VCPU_GPR
+enum { GuestTables=Pages, GuestStack=GuestTables+NptTableCount, AllocPages=GuestStack+1 };
+#elif defined(HV_NPT_WRITE)
 enum { DataGpa=0x2000, InitialByte=0x5a, StoredByte=0xa5, Data=Pages, AllocPages=Pages+1 };
 #elif defined(HV_NPT_REMAP)
 enum { DataGpa=0x2000, FrameA=Pages, FrameB, AllocPages, MarkerA=0xa11a, MarkerB=0xb22b };
@@ -45,6 +47,10 @@ static void hex(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *out, CHAR16 *label, UINT64 v)
     out->OutputString(out,label);
     out->OutputString(out,buf);
 }
+
+#ifdef HV_VCPU_GPR
+#include "vcpu_gpr.h"
+#endif
 
 #ifdef HV_FORENSIC_WRITE
 /* AMD APM Vol. 2 §15.25.7. U/S is not the guest CPL. This non-SNP fixture
@@ -101,8 +107,10 @@ static void smoke(EFI_SYSTEM_TABLE *st)
     __cpuid(r,(int)0x80000001u);
     if (!(r[2]&4)) { out->OutputString(out,L"SKIP: SVM not exposed.\r\n"); return; }
     __cpuid(r,(int)0x8000000au);
-#ifdef HV_CPUID_RESUME
+#if defined(HV_CPUID_RESUME) || defined(HV_VCPU_GPR)
     BOOLEAN nrips=(r[3] & (1u<<3))!=0;
+#endif
+#ifdef HV_CPUID_RESUME
     CpuidFrame frame={0,0,0};
     UINT64 first_exit, first_ip, leaf, subleaf, resume_ip=0;
     BOOLEAN resumed=FALSE;
@@ -110,6 +118,14 @@ static void smoke(EFI_SYSTEM_TABLE *st)
     if (length>EFI_PAGE_SIZE || guest_ip(L2AfterCpuid)!=guest_ip(L2Cpuid)+2) {
         out->OutputString(out,L"FAIL: invalid fixed CPUID guest layout.\r\n"); return;
     }
+#elif defined(HV_VCPU_GPR)
+    UINTN length=(UINTN)GprEnd-(UINTN)GprStart;
+    if (!gpr_layout_ok(length)) {
+        out->OutputString(out,L"FAIL: invalid fixed GPR guest layout.\r\n"); return;
+    }
+    UINT64 frame[14];
+    GprTrace trace;
+    bs->SetMem(frame,sizeof(frame),0);
 #endif
     if (!(r[3]&1) || (UINT32)r[1]<2 || (__readcr4() & (1u<<12))) {
         out->OutputString(out,L"SKIP: need nested paging, guest ASID 1 and four-level host paging.\r\n"); return;
@@ -130,6 +146,8 @@ static void smoke(EFI_SYSTEM_TABLE *st)
                     base+Pml4*EFI_PAGE_SIZE, base+Code*EFI_PAGE_SIZE);
 #ifdef HV_CPUID_RESUME
     bs->CopyMem(vmcb+Code*EFI_PAGE_SIZE,(VOID *)L2Start,length);
+#elif defined(HV_VCPU_GPR)
+    bs->CopyMem(vmcb+Code*EFI_PAGE_SIZE,(VOID *)GprStart,length);
 #elif defined(HV_NPT_WRITE)
     /* 16-bit MOV byte ptr DS:[2000h], A5h; HLT. Code stays read-only in both arms. */
     const UINT8 payload[]={0xc6,0x06,DataGpa & 0xff,DataGpa >> 8,StoredByte,0xf4};
@@ -161,7 +179,7 @@ static void smoke(EFI_SYSTEM_TABLE *st)
 #endif
     FIELD(UINT32,Exceptions)=0xffffffffu;
     FIELD(UINT32,Intercepts)=0x0fu | (1u<<24) | (1u<<27) | (1u<<28) | (1u<<31);
-#ifdef HV_CPUID_RESUME
+#if defined(HV_CPUID_RESUME) || defined(HV_VCPU_GPR)
     FIELD(UINT32,Intercepts)|=1u<<18;
 #endif
     FIELD(UINT32,SvmIntercepts)=0x7f; /* includes mandatory VMRUN intercept */
@@ -172,22 +190,28 @@ static void smoke(EFI_SYSTEM_TABLE *st)
     FIELD(UINT32,IntControl)=1u<<24;
     FIELD(UINT64,NpEnable)=1;
     FIELD(UINT64,NestedCr3)=base+Pml4*EFI_PAGE_SIZE;
+#ifdef HV_VCPU_GPR
+    gpr_guest_state(vmcb,base);
+#else
     for (UINTN seg=Es; seg<=Ds; seg+=16) {
         FIELD(UINT16,seg+2)=(seg==Cs)?0x9b:0x93;
         FIELD(UINT32,seg+4)=0xffff;
     }
     FIELD(UINT64,GuestEfer)=SVME; /* required even for this real-mode guest */
     FIELD(UINT64,Cr0)=0x30;
+    FIELD(UINT64,Rsp)=FixedGuestGpa+EFI_PAGE_SIZE-16; /* no stack accesses in this payload */
+#endif
     FIELD(UINT64,Dr6)=0xffff0ff0u;
     FIELD(UINT64,Dr7)=0x400;
     FIELD(UINT64,Flags)=2;
     FIELD(UINT64,Rip)=FixedGuestGpa;
-    FIELD(UINT64,Rsp)=FixedGuestGpa+EFI_PAGE_SIZE-16; /* no stack accesses in this payload */
     FIELD(UINT64,Pat)=__readmsr(0x277);
     FIELD(UINT64,ExitCode)=~0ull; /* never confuse unmodified memory with success */
 
 #ifdef HV_CPUID_RESUME
     out->OutputString(out,L"Entering L2: CPUID -> validate 4 replies -> HLT\r\n");
+#elif defined(HV_VCPU_GPR)
+    out->OutputString(out,L"Entering 64-bit L2: two CPUID GPR save/restore rounds\r\n");
 #elif defined(HV_FORENSIC_WRITE)
     out->OutputString(out,L"Forensic NPT test | fixed MOV byte [2000h], A5h\r\n");
 #elif defined(HV_NPT_WRITE)
@@ -222,6 +246,8 @@ static void smoke(EFI_SYSTEM_TABLE *st)
             RunCpuidGuest((UINTN)base,&frame);
         }
     }
+#elif defined(HV_VCPU_GPR)
+    gpr_run(vmcb,frame,nrips,&trace);
 #elif defined(HV_NPT_WRITE)
     __svm_vmrun((UINTN)base);
     control_exit=FIELD(UINT64,ExitCode);
@@ -271,7 +297,9 @@ static void smoke(EFI_SYSTEM_TABLE *st)
     __writemsr(MSR_EFER,efer);
     bs->RestoreTPL(tpl);
 
-#ifdef HV_NPT_REMAP
+#ifdef HV_VCPU_GPR
+    gpr_report(out,vmcb,&trace);
+#elif defined(HV_NPT_REMAP)
     for (UINTN i=0; i<reads; ++i) {
         out->OutputString(out,i ? L"Frame B:\r\n" : L"Frame A:\r\n");
         hex(out,L"  EXITCODE: ",samples[i].exit);
