@@ -30,6 +30,17 @@ static UINT8 *linux_stage(UINT8 *base)
  * bit-for-bit before and after VMRUN, without masking any hardware changes. */
 #define LINUX_LINK_FLAGS 0x27ull
 #define LINUX_LEAF_FLAGS ((1ull<<63)|0x67ull)
+/* In the opt-in ACPI map, the immutable descriptor page is read-only/NX;
+ * the dedicated FACS page can hold guest-owned writable NVS, still NX. */
+static UINT64 linux_npt_rights(UINTN gpa)
+{
+#ifdef HV_ACPI_MAP
+    if (gpa==PowerRsdpGpa) return LINUX_LEAF_FLAGS & ~2ull;
+#else
+    (void)gpa;
+#endif
+    return LINUX_LEAF_FLAGS;
+}
 static void linux_build_npt(UINT8 *base)
 {
     UINT64 (*npt)[512]=(UINT64 (*)[512])(base+LinuxNptFirst*LinuxPage);
@@ -40,7 +51,7 @@ static void linux_build_npt(UINT8 *base)
     for (UINTN i=0; i<LinuxPtCount; ++i) npt[2][i]=(UINTN)npt[3+i]|LINUX_LINK_FLAGS;
     for (UINTN gpa=0; gpa<LinuxRamBytes; gpa+=LinuxPage) {
         if (gpa>=LinuxHoleStart && gpa<LinuxHighRam) continue;
-        npt[3+gpa/LinuxLargePage][gpa/LinuxPage%512]=(UINTN)(ram+gpa)|LINUX_LEAF_FLAGS;
+        npt[3+gpa/LinuxLargePage][gpa/LinuxPage%512]=(UINTN)(ram+gpa)|linux_npt_rights(gpa);
     }
 }
 
@@ -58,7 +69,7 @@ static BOOLEAN linux_tree_ok(UINT8 *vmcb)
             else if (page>=3) {
                 UINTN pfn=(page-3)*512+slot;
                 if (pfn<LinuxHoleStart/LinuxPage || pfn>=LinuxHighRam/LinuxPage)
-                    want=(UINTN)(vmcb+(LinuxRamFirst+pfn)*LinuxPage)|LINUX_LEAF_FLAGS;
+                    want=(UINTN)(vmcb+(LinuxRamFirst+pfn)*LinuxPage)|linux_npt_rights(pfn*LinuxPage);
             }
             if (npt[page][slot]!=want) return 0;
         }
@@ -101,7 +112,7 @@ static void linux_fetch_vmcb(UINT8 *vmcb, UINT64 entry)
 
 #include "fetch_fixture.h"
 
-#if defined(HV_INPUT_TEST) || defined(HV_ENTRY_TEST)
+#if defined(HV_INPUT_TEST) || defined(HV_ENTRY_TEST) || defined(HV_ACPI_MAP)
 extern volatile unsigned linux_vmrun_count; /* assembly increments just before VMRUN */
 #endif
 
@@ -132,6 +143,9 @@ static const char *linux_verified_admit(UINT8 *base, enum LinuxInput *bad)
     error=build_linux_layout(ram,LinuxRamBytes,media+LinuxImageOff,LinuxImageLen,
         media+LinuxRdOff,LinuxRdLen,media+LinuxCmdOff,LinuxCmdLen,&layout);
     if (error) return error;
+#ifdef HV_ACPI_MAP
+    if (!linux_acpi_publish(ram,LinuxRamBytes)) return "ACPI PUBLICATION";
+#endif
     linux_fetch_vmcb(vmcb,layout.entry);
     uint64_t walked;
     if (!fetch_walk(ram,LinuxRamBytes,FIELD(UINT64,Cr3),layout.entry,&walked) ||
@@ -140,6 +154,25 @@ static const char *linux_verified_admit(UINT8 *base, enum LinuxInput *bad)
     frame[RsiSlot]=LinuxParams;
     if (!linux_tree_ok(vmcb)) return "ADMIT NPT SETUP";
     if (!linux_guard_ok(base)) return "ADMIT PRIVATE GUARD";
+#ifdef HV_ACPI_MAP
+    UINT8 *bp=ram+LinuxParams, *nvs_type=bp+AcpiMap+2*AcpiRow+16;
+    unsigned attempts=linux_vmrun_count;
+    linux_put64(bp+AcpiRootField,LinuxHoleStart);
+    enum LinuxEntryFault fault=linux_checked_fetch(vmcb,frame,ram);
+    pkg_observe("BAD ROOT ",fault);
+    pkg_observe("ROOT ENTRIES ",linux_vmrun_count-attempts);
+    if (fault!=LinuxEntryBootParams || linux_vmrun_count!=attempts) return "ACPI BAD ROOT";
+    linux_put64(bp+AcpiRootField,PowerRsdpGpa);
+    linux_put32(nvs_type,1);
+    fault=linux_checked_fetch(vmcb,frame,ram);
+    pkg_observe("BAD NVS ",fault);
+    pkg_observe("NVS ENTRIES ",linux_vmrun_count-attempts);
+    if (fault!=LinuxEntryE820 || linux_vmrun_count!=attempts) return "ACPI BAD NVS";
+    linux_put32(nvs_type,4);
+    pkg_observe("RSDP GPA ",linux_le64(bp+AcpiRootField));
+    pkg_observe("E820 COUNT ",bp[AcpiMapCount]);
+    pkg_observe("FACS GPA ",linux_le64(ram+PowerRsdpGpa+PowerFadtOffset+132));
+#endif
 #ifdef HV_ENTRY_TEST
     unsigned before=linux_vmrun_count;
     frame[RsiSlot]=~0ull;
@@ -161,6 +194,11 @@ static const char *linux_verified_admit(UINT8 *base, enum LinuxInput *bad)
     pkg_observe("ENTRY GDT ",FIELD(UINT64,0x468));
 #endif
     if (linux_checked_fetch(vmcb,frame,ram)!=LinuxEntryOK) return "NX ENTRY CONTRACT";
+#ifdef HV_ACPI_MAP
+    pkg_observe("NX ENTRIES ",linux_vmrun_count-attempts);
+    if (linux_vmrun_count-attempts!=1 || !linux_acpi_valid(ram,LinuxRamBytes))
+        return "ACPI RESTORED MAP";
+#endif
 #ifdef HV_ENTRY_TEST
     pkg_observe("NX ENTRIES ",linux_vmrun_count-before);
     if (linux_vmrun_count-before!=1) return "NX ENTRY COUNT";

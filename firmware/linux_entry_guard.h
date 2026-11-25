@@ -84,6 +84,10 @@ static inline uint64_t linux_entry_split(const uint8_t *bp, unsigned lo, unsigne
     return linux_le32(bp+lo) | ((uint64_t)linux_le32(bp+hi)<<32);
 }
 
+#ifdef HV_ACPI_MAP
+#include "linux_acpi_layout.h"
+#endif
+
 static inline enum LinuxEntryFault linux_entry_guard(const uint8_t *vmcb, size_t vmcb_bytes,
     uint64_t actual_rsi, const uint8_t *ram, size_t ram_bytes)
 {
@@ -120,8 +124,12 @@ static inline enum LinuxEntryFault linux_entry_guard(const uint8_t *vmcb, size_t
     if (linux_le32(bp+0x202)!=UINT32_C(0x53726448) || linux_le16(bp+0x206)!=0x020f ||
         bp[0x210]!=0xff || bp[0x211]!=1 || linux_le32(bp+0x208) || linux_le32(bp+0x224) ||
         linux_le32(bp+0x23c) || linux_le64(bp+0x240) || linux_le64(bp+0x250)) return LinuxEntryBootParams;
-    /* No ACPI RSDP, confidential-computing blob or EFI handoff in the fixed PC. */
-    if (linux_le64(bp+0x70) || linux_le32(bp+0x13c)) return LinuxEntryBootParams;
+    if (linux_le32(bp+0x13c)) return LinuxEntryBootParams;
+#ifdef HV_ACPI_MAP
+    if (linux_le64(bp+AcpiRootField)!=PowerRsdpGpa) return LinuxEntryBootParams;
+#else
+    if (linux_le64(bp+0x70)) return LinuxEntryBootParams;
+#endif
     for (unsigned i=0x1c0; i<0x1e0; i+=8)
         if (linux_le64(bp+i)) return LinuxEntryBootParams;
     if (linux_le32(bp+0x214)!=EntryKernel || linux_le64(bp+0x258)!=EntryKernel ||
@@ -133,6 +141,9 @@ static inline enum LinuxEntryFault linux_entry_guard(const uint8_t *vmcb, size_t
     if (linux_entry_split(bp,0x228,0xc8)!=LinuxCmdline || linux_le32(bp+0x238)!=0x7ff ||
         ram[LinuxCmdline+EntryCmdBytes-1]!=0) return LinuxEntryCmdline;
     for (unsigned i=0; i<EntryCmdBytes-1; ++i) if (!ram[LinuxCmdline+i]) return LinuxEntryCmdline;
+#ifdef HV_ACPI_MAP
+    if (!linux_acpi_valid(ram,ram_bytes)) return LinuxEntryE820;
+#else
     if (bp[0x1e8]!=3) return LinuxEntryE820;
     static const uint32_t edges[]={0,LinuxHoleStart,LinuxHighRam,LinuxRamBytes};
     for (unsigned i=0; i<3; ++i) {
@@ -140,6 +151,7 @@ static inline enum LinuxEntryFault linux_entry_guard(const uint8_t *vmcb, size_t
         if (linux_le64(row)!=edges[i] || linux_le64(row+8)!=edges[i+1]-edges[i] ||
             linux_le32(row+16)!=(i==1 ? 2u : 1u)) return LinuxEntryE820;
     }
+#endif
     if (!linux_entry_paging(ram)) return LinuxEntryPaging;
     uint64_t walked;
     if (!fetch_walk(ram,ram_bytes,cr3,rip,&walked) || walked!=EntryIP || ram[EntryIP]!=0xfc)

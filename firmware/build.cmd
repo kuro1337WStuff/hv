@@ -16,6 +16,7 @@ set "LINUX_MEDIA="
 if /i "%~1"=="l1-linux-admission" set "LINUX_MEDIA=1"
 if /i "%~1"=="l1-linux-inputs" set "LINUX_MEDIA=1"
 if /i "%~1"=="l1-entry-guard" set "LINUX_MEDIA=1"
+if /i "%~1"=="l1-acpi-map" set "LINUX_MEDIA=1"
 if /i "%~1"=="l2" (
   set "SRC=l2_smoke"
   set "EFI=L2SMOKE"
@@ -157,6 +158,11 @@ if /i "%~1"=="l2" (
     set "EFI=L1ENTRYGUARD"
     set "ISO=hv-l1-entry-guard"
     set "CASE_FLAGS=/DHV_STANDALONE_L2 /DHV_LINUX_ADMISSION /DHV_ENTRY_TEST"
+    set "EXTRA_ASM_FLAGS=/DHV_COUNT_ENTRIES"
+  ) else if /i "%~1"=="l1-acpi-map" (
+    set "EFI=L1ACPIMAP"
+    set "ISO=hv-l1-acpi-map"
+    set "CASE_FLAGS=/DHV_STANDALONE_L2 /DHV_LINUX_ADMISSION /DHV_ACPI_MAP"
     set "EXTRA_ASM_FLAGS=/DHV_COUNT_ENTRIES"
   )
 ) else if /i "%~1"=="cpuid" (
