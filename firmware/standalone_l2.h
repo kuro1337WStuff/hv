@@ -2,12 +2,56 @@
 #define HV_STANDALONE_L2_H
 #include "fixed_vmcb.h"
 
+#ifdef HV_NPT_WRITE
+#include "fixed_npt_write.h"
+enum { StandaloneGuestPages=Data+1 };
+typedef struct {
+    UINT64 rw_exit, rw_rip, rw_byte, ro_exit, ro_rip, info1, gpa, before, after, entries;
+} StandaloneSample;
+
+static const char *standalone_store_run(UINT8 *vmcb, StandaloneSample *s)
+{
+    volatile UINT8 *target=vmcb+Data*EFI_PAGE_SIZE; /* owned backing, never EXITINFO2 */
+    volatile UINT64 *leaf=&((FixedNpt *)(vmcb+Pml4*EFI_PAGE_SIZE))->table[3][DataGpa/NptPageBytes];
+    *target=InitialByte;
+    *leaf=(UINTN)target|7;
+    if (*target!=InitialByte) return "RW INITIAL BYTE";
+    s->entries=1;
+    __svm_vmrun((UINTN)vmcb);
+    s->rw_exit=FIELD(UINT64,ExitCode);
+    s->rw_rip=FIELD(UINT64,Rip);
+    s->rw_byte=*target;
+    if (s->rw_exit!=0x78 || s->rw_rip!=FixedGuestGpa+sizeof(fixed_store_hlt)-1 ||
+        s->rw_byte!=StoredByte) return "RW CONTROL";
+
+    *target=InitialByte;
+    s->before=*target;
+    if (s->before!=InitialByte) return "RO RESET BYTE";
+    *leaf &= ~2ull; /* retain the frame, including any hardware A/D updates */
+    FIELD(UINT64,Rip)=FixedGuestGpa;
+    FIELD(UINT8,TlbControl)=1; /* full local flush at the next VMRUN */
+    FIELD(UINT64,ExitCode)=~0ull;
+    FIELD(UINT64,Info1)=FIELD(UINT64,Info2)=0;
+    s->entries=2;
+    __svm_vmrun((UINTN)vmcb);
+    s->ro_exit=FIELD(UINT64,ExitCode);
+    s->ro_rip=FIELD(UINT64,Rip);
+    s->info1=FIELD(UINT64,Info1);
+    s->gpa=FIELD(UINT64,Info2);
+    s->after=*target;
+    if (!final_write_fault(s->ro_exit,s->info1) || s->ro_rip!=FixedGuestGpa ||
+        s->gpa!=DataGpa) return "RO FAULT";
+    if (s->after!=s->before) return "RO BYTE CHANGED";
+    return NULL;
+}
+#else
 enum { StandaloneGuestPages=Pages };
 #ifdef HV_CPUID_RESUME
 #include "fixed_cpuid.h"
 typedef CpuidSample StandaloneSample;
 #else
 typedef struct { UINT64 exitcode, rip, rax; } StandaloneSample;
+#endif
 #endif
 
 /* BSP only, interrupts already disabled. reservation is a contiguous identity
@@ -17,6 +61,10 @@ static const char *run_standalone_l2(void *reservation, StandaloneSample *sample
     UINTN base=(UINTN)reservation;
     UINT8 *vmcb=(UINT8 *)reservation;
     int r[4];
+#ifdef HV_NPT_WRITE
+    __stosb((UINT8 *)sample,0,sizeof(*sample));
+    sample->rw_exit=sample->ro_exit=~0ull;
+#else
     sample->exitcode=~0ull;
     sample->rip=sample->rax=0;
 #ifdef HV_CPUID_RESUME
@@ -25,6 +73,7 @@ static const char *run_standalone_l2(void *reservation, StandaloneSample *sample
     sample->nrips=FALSE;
     UINTN length=(UINTN)L2End-(UINTN)L2Start;
     if (!cpuid_layout_ok(length)) return "CPUID GUEST LAYOUT";
+#endif
 #endif
     if (!base || (base & (EFI_PAGE_SIZE-1)) || base>MAX_UINTN-(StandaloneGuestPages*EFI_PAGE_SIZE-1))
         return "GUEST RESERVATION";
@@ -55,6 +104,9 @@ static const char *run_standalone_l2(void *reservation, StandaloneSample *sample
     build_fixed_npt((FixedNpt *)(vmcb+Pml4*EFI_PAGE_SIZE),base+Pml4*EFI_PAGE_SIZE,base+Code*EFI_PAGE_SIZE);
 #ifdef HV_CPUID_RESUME
     __movsb(vmcb+Code*EFI_PAGE_SIZE,L2Start,length);
+#elif defined(HV_NPT_WRITE)
+    __stosb(vmcb+Data*EFI_PAGE_SIZE,0,EFI_PAGE_SIZE);
+    __movsb(vmcb+Code*EFI_PAGE_SIZE,fixed_store_hlt,sizeof(fixed_store_hlt));
 #else
     __movsb(vmcb+Code*EFI_PAGE_SIZE,fixed_mov_hlt,sizeof(fixed_mov_hlt));
 #endif
@@ -71,6 +123,8 @@ static const char *run_standalone_l2(void *reservation, StandaloneSample *sample
     __writemsr(MSR_HSAVE,base+HostSave*EFI_PAGE_SIZE);
 #ifdef HV_CPUID_RESUME
     const char *error=fixed_cpuid_run(vmcb,sample);
+#elif defined(HV_NPT_WRITE)
+    const char *error=standalone_store_run(vmcb,sample);
 #else
     __svm_vmrun(base);
 #endif
@@ -81,7 +135,7 @@ static const char *run_standalone_l2(void *reservation, StandaloneSample *sample
     __svm_stgi();
     __writemsr(MSR_EFER,efer);
 
-#ifdef HV_CPUID_RESUME
+#if defined(HV_CPUID_RESUME) || defined(HV_NPT_WRITE)
     return error;
 #else
     sample->exitcode=FIELD(UINT64,ExitCode);

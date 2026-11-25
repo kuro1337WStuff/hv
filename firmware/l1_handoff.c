@@ -23,7 +23,10 @@ static UINTN arena_used;
 static __declspec(align(16)) UINT8 map_storage[128 * 1024];
 static volatile UINT32 *pixels;
 static UINT32 width, height, pitch;
-#if defined(HV_STANDALONE_L2) && defined(HV_CPUID_RESUME)
+#if defined(HV_STANDALONE_L2) && defined(HV_NPT_WRITE)
+#define LOG_ROWS 11u  /* HANDOFF and ten sampled values */
+#define NPT_INFO_LABEL "EXITINFO1 "
+#elif defined(HV_STANDALONE_L2) && defined(HV_CPUID_RESUME)
 #define LOG_ROWS 10u  /* HANDOFF and nine sampled values */
 #else
 #define LOG_ROWS 4u
@@ -90,6 +93,9 @@ static int use_gop(EFI_GRAPHICS_OUTPUT_PROTOCOL *gop)
     EFI_GRAPHICS_OUTPUT_MODE_INFORMATION *i = m->Info;
     if (i->Version != 0 || (i->PixelFormat != PixelBlueGreenRedReserved8BitPerColor &&
         i->PixelFormat != PixelRedGreenBlueReserved8BitPerColor)) return 0;
+#if defined(HV_STANDALONE_L2) && defined(HV_NPT_WRITE)
+    if (i->HorizontalResolution < 20u + 12u * (sizeof(NPT_INFO_LABEL) - 1u + 16u)) return 0;
+#endif
     if (i->HorizontalResolution < 320 || i->VerticalResolution < 200 ||
         i->VerticalResolution < LOG_Y(LOG_ROWS - 1) + 14 ||
         i->PixelsPerScanLine < i->HorizontalResolution || !m->FrameBufferBase ||
@@ -163,7 +169,7 @@ static int send_text(const char *s)
     return 1;
 }
 #else
-/* The longest label plus 16 hex digits fits even the minimum 320px mode. */
+/* Callers reserve space for the label, 16 hex digits and the terminator. */
 static void log_hex(char *line, const char *label, UINT64 value)
 {
     static const char hex[] = "0123456789ABCDEF";
@@ -177,7 +183,9 @@ static void log_hex(char *line, const char *label, UINT64 value)
 __declspec(noreturn) static void fail(const char *reason)
 {
     L1DisableInterrupts();
-#if defined(HV_STANDALONE_L2) && defined(HV_CPUID_RESUME)
+#if defined(HV_STANDALONE_L2) && defined(HV_NPT_WRITE)
+    screen("L1 NPT WRITE FAIL", reason, 0xff00ff);
+#elif defined(HV_STANDALONE_L2) && defined(HV_CPUID_RESUME)
     screen("L1 CPUID FAIL", reason, 0xff00ff);
 #elif defined(HV_STANDALONE_L2)
     screen("L1 L2 FAIL", reason, 0xff00ff);
@@ -211,6 +219,22 @@ __declspec(noreturn) void L1OwnedMain(void)
     if (!reservation || (UINTN)reservation != owned_base || arena_used != ARENA_PAGES) fail("ARENA");
     StandaloneSample sample;
     const char *reason = run_standalone_l2(reservation, &sample);
+#ifdef HV_NPT_WRITE
+    static char lines[LOG_ROWS - 1][sizeof(NPT_INFO_LABEL) + 16];
+    unsigned n = 0;
+    log_hex(lines[n++], "RW EXIT ", sample.rw_exit);
+    log_hex(lines[n++], "RW RIP ", sample.rw_rip);
+    log_hex(lines[n++], "RW BYTE ", sample.rw_byte);
+    log_hex(lines[n++], "RO EXIT ", sample.ro_exit);
+    log_hex(lines[n++], "RO RIP ", sample.ro_rip);
+    log_hex(lines[n++], NPT_INFO_LABEL, sample.info1);
+    log_hex(lines[n++], "GPA ", sample.gpa);
+    log_hex(lines[n++], "BEFORE ", sample.before);
+    log_hex(lines[n++], "AFTER ", sample.after);
+    log_hex(lines[n++], "ENTRIES ", sample.entries);
+    if (reason) fail(reason);
+    screen("L1 NPT WRITE PASS", NULL, 0x00ff00);
+#else
     static char lines[LOG_ROWS - 1][sizeof("EXITCODE ") + 16];
     unsigned n = 0;
 #ifdef HV_CPUID_RESUME
@@ -229,6 +253,7 @@ __declspec(noreturn) void L1OwnedMain(void)
     screen("L1 CPUID PASS", NULL, 0x00ff00);
 #else
     screen("L1 L2 PASS", NULL, 0x00ff00);
+#endif
 #endif
     L1Halt();
 #else
@@ -284,7 +309,9 @@ EFI_STATUS EFIAPI EfiMain(EFI_HANDLE image, EFI_SYSTEM_TABLE *st)
     uart_init();
 #endif
     if (!find_screen(bs, st->ConsoleOutHandle)) {
-#if defined(HV_STANDALONE_L2) && defined(HV_CPUID_RESUME)
+#if defined(HV_STANDALONE_L2) && defined(HV_NPT_WRITE)
+        if (st->ConOut) st->ConOut->OutputString(st->ConOut, L"L1 NPT WRITE FAIL: NO DIRECT FRAMEBUFFER\r\n");
+#elif defined(HV_STANDALONE_L2) && defined(HV_CPUID_RESUME)
         if (st->ConOut) st->ConOut->OutputString(st->ConOut, L"L1 CPUID FAIL: NO DIRECT FRAMEBUFFER\r\n");
 #elif defined(HV_STANDALONE_L2)
         if (st->ConOut) st->ConOut->OutputString(st->ConOut, L"L1 L2 FAIL: NO DIRECT FRAMEBUFFER\r\n");

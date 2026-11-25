@@ -21,7 +21,8 @@ enum { GuestTables=Pages, GuestStack=GuestTables+NptTableCount,
 #endif
 };
 #elif defined(HV_NPT_WRITE)
-enum { DataGpa=0x2000, InitialByte=0x5a, StoredByte=0xa5, Data=Pages, AllocPages=Pages+1 };
+#include "fixed_npt_write.h"
+enum { AllocPages=Data+1 };
 #elif defined(HV_NPT_REMAP)
 enum { DataGpa=0x2000, FrameA=Pages, FrameB, AllocPages, MarkerA=0xa11a, MarkerB=0xb22b };
 typedef struct { UINT64 exit, ip, ax; } ReadSample;
@@ -59,15 +60,6 @@ static void hex(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *out, CHAR16 *label, UINT64 v)
 #endif
 
 #ifdef HV_FORENSIC_WRITE
-/* AMD APM Vol. 2 §15.25.7. U/S is not the guest CPL. This non-SNP fixture
- * uses no shadow stack or verify-paging-write features. */
-static BOOLEAN final_write_fault(UINT64 exit, UINT64 info)
-{
-    const UINT64 required=(1ull<<32)|3;
-    const UINT64 excluded=(1ull<<38)|(1ull<<37)|(1ull<<33)|0x58;
-    return exit==0x400 && (info & (required|excluded))==required;
-}
-
 /* Only decode C6 /0 [disp16],imm8 from our immutable real-mode payload.
  * CS.base and DS.base are zero. Never use the reported GPA as a host pointer. */
 static BOOLEAN forensic_report(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *out, const UINT8 *code,
@@ -211,9 +203,7 @@ static void smoke(EFI_SYSTEM_TABLE *st)
 #elif defined(HV_EXCEPTION_UD)
     bs->CopyMem(vmcb+Code*EFI_PAGE_SIZE,(VOID *)UdStart,length);
 #elif defined(HV_NPT_WRITE)
-    /* 16-bit MOV byte ptr DS:[2000h], A5h; HLT. Code stays read-only in both arms. */
-    const UINT8 payload[]={0xc6,0x06,DataGpa & 0xff,DataGpa >> 8,StoredByte,0xf4};
-    bs->CopyMem(vmcb+Code*EFI_PAGE_SIZE,(VOID *)payload,sizeof(payload));
+    bs->CopyMem(vmcb+Code*EFI_PAGE_SIZE,(VOID *)fixed_store_hlt,sizeof(fixed_store_hlt));
     volatile UINT8 *target=vmcb+Data*EFI_PAGE_SIZE;
     volatile UINT64 *leaf=&((FixedNpt *)(vmcb+Pml4*EFI_PAGE_SIZE))->table[3][DataGpa/NptPageBytes];
     *target=InitialByte;
@@ -319,7 +309,7 @@ static void smoke(EFI_SYSTEM_TABLE *st)
     control_exit=FIELD(UINT64,ExitCode);
     control_ip=FIELD(UINT64,Rip);
     control_byte=*target;
-    control_ok=control_exit==0x78 && control_ip==FixedGuestGpa+sizeof(payload)-1 && control_byte==StoredByte;
+    control_ok=control_exit==0x78 && control_ip==FixedGuestGpa+sizeof(fixed_store_hlt)-1 && control_byte==StoredByte;
 #ifdef HV_FORENSIC_WRITE
     control_ok=control_ok && !final_write_fault(control_exit,FIELD(UINT64,Info1));
 #endif
@@ -401,7 +391,7 @@ static void smoke(EFI_SYSTEM_TABLE *st)
         UINT64 info=FIELD(UINT64,Info1), gpa=FIELD(UINT64,Info2);
         UINT8 protected_byte=*target;
 #ifdef HV_FORENSIC_WRITE
-        BOOLEAN matched=forensic_report(out,vmcb+Code*EFI_PAGE_SIZE,sizeof(payload),
+        BOOLEAN matched=forensic_report(out,vmcb+Code*EFI_PAGE_SIZE,sizeof(fixed_store_hlt),
                                         exit,info,gpa,ip,before,protected_byte);
         out->OutputString(out,matched
             ? L"PASS: attempted write identified; no byte committed.\r\n"
