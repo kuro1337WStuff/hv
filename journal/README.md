@@ -2,6 +2,14 @@
 
 Development host: Ryzen 9 9950X. Firmware runs use the `HV-SVM-L1` Hyper-V VM; host-only checks are labeled separately. Neither qualifies the 9950X3D deployment target on bare metal.
 
+## 017 · 2026-11-24 · One nested GPA flush for both processors
+
+**PASS in `HV-SVM-L1`.** Both L2s read `0xA11A` at GPA `0x2000` and halted. With both stopped, L1 remapped the page. Processor 0 issued a single Hyper-V all-processor flush for the shared NPT root and received status `0`. On re-entry, neither processor requested a local flush. Both read `0xB22B`.
+
+![Console showing the two L1 IDs, reads before and after the remap, and hypercall status zero](images/npt-broadcast-017.png)
+
+Run: `python lab/hv_queue.py run --rebuild npt-broadcast`. Hyper-V did **not** advertise native AMD `INVLPGB` to the L1 bootstrap processor. This tests the Hyper-V interface, not a physical broadcast instruction or interruption of a running guest. The queue stopped for first-time screen review; [run 017](test-report.md#017--2026-11-24-local--one-all-processor-nested-gpa-flush) records the image and verdict.
+
 ## 015–016 · 2026-11-24 · Two L1 processors see the new frame
 
 The earlier UEFI image could not start a second processor. The new `npt-cross` image uses Limine's multiprocessor handoff instead. Code running on each L1 processor reported its own APIC ID before either entered L2: **0 on the bootstrap processor and 1 on the application processor**.

@@ -17,6 +17,7 @@ The [journal](README.md) records these console observations on a Ryzen 9 9950X u
 | Host-side NPT layout | Host only, no VMRUN | The four-level walk maps the fixed guest page at GPA `0x1000` to its designated backing page, read-only; no other leaf is present. This checks table contents, not hardware enforcement. |
 | Nested regression | `l2` and `cpuid`, each rebuilt and booted in the AMD Hyper-V lab | Record each image separately. `l2` must reproduce the halt, RIP and marker from 002; `cpuid` must reproduce the two exits and guest-generated PASS from 003. Record the resume path actually observed. |
 | NPT write protection | `npt-write`, paired control and protected store | The writable store must reach HLT and change the target byte. After restoring the byte and revoking write permission, the same store must cause a final-data write protection NPF at the expected GPA and instruction, leaving the byte unchanged. |
+| All-processor nested GPA invalidation | `npt-broadcast`, opt-in on AMD Hyper-V | Both measured processor IDs must first read A through the same NPT root. With both L2s stopped, change the leaf, require success from one BSP `HvCallFlushGuestPhysicalAddressSpace` on that root, then require both L2s to read B at the original GPA and HLT site with no entry flush. Missing capability is SKIP, not PASS. No claim about which instruction L0 used. |
 
 **Target qualification:** No bare-metal Ryzen 9 9950X3D run is recorded here. Host-side checks and nested runs on the 9950X do not qualify that target.
 
@@ -106,3 +107,11 @@ Before guest entry, the bootstrap processor and application processor independen
 ### 016 · 2026-11-24 local · Supervised replay after screen review
 
 **PASS / COMPLETE.** `python lab/hv_queue.py run l2 npt-cross`, batch `c59455d8d942473caf588dd7c18f2daf`. The intervening `l2` image (run 005 digest) reached its distinct PASS screen before the worker mounted and booted the run 015 cross ISO again. The fresh cross console matched the independently reviewed run 015 screen, and the queue exited 0. Per-run frames and `events.jsonl` remain under the local batch directory; the VM was left at cross-vCPU PASS.
+
+### 017 · 2026-11-24 local · One all-processor nested GPA flush
+
+**Guest PASS; queue ATTENTION (new screen).** Ryzen 9 9950X, `HV-SVM-L1`, two nested vCPUs. Source `a327bf22ed`; `python lab/hv_queue.py run --rebuild npt-broadcast`; batch `6db8de80390d485586cc6550f649cded`. ISO SHA-256 `160300AAEB03C976ACC5F05177297820E0F08C4EDD78B5B53D3F90CCC0EAA336`. The worker checkpointed the prior `npt-cross` PASS, booted the new profile and captured its first unrecognized terminal after 60 seconds. It did not advance.
+
+The [captured console](images/npt-broadcast-017.png) meets the predeclared criterion. L1 APIC IDs 0 and 1 each read `AX=0xA11A` at GPA `0x2000` before the remap. The BSP reported `CPUID.4000000A:EAX=0x4A0000` (AMD enlightened NPT bit 22 set). After the leaf changed, the BSP issued one `HvCallFlushGuestPhysicalAddressSpace` (`0xAF`) for the shared `nCR3`; status `0` means success. Both vCPUs re-entered with `TLB_CONTROL=0` and returned `AX=0xB22B`. All four samples exited at HLT (`0x78`, RIP `0x1003`).
+
+[Hyper-V nested address spaces](https://learn.microsoft.com/en-us/virtualization/hyper-v-on-windows/tlfs/nested-virtualization#second-level-address-translation) define the AMD target; [the hypercall contract](https://learn.microsoft.com/en-us/virtualization/hyper-v-on-windows/tlfs/hypercalls/hvcallflushguestphysicaladdressspace) defines completion on all processors before return. The BSP reported `CPUID.80000008:EBX[3]=0`; native `INVLPGB`/`TLBSYNC` was not tested. This run establishes the guest-visible result, not TLB residency, L0's implementation, interruption of an active L2, or 9950X3D bare-metal behavior.
