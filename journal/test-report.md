@@ -307,3 +307,19 @@ Scope: one fixed request on one post-handoff vCPU using the reported next RIP. N
 Both entries ran the same `MOV byte ptr [0x2000],0xA5` on the same vCPU after `ExitBootServices`. Between entries L1 reset the owned data byte, cleared only the NPT leaf's write bit, reset the guest RIP, and requested the full local flush (`TLB_CONTROL=1`). The ASID, nested root, code and data frames did not change.
 
 The protected exit reported `EXITINFO1=0x0000000100000007` and `EXITINFO2=0x2000`. Bits 0, 1 and 32 identify a protection violation on a write during final guest-physical translation; bit 33 was clear (not a guest page-table walk). The backing byte was read from L1's owned frame, not through the fault address. L1 stopped without resuming or emulating the store. See AMD64 APM Vol. 2 §§15.16 and 15.25.7. No cross-vCPU or bare-metal result is claimed.
+
+### 040 · 2026-11-25 local · Standalone backing-frame remap and baseline batch
+
+**Remap firmware PASS; batch ATTENTION on the fifth profile for first-time framebuffer review.** Command: `python lab/hv_queue.py run --session --suite standalone --rebuild`. Nested `HV-SVM-L1` on the Ryzen 9 9950X; firmware source `1e158b606d`, suite revision `d487be34f4`, batch `1581c486491042e4add188872e1e9efb`. The worker checkpointed the prior `l1-npt-write` PASS. All five profiles booted in order without a per-test launch; the first four produced queue PASS, not merely successful builds.
+
+| Profile | Evidence | ISO SHA-256 |
+|---|---|---|
+| `l1-handoff` | Ordered COM1 transcript and reviewed terminal | `AA9D19D828E532D0DA479AC7832E52F7025D29C6E1D5E867129E34FFA00F49E8` |
+| `l1-l2` | Reviewed guest HLT/marker screen | `4B3B5C37EFB8B9491C39D462E6686DC206673EC4E424ACB9B114853BE9CBC94B` |
+| `l1-cpuid` | Reviewed two-entry CPUID resume screen | `F449D1C8471BA561FF638D9F91D8BD829B65B5A1D9262A70375DC9209578C158` |
+| `l1-npt-write` | Reviewed writable/read-only pair | `1726FDE4308EDB19FD6B4EF04E930F297E919AFEB5A1B8D2864AC485DCB18D47` |
+| `l1-npt-remap` | [New screen reviewed after capture](images/l1-npt-remap-040.png) | `D3F42C4E644AA71F428788913C5D4E194F379E2B4AF8229515D9B549D9D557E2` |
+
+After `ExitBootServices`, L1 seeded two distinct owned pages once. `MOV AX,[0x2000]; HLT` ran twice, starting with full RAX zero each time. Frame A returned `RAX=0xA11A`; frame B returned `RAX=0xB22B`. Both exits were `0x78` at RIP `0x1003`. Final L1 backing reads were `0xA11A` and `0xB22B`. Only the leaf address bits changed on replacement; the read-only permissions, guest code, ASID and NPT root did not. Both entries requested a full local flush (`TLB_CONTROL=1`); see AMD64 APM Vol. 2 §15.16.
+
+This verifies same-vCPU behavior **with** invalidation. It does not establish that omitting a flush would fail on this run, that a remote vCPU saw the remap, or that the physical 9950X3D is qualified. The UEFI `npt-remap` control rebuilt against the same fixed fixture but was not booted here.

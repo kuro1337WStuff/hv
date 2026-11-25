@@ -2,6 +2,14 @@
 
 Development host: Ryzen 9 9950X. Firmware runs use the `HV-SVM-L1` Hyper-V VM; host-only checks are labeled separately. Neither qualifies the 9950X3D deployment target on bare metal.
 
+## 040 · 2026-11-25 · One guest address reads two different backing frames
+
+**Passed in `HV-SVM-L1`.** The same guest load from GPA `0x2000` returned `0xA11A`, then `0xB22B` after the standalone L1 changed the backing frame and requested a local translation flush. Both entries reached the same halt. L1 independently read the two backing words and found both original markers intact: this was a mapping change, not a rewrite of the data.
+
+![L1 framebuffer showing both guest RAX values, the two matching HLT exits, and both intact backing words](images/l1-npt-remap-040.png)
+
+This was the fifth boot in one supervised batch. Handoff (including COM1), L2 entry, CPUID resume, and write protection passed before the new remap screen stopped the queue for review. The [ledger](test-report.md#040--2026-11-25-local--standalone-backing-frame-remap-and-baseline-batch) records all five image digests.
+
 ## 039 · 2026-11-25 · Standalone L1 revokes write access to a live guest mapping
 
 **Passed in `HV-SVM-L1`.** With the mapping writable, the guest stored `0xA5` at GPA `0x2000` and reached `HLT`. L1 reset the byte to `0x5A`, made the same backing page read-only, and requested a local translation flush on re-entry. The identical store then faulted at its first byte (`RIP=0x1000`). L1 read the backing byte directly: `0x5A` before and after.
