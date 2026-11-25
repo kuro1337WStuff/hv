@@ -29,6 +29,8 @@ static void pkg_reset(UINT8 *vmcb)
 #include "vcpu_fpstate.h"
 #ifdef HV_FLOOR_CONTRACT
 #include "floor_contract.h"
+#elif defined(HV_EFER_READ)
+#include "efer_read.h"
 #else
 #include "cpu_contract.h"
 #endif

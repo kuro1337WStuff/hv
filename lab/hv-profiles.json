@@ -15,6 +15,7 @@
   {"profile":"l1-power-s5","stem":"hv-l1-power-s5","pass":"4c6f55a0d3171e0fb3b7069ff2344c5c26a10e7f320bbf51bfec09253f5555d5"},
   {"profile":"l1-entry-guard","stem":"hv-l1-entry-guard","pass":"d5058c8f655d18566d26b0be317b0e83bc9db534aefd141e39b56c11dc65b87d"},
   {"profile":"l1-cpu-floor","stem":"hv-l1-cpu-floor","pass":"c7ac9ba1ec5e518697dd3016d09a3a2728faa7c9dafb05f3643d0e098a0bbc4e"},
+  {"profile":"l1-efer-read","stem":"hv-l1-efer-read","pass":"b5937ea3096bec5863697e447268916fa0680dfa0f8f9f82a8da7f13d1db38be"},
   {"profile":"l1-page-pair","stem":"hv-l1-page-pair","pass":"5702b97a33be2f6b5d5c8f9e9edea560c4c3cd34fd58785e088d8a0f7ce0b6bd"},
   {"profile":"l1-page-transition","stem":"hv-l1-page-transition","pass":"b8ab9f27b975afe4b88c0ee0e6c627f60a379383e174c0646000a63370f8c083"},
   {"profile":"l1-range-audit","stem":"hv-l1-range-audit","pass":"89d6c8a3c97187e80f2be809b6a669dbe6828be32fed31465affd6faac90b5ff"},
