@@ -214,10 +214,13 @@ class SessionInput(io.RawIOBase):
         return self.sock.recv_into(buffer)
 
 
-def session_run(path, profiles, registry, manifest):
-    queue = read_limited(path / 'queue.json', 8192)
+def session_run(path, profiles, registry, manifest, *, root=None, queue=None):
+    if queue is None:
+        queue = read_limited(path / 'queue.json', 8192)
+    elif not isinstance(queue, bytes) or not 0 < len(queue) <= 8192:
+        raise ValueError('Invalid submitted queue.')
     queue.decode('utf-8')
-    checkout = hashlib.sha256(str(ROOT).lower().encode('utf-8')).hexdigest()[:20]
+    checkout = hashlib.sha256(str(ROOT if root is None else root).lower().encode('utf-8')).hexdigest()[:20]
     program_files = Path(os.environ.get('ProgramW6432') or os.environ['ProgramFiles'])
     raw = read_limited(program_files / ('HvLabSession-' + checkout) / 'session.json', 4096)
     info = json.loads(raw)
@@ -232,9 +235,15 @@ def session_run(path, profiles, registry, manifest):
     images = {f'{prefix}{profile}.png' for profile in registry for prefix in ('guard-', 'prior-')}
     images.update(p + '.png' for p in profiles)
     terminal = None
+    if os.path.lexists(path / 'STOP'):
+        host_event(path, 'STOPPED', 'Stopped before contacting the session broker.')
+        return 2
     with socket.create_connection(('127.0.0.1', info['port']), timeout=5) as sock, \
             io.BufferedReader(SessionInput(sock)) as stream:
         check_peer(sock, info['pid'])
+        if os.path.lexists(path / 'STOP'):
+            host_event(path, 'STOPPED', 'Stopped before submitting to the session broker.')
+            return 2
         sock.sendall(f"{info['token']} {path.name}\n".encode('ascii'))
         for document in (queue, manifest):
             sock.sendall(struct.pack('>I', len(document)) + document)

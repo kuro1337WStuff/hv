@@ -17,6 +17,7 @@ if /i "%~1"=="l1-linux-admission" set "LINUX_MEDIA=1"
 if /i "%~1"=="l1-linux-inputs" set "LINUX_MEDIA=1"
 if /i "%~1"=="l1-entry-guard" set "LINUX_MEDIA=1"
 if /i "%~1"=="l1-acpi-map" set "LINUX_MEDIA=1"
+if /i "%~1"=="l1-range-audit" set "LINUX_MEDIA=1"
 if /i "%~1"=="l2" (
   set "SRC=l2_smoke"
   set "EFI=L2SMOKE"
@@ -91,6 +92,15 @@ if /i "%~1"=="l2" (
   set "ASM_SRC=firmware\l1_handoff.asm"
   set "EXTRA_ASM=vcpu_gpr page_pair"
   set "EXTRA_ASM_FLAGS=/DHV_COUNT_ENTRIES"
+) else if /i "%~1"=="l1-page-transition" (
+  set "SRC=l1_handoff"
+  set "EFI=L1PAGETRANSITION"
+  set "ISO=hv-l1-page-transition"
+  set "CASE_FLAGS=/DHV_STANDALONE_L2 /DHV_PACKAGE /DHV_PAGE_TRANSITION"
+  set "ASM_OBJ=build\l1_page_transition_handoff.obj"
+  set "ASM_SRC=firmware\l1_handoff.asm"
+  set "EXTRA_ASM=vcpu_gpr page_transition"
+  set "EXTRA_ASM_FLAGS=/DHV_COUNT_ENTRIES"
 ) else if /i "%~1"=="l1-cr4-guard" (
   set "SRC=l1_handoff"
   set "EFI=L1CR4GUARD"
@@ -158,6 +168,11 @@ if /i "%~1"=="l2" (
     set "EFI=L1ENTRYGUARD"
     set "ISO=hv-l1-entry-guard"
     set "CASE_FLAGS=/DHV_STANDALONE_L2 /DHV_LINUX_ADMISSION /DHV_ENTRY_TEST"
+    set "EXTRA_ASM_FLAGS=/DHV_COUNT_ENTRIES"
+  ) else if /i "%~1"=="l1-range-audit" (
+    set "EFI=L1RANGEAUDIT"
+    set "ISO=hv-l1-range-audit"
+    set "CASE_FLAGS=/DHV_STANDALONE_L2 /DHV_LINUX_ADMISSION /DHV_RANGE_AUDIT"
     set "EXTRA_ASM_FLAGS=/DHV_COUNT_ENTRIES"
   ) else if /i "%~1"=="l1-acpi-map" (
     set "EFI=L1ACPIMAP"

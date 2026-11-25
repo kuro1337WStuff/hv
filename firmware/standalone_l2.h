@@ -4,7 +4,7 @@
 
 #if defined(HV_CPU_CONTRACT) || defined(HV_SERIAL_CONTRACT) || defined(HV_TICK_CONTRACT) || \
     defined(HV_TX_CONTRACT) || defined(HV_POWER_CONTRACT) || defined(HV_PAGE_PAIR) || \
-    defined(HV_CR4_GUARD) || defined(HV_CR4_GP)
+    defined(HV_PAGE_TRANSITION) || defined(HV_CR4_GUARD) || defined(HV_CR4_GP)
 #define HV_STANDALONE_CONTRACT
 #endif
 #ifdef HV_PACKAGE
@@ -110,7 +110,7 @@ static const char *run_standalone_l2(void *reservation, StandaloneSample *sample
     if ((UINT32)r[0]<0x8000000au) return "NO SVM LEAF";
     __cpuid(r,(int)0x80000001u);
     if (!(r[2]&4)) return "NO SVM";
-#if defined(HV_LINUX_ADMISSION) || defined(HV_PAGE_PAIR)
+#if defined(HV_LINUX_ADMISSION) || defined(HV_PAGE_PAIR) || defined(HV_PAGE_TRANSITION)
     if (!(r[3] & (1u<<20))) return "NX REQUIRED";
 #endif
     __cpuid(r,(int)0x8000000au);
@@ -123,10 +123,14 @@ static const char *run_standalone_l2(void *reservation, StandaloneSample *sample
     if (__readmsr(MSR_VM_CR) & (1u<<4)) return "SVM DISABLED";
     UINT64 efer=__readmsr(MSR_EFER);
     if (efer & SVME) return "SVM IN USE";
-#ifdef HV_PAGE_PAIR
+#if defined(HV_PAGE_PAIR) || defined(HV_PAGE_TRANSITION) || defined(HV_RANGE_AUDIT)
     if (!(efer & (1u<<11))) return "HOST NXE REQUIRED";
 #endif
 
+#ifdef HV_RANGE_AUDIT
+    /* Map bytes only: leave EFER, HSAVE and the interrupt shadow untouched. */
+    return linux_range_audit(vmcb);
+#else
 #if defined(HV_PACKAGE) || defined(HV_LINUX_ADMISSION)
     __stosb(vmcb+HostSave*EFI_PAGE_SIZE,0,EFI_PAGE_SIZE);
 #else
@@ -158,6 +162,8 @@ static const char *run_standalone_l2(void *reservation, StandaloneSample *sample
     __writemsr(MSR_HSAVE,base+HostSave*EFI_PAGE_SIZE);
 #if defined(HV_PAGE_PAIR)
     const char *error=page_pair_run(vmcb);
+#elif defined(HV_PAGE_TRANSITION)
+    const char *error=transition_run(vmcb);
 #elif defined(HV_CR4_GUARD)
     const char *error=cr4_guard_run(vmcb);
 #elif defined(HV_CR4_GP)
@@ -205,5 +211,6 @@ static const char *run_standalone_l2(void *reservation, StandaloneSample *sample
     if (sample->rax!=MARKER) return "UNEXPECTED RAX";
     return NULL;
 #endif
+#endif /* !HV_RANGE_AUDIT */
 }
 #endif

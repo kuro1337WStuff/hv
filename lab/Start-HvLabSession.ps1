@@ -16,11 +16,78 @@ $windows = [Environment]::GetFolderPath('Windows')
 $programs = [Environment]::GetFolderPath('ProgramFiles')
 $lab = $PSScriptRoot
 $root = [IO.Path]::GetDirectoryName($lab)
+$vmName = switch ([IO.Path]::GetFileName($root)) {
+    'hv-lane-a' { 'HV-SVM-L1-A' }
+    'hv-lane-b' { 'HV-SVM-L1-B' }
+    default { 'HV-SVM-L1' }
+}
 $utf8 = [Text.UTF8Encoding]::new($false, $true)
 function Get-TextDigest([string]$Text) {
     $sha = [Security.Cryptography.SHA256]::Create()
     try { return [BitConverter]::ToString($sha.ComputeHash($utf8.GetBytes($Text))).Replace('-', '').ToLowerInvariant() }
     finally { $sha.Dispose() }
+}
+function Open-StageReadiness([string]$StageDirectory) {
+    # The caller owns the protected root and its session lock. Publish only
+    # in this newly verified stage. The write handle, not the file, is proof;
+    # after normal exit or a crash the zero-byte file is merely history.
+    return [IO.File]::Open([IO.Path]::Combine($StageDirectory,'ready.lease'),
+            [IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::Read)
+}
+function Read-SessionDescriptor([string]$Descriptor) {
+    try {
+        # Do not block atomic replacement while the ordinary caller polls.
+        $stream = [IO.File]::Open($Descriptor,'Open','Read',([IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete))
+    } catch {
+        $cause = $_.Exception.GetBaseException()
+        if ($cause -is [IO.FileNotFoundException] -or $cause -is [IO.DirectoryNotFoundException]) { return }
+        throw
+    }
+    try {
+        $reader = [IO.StreamReader]::new($stream)
+        try { return $reader.ReadToEnd() } finally { $reader.Dispose() }
+    } finally { $stream.Dispose() }
+}
+function Test-SessionPublication([string]$Descriptor,[int]$ChildId,[string]$Previous) {
+    try { $text = Read-SessionDescriptor $Descriptor } catch [IO.IOException] { return $false }
+    if (!$text -or $text -ceq $Previous) { return $false }
+    try { $active = ConvertFrom-Json -InputObject $text -ErrorAction Stop } catch { return $false }
+    return ($active.pid -eq $ChildId)
+}
+function Publish-SessionReadiness([string]$StageDirectory,[string]$Descriptor,[string]$Data,[bool]$Dedicated) {
+    # The protected root's active.lock serializes publishers and teardown.
+    # The observer ignores an in-flight lease while this stage-local file
+    # exists. Moving it publishes the complete descriptor and lifts that gate
+    # in one same-volume operation. Never copy it or expose partial JSON.
+    $pending = [IO.Path]::Combine($StageDirectory,'session.pending')
+    $publication = @{ Descriptor = $Descriptor; Lease = $null }
+    $ownsPending = $false
+    $published = $false
+    try {
+        $stream = [IO.File]::Open($pending,'CreateNew','Write','None')
+        $ownsPending = $true
+        try {
+            $bytes = $utf8.GetBytes($Data)
+            $stream.Write($bytes,0,$bytes.Length)
+        } finally { $stream.Dispose() }
+        if ($Dedicated) { $publication.Lease = Open-StageReadiness $StageDirectory }
+        if ([IO.File]::Exists($Descriptor)) {
+            [IO.File]::Replace($pending,$Descriptor,[System.Management.Automation.Language.NullString]::Value)
+        } else {
+            [IO.File]::Move($pending,$Descriptor)
+        }
+        $published = $true
+        return $publication
+    } finally {
+        if (!$published) {
+            if ($publication.Lease) { $publication.Lease.Dispose() }
+            if ($ownsPending) { [IO.File]::Delete($pending) }
+        }
+    }
+}
+function Close-SessionPublication($Publication) {
+    if ($Publication.Lease) { $Publication.Lease.Dispose() }
+    [IO.File]::Delete($Publication.Descriptor)
 }
 function Assert-Plain([string]$Path) {
     for ($p = $Path; $p; $p = [IO.Path]::GetDirectoryName($p)) {
@@ -142,16 +209,20 @@ function Invoke-SessionBatch($Client,$Stream,$Writer,[string]$Id) {
 $sessionRoot = Join-Path $programs ('HvLabSession-'+(Get-TextDigest $root.ToLowerInvariant()).Substring(0,20))
 $descriptor = Join-Path $sessionRoot 'session.json'
 if (!$principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    # A crash can leave a valid legacy descriptor, even with a recycled PID.
+    # Only a change from what preceded this launch can acknowledge the child.
+    $previous = Read-SessionDescriptor $descriptor
     $child = Start-Process -FilePath $exe -WorkingDirectory $PSHOME -Verb RunAs -PassThru -ArgumentList ('-NoProfile -File "' + $PSCommandPath + '"')
-    $timer = [Diagnostics.Stopwatch]::StartNew()
-    while (!$child.WaitForExit(200)) {
-        if ([IO.File]::Exists($descriptor)) {
-            try { $active = [IO.File]::ReadAllText($descriptor) | ConvertFrom-Json } catch { continue }
-            if ($active.pid -eq $child.Id) { Write-Host "Delegated lab session ready (PID $($child.Id))."; return }
+    try {
+        $timer = [Diagnostics.Stopwatch]::StartNew()
+        while (!$child.WaitForExit(200)) {
+            if ((Test-SessionPublication $descriptor $child.Id $previous) -and !$child.HasExited) {
+                Write-Host "Delegated lab session ready (PID $($child.Id))."; return
+            }
+            if ($timer.Elapsed.TotalSeconds -gt 45) { throw 'Worker not ready; inspect the elevated console.' }
         }
-        if ($timer.Elapsed.TotalSeconds -gt 45) { throw 'Worker not ready; inspect the elevated console.' }
-    }
-    throw "Session did not start (exit $($child.ExitCode)). Inspect the console or $sessionRoot\startup-error.txt."
+        throw "Session did not start (exit $($child.ExitCode)). Inspect the console or $sessionRoot\startup-error.txt."
+    } finally { $child.Dispose() }
 }
 $env:Path = "$windows\System32;$windows;$PSHOME"
 $env:PSModulePath = "$PSHOME\Modules;$programs\WindowsPowerShell\Modules"
@@ -161,9 +232,19 @@ $lock = [IO.File]::Open((Join-Path $sessionRoot 'active.lock'),'OpenOrCreate','W
 $private = Join-Path $sessionRoot ([guid]::NewGuid().ToString('N'))
 $directoryLocks = [Collections.Generic.List[IDisposable]]::new()
 $listener = $null
+$publication = $null
 try {
-    $vm = Get-VM -Name 'HV-SVM-L1' -ErrorAction Stop
-    if (@($vm).Count -ne 1 -or $vm.Generation -ne 2) { throw 'Expected one Generation 2 HV-SVM-L1.' }
+    $vm = Get-VM -Name $vmName -ErrorAction Stop
+    if (@($vm).Count -ne 1 -or $vm.Name -ne $vmName -or $vm.Generation -ne 2) {
+        throw "Expected one Generation 2 VM named $vmName."
+    }
+    $store = if ($vmName -eq 'HV-SVM-L1') { Join-Path $lab "machines\$vmName" }
+             else { Join-Path $programs "HvLabMachine-$vmName" }
+    $location = [IO.Path]::GetFullPath($vm.ConfigurationLocation).TrimEnd('\')
+    if ($location -ine $store -and !$location.StartsWith($store + '\', [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'VM configuration is outside the expected checkout store.'
+    }
+    Assert-Plain $location
     $privateRuns = Join-Path $private 'runs'
     $null = [IO.Directory]::CreateDirectory($privateRuns)
     $env:TEMP = $private; $env:TMP = $private
@@ -187,7 +268,7 @@ public static class HvSessionDirectory {
     $directoryLocks.Add((Lock-Directory (Join-Path $root 'build\runs')))
     $worker = Join-Path $private 'Invoke-HvQueue.ps1'
     $trusted = @{
-        'Invoke-HvQueue.ps1'='309d53290493c26c11c81a6282d15d29a9a35bed9da80b24de263c9b633e471b'
+        'Invoke-HvQueue.ps1'='b1ec9193b5d93ad851c19a5a1eff545adfb8fd08f47393afcfa3f71c89fea6e2'
         'Receive-HvHandoff.ps1'='87780e5797d51dd3f74ba1815491dbcf52f74d767d8a301f6b9fd2eb1084641b'
         'HvConsole.ps1'='921c4638be60b02d76930a7a881bb376a8fe599c61c6d8f5b3b3d36ca2510275'
     }
@@ -200,8 +281,8 @@ public static class HvSessionDirectory {
     $listener.ExclusiveAddressUse = $true
     $listener.Start(1)
     $token = [guid]::NewGuid().ToString('N')
-    $data = @{port=$listener.LocalEndpoint.Port;token=$token;pid=$PID;handoffSerial=1} | ConvertTo-Json -Compress
-    [IO.File]::WriteAllText($descriptor,$data,$utf8)
+    $data = @{port=$listener.LocalEndpoint.Port;token=$token;pid=$PID;handoffSerial=[int]($vmName -eq 'HV-SVM-L1')} | ConvertTo-Json -Compress
+    $publication = Publish-SessionReadiness $private $descriptor $data ($vmName -ne 'HV-SVM-L1')
     Write-Host "LAB SESSION READY: $($vm.Name) / $($vm.Id). Press Q or close this window to revoke."
     while ($true) {
         if ([Console]::KeyAvailable -and [Console]::ReadKey($true).Key -eq 'Q') { break }
@@ -226,9 +307,13 @@ public static class HvSessionDirectory {
     [IO.File]::WriteAllText((Join-Path $sessionRoot 'startup-error.txt'),$_.ToString(),$utf8)
     throw
 } finally {
-    if ($listener) { $listener.Stop() }
-    [IO.File]::Delete($descriptor)
-    foreach ($handle in $directoryLocks) { $handle.Dispose() }
-    $lock.Dispose()
+    try {
+        if ($publication) { Close-SessionPublication $publication }
+    } finally {
+        try {
+            if ($listener) { $listener.Stop() }
+            foreach ($handle in $directoryLocks) { $handle.Dispose() }
+        } finally { $lock.Dispose() }
+    }
     Write-Host 'Lab session closed. No further batches accepted.'
 }
