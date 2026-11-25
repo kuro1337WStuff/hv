@@ -26,6 +26,8 @@ static UINT32 width, height, pitch;
 #ifdef HV_PACKAGE
 #define LOG_ROWS 42u
 #define LOG_Y(i) (80u + 16u * (i))
+#elif defined(HV_LINUX_ADMISSION)
+#define LOG_ROWS 9u
 #elif defined(HV_STANDALONE_L2) && defined(HV_NPT_WRITE)
 #define LOG_ROWS 11u  /* HANDOFF and ten sampled values */
 #define NPT_INFO_LABEL "EXITINFO1 "
@@ -101,7 +103,7 @@ static int use_gop(EFI_GRAPHICS_OUTPUT_PROTOCOL *gop)
     EFI_GRAPHICS_OUTPUT_MODE_INFORMATION *i = m->Info;
     if (i->Version != 0 || (i->PixelFormat != PixelBlueGreenRedReserved8BitPerColor &&
         i->PixelFormat != PixelRedGreenBlueReserved8BitPerColor)) return 0;
-#ifdef HV_PACKAGE
+#if defined(HV_PACKAGE) || defined(HV_LINUX_ADMISSION)
     if (i->HorizontalResolution < 20u + 12u * 32u) return 0;
 #elif defined(HV_STANDALONE_L2) && defined(HV_NPT_WRITE)
     if (i->HorizontalResolution < 20u + 12u * (sizeof(NPT_INFO_LABEL) - 1u + 16u)) return 0;
@@ -197,6 +199,8 @@ __declspec(noreturn) static void fail(const char *reason)
     L1DisableInterrupts();
 #ifdef HV_PACKAGE
     screen("L1 PACKAGE FAIL", reason, 0xff00ff);
+#elif defined(HV_LINUX_ADMISSION)
+    screen("L1 LINUX ADMISSION FAIL", reason, 0xff00ff);
 #elif defined(HV_STANDALONE_L2) && defined(HV_NPT_WRITE)
     screen("L1 NPT WRITE FAIL", reason, 0xff00ff);
 #elif defined(HV_STANDALONE_L2) && defined(HV_NPT_REMAP)
@@ -213,7 +217,7 @@ __declspec(noreturn) static void fail(const char *reason)
     L1Halt();
 }
 
-#ifdef HV_PACKAGE
+#if defined(HV_PACKAGE) || defined(HV_LINUX_ADMISSION)
 static void pkg_observe(const char *label, UINT64 value)
 {
     static char lines[LOG_ROWS][12 + 16 + 1];
@@ -223,6 +227,8 @@ static void pkg_observe(const char *label, UINT64 value)
     log_hex(lines[logged],label,value);
 }
 
+#endif
+#ifdef HV_PACKAGE
 static void pkg_text(const char *text)
 {
     if (logged>=LOG_ROWS) fail("OBSERVATION LIMIT");
@@ -250,6 +256,11 @@ __declspec(noreturn) void L1OwnedMain(void)
 #ifdef HV_STANDALONE_L2
     void *reservation = take_pages(StandaloneGuestPages);
     if (!reservation || (UINTN)reservation != owned_base || arena_used != ARENA_PAGES) fail("ARENA");
+#ifdef HV_LINUX_ADMISSION
+    const char *reason=run_standalone_l2(reservation);
+    if (reason) fail(reason);
+    screen("L1 LINUX ADMISSION PASS", "FETCH DENIED: NO LINUX BOOT", 0x00ff00);
+#else
     StandaloneSample sample;
     const char *reason = run_standalone_l2(reservation, &sample);
 #ifdef HV_PACKAGE
@@ -304,6 +315,7 @@ __declspec(noreturn) void L1OwnedMain(void)
     screen("L1 CPUID PASS", NULL, 0x00ff00);
 #else
     screen("L1 L2 PASS", NULL, 0x00ff00);
+#endif
 #endif
 #endif
     L1Halt();
@@ -375,6 +387,10 @@ EFI_STATUS EFIAPI EfiMain(EFI_HANDLE image, EFI_SYSTEM_TABLE *st)
     if (bs->AllocatePages(AllocateAnyPages, EfiLoaderData, TOTAL_PAGES, &owned_base) != EFI_SUCCESS ||
         !owned_base || (owned_base & (EFI_PAGE_SIZE - 1)) || owned_base > MAX_UINTN - TOTAL_PAGES * EFI_PAGE_SIZE)
         fail("RESERVATION");
+#ifdef HV_LINUX_ADMISSION
+    const char *media_error=linux_read_media(image,st,linux_stage((UINT8 *)(UINTN)owned_base));
+    if (media_error) fail(media_error);
+#endif
     L1PrepareIdt();
     /* Nothing below this point calls EFI except GetMemoryMap/ExitBootServices.
      * The fixed map buffer also survives a partially completed EFI shutdown. */

@@ -4,6 +4,9 @@
 
 #ifdef HV_PACKAGE
 #include "package.h"
+#elif defined(HV_LINUX_ADMISSION)
+static void pkg_observe(const char *label, UINT64 value);
+#include "linux_admission.h"
 #elif defined(HV_NPT_WRITE)
 #include "fixed_npt_write.h"
 enum { StandaloneGuestPages=Data+1 };
@@ -62,7 +65,11 @@ typedef struct { UINT64 exitcode, rip, rax; } StandaloneSample;
 
 /* BSP only, interrupts already disabled. reservation is a contiguous identity
  * mapping retained by L1 after ExitBootServices; no firmware calls below. */
+#ifdef HV_LINUX_ADMISSION
+static const char *run_standalone_l2(void *reservation)
+#else
 static const char *run_standalone_l2(void *reservation, StandaloneSample *sample)
+#endif
 {
     UINTN base=(UINTN)reservation;
     UINT8 *vmcb=(UINT8 *)reservation;
@@ -74,7 +81,7 @@ static const char *run_standalone_l2(void *reservation, StandaloneSample *sample
     sample->rw_exit=sample->ro_exit=~0ull;
 #elif defined(HV_NPT_REMAP)
     fixed_remap_init_sample(sample);
-#else
+#elif !defined(HV_LINUX_ADMISSION)
     sample->exitcode=~0ull;
     sample->rip=sample->rax=0;
 #ifdef HV_CPUID_RESUME
@@ -98,6 +105,9 @@ static const char *run_standalone_l2(void *reservation, StandaloneSample *sample
     if ((UINT32)r[0]<0x8000000au) return "NO SVM LEAF";
     __cpuid(r,(int)0x80000001u);
     if (!(r[2]&4)) return "NO SVM";
+#ifdef HV_LINUX_ADMISSION
+    if (!(r[3] & (1u<<20))) return "NX REQUIRED";
+#endif
     __cpuid(r,(int)0x8000000au);
 #ifdef HV_CPUID_RESUME
     sample->nrips=(r[3] & (1u<<3))!=0;
@@ -109,7 +119,7 @@ static const char *run_standalone_l2(void *reservation, StandaloneSample *sample
     UINT64 efer=__readmsr(MSR_EFER);
     if (efer & SVME) return "SVM IN USE";
 
-#ifdef HV_PACKAGE
+#if defined(HV_PACKAGE) || defined(HV_LINUX_ADMISSION)
     __stosb(vmcb+HostSave*EFI_PAGE_SIZE,0,EFI_PAGE_SIZE);
 #else
     __stosb(vmcb,0,Iopm*EFI_PAGE_SIZE);
@@ -140,6 +150,8 @@ static const char *run_standalone_l2(void *reservation, StandaloneSample *sample
     __writemsr(MSR_HSAVE,base+HostSave*EFI_PAGE_SIZE);
 #ifdef HV_PACKAGE
     const char *error=pkg_run(vmcb,sample);
+#elif defined(HV_LINUX_ADMISSION)
+    const char *error=linux_admit(vmcb);
 #elif defined(HV_CPUID_RESUME)
     const char *error=fixed_cpuid_run(vmcb,sample);
 #elif defined(HV_NPT_WRITE)
@@ -156,7 +168,7 @@ static const char *run_standalone_l2(void *reservation, StandaloneSample *sample
     __svm_stgi();
     __writemsr(MSR_EFER,efer);
 
-#if defined(HV_PACKAGE) || defined(HV_CPUID_RESUME) || defined(HV_NPT_WRITE) || defined(HV_NPT_REMAP)
+#if defined(HV_PACKAGE) || defined(HV_LINUX_ADMISSION) || defined(HV_CPUID_RESUME) || defined(HV_NPT_WRITE) || defined(HV_NPT_REMAP)
     return error;
 #else
     sample->exitcode=FIELD(UINT64,ExitCode);

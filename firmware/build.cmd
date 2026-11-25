@@ -58,6 +58,14 @@ if /i "%~1"=="l2" (
   set "ASM_OBJ=build\l1_package_handoff.obj"
   set "ASM_SRC=firmware\l1_handoff.asm"
   set "EXTRA_ASM=vcpu_fpstate cpuid_resume exception_ud vcpu_gpr pkg_devices"
+) else if /i "%~1"=="l1-linux-admission" (
+  set "SRC=l1_handoff"
+  set "EFI=L1LXADMIT"
+  set "ISO=hv-l1-linux-admission"
+  set "CASE_FLAGS=/DHV_STANDALONE_L2 /DHV_LINUX_ADMISSION"
+  set "ASM_OBJ=build\linux_handoff.obj"
+  set "ASM_SRC=firmware\l1_handoff.asm"
+  set "EXTRA_ASM=vcpu_gpr"
 ) else if /i "%~1"=="cpuid" (
   set "SRC=l2_smoke"
   set "EFI=CPUIDRES"
@@ -171,7 +179,11 @@ if defined CPUID_OBJ (
 for %%s in (%EXTRA_ASM%) do call :extra_asm %%s || exit /b 1
 cl /nologo /c /TC /std:c11 /O1 /GS- /Zl /W4 /WX %CASE_FLAGS% /I"%INC_EDK%\X64" /I"%INC_EDK%" /Fobuild\%EFI%.obj firmware\%SRC%.c || exit /b 1
 link /nologo /nodefaultlib /incremental:no /machine:x64 /subsystem:efi_application /entry:EfiMain /out:build\%EFI%.EFI build\%EFI%.obj %ASM_OBJ% %CPUID_OBJ% %EXTRA_OBJS% || exit /b 1
-"%PACK%" firmware\pack_iso.py build\%EFI%.EFI build\%ISO%.iso || exit /b 1
+if /i "%~1"=="l1-linux-admission" (
+  "%PACK%" firmware\linux_media.py build\%EFI%.EFI build\%ISO%.iso || exit /b 1
+) else (
+  "%PACK%" firmware\pack_iso.py build\%EFI%.EFI build\%ISO%.iso || exit /b 1
+)
 goto :done
 :cross
 "%PACK%" firmware\cross\build.py %CROSS_PROFILE% || exit /b 1

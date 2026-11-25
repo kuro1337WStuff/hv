@@ -49,6 +49,17 @@ For a manual handoff instead, `run --stage-only` builds/stages without starting 
 3. An L2 store at `0x2FFF` must succeed; the next at `0x3000` must fault without modifying the adjacent private backing. L1 checks the entire four-level NPT against the allowed frame list before and after entry.
 4. Check deferred and priority-masked interrupts, virtual timer expiry following HLT, and byte-at-a-time output from L2 to a virtual UART. The captured guest marker must accompany the independent post-wake guest halt; there is no host port passthrough. This fixture's interrupt acknowledgement is not a PC interrupt-controller implementation.
 
+`l1-linux-admission` stages the pinned Linux payload and checks the first attempted kernel **instruction fetch**, not a boot. Prepare `build/linux-inputs/` once with `python lab/linux/prepare.py` (requires the checksum-pinned local Alpine 3.24.4 virt ISO used by lab provisioning). The packer rechecks the three input hashes. Run `python lab/hv_queue.py run --session --rebuild l1-linux-admission`. Reloading or seating Linux directly in Hyper-V would bypass the code under test.
+
+Before `ExitBootServices`, L1 reads the fixed guest files from its own boot volume into private staging. After handoff it builds the Linux 2.15 `boot_params`, e820, GDT and identity map in owned RAM. L1's separate NPT must map that RAM and no private pages, leave the reserved hole absent, and deny execution. The only acceptable guest exit is a present final instruction-fetch NPF at kernel entry `0x1000200`, with `RSI=0x10000`. Do not lift NX to turn this admission check into an OS runner.
+
+For a host-only layout check, use an x64 Visual Studio Developer Command Prompt at the repository root:
+
+```cmd
+cl /nologo /std:c11 /O2 /W4 /WX lab\tests\linux_layout_test.c /Fobuild\linux_layout_test.obj /Febuild\linux_layout_test.exe
+build\linux_layout_test.exe build\linux-inputs\vmlinuz-virt build\linux-inputs\initramfs.cpio build\linux-inputs\cmdline.bin
+```
+
 `npt-cross` uses its own two-processor L1 payload. Rebuild with `firmware\build.cmd npt-cross`, then run `python lab/hv_queue.py run npt-cross`. The builder caches hash-pinned Limine v8 UEFI loader/header and Zig 0.13 tools under `build/tools`; first build needs network access. Other profiles remain UEFI applications. The cross test is read-only with respect to guest disks: it exits boot services via Limine, measures both local APIC IDs, runs four fixed L2 loads and halts on its evidence screen. Do not install this lab image as a host bootloader.
 
 `npt-broadcast` is opt-in. It uses the two-processor L1 harness to request one synchronous Hyper-V flush of nested GPA translations for the selected NPT root across all processors. This is not a native `INVLPGB` test. Run `python lab/hv_queue.py run --rebuild npt-broadcast` to build and boot it. Only the [reviewed PASS screen](../journal/images/npt-broadcast-017.png) is accepted; the worker stops for inspection on any other display.
