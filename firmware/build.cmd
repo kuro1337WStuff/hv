@@ -109,6 +109,14 @@ if /i "%~1"=="l2" (
   set "ASM_SRC=firmware\l1_handoff.asm"
   set "EXTRA_ASM=vcpu_gpr cr4_gp"
   set "EXTRA_ASM_FLAGS=/DHV_COUNT_ENTRIES"
+) else if /i "%~1"=="l1-uart-irq4" (
+  set "SRC=l1_handoff"
+  set "EFI=L1UARTIRQ4"
+  set "ISO=hv-l1-uart-irq4"
+  set "CASE_FLAGS=/DHV_STANDALONE_L2 /DHV_PACKAGE /DHV_UART_IRQ4"
+  set "ASM_OBJ=build\l1_irq4_handoff.obj"
+  set "ASM_SRC=firmware\l1_handoff.asm"
+  set "EXTRA_ASM=vcpu_gpr uart_irq4"
 ) else if /i "%~1"=="l1-uart-thre" (
   set "SRC=l1_handoff"
   set "EFI=L1UARTTHRE"

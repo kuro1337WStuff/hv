@@ -2,7 +2,7 @@
 #define HV_STANDALONE_L2_H
 #include "fixed_vmcb.h"
 
-#if defined(HV_UART_THRE)
+#if defined(HV_UART_THRE) || defined(HV_UART_IRQ4)
 #define HV_STANDALONE_CONTRACT
 #endif
 #if defined(HV_CPU_CONTRACT) || defined(HV_SERIAL_CONTRACT) || defined(HV_TICK_CONTRACT) || \
@@ -169,6 +169,8 @@ static const char *run_standalone_l2(void *reservation, StandaloneSample *sample
     const char *error=floor_contract_run(vmcb);
 #elif defined(HV_CPU_CONTRACT)
     const char *error=cpu_contract_run(vmcb);
+#elif defined(HV_UART_IRQ4)
+    const char *error=uart_irq4_run(vmcb);
 #elif defined(HV_UART_THRE)
     const char *error=uart_thre_run(vmcb);
 #elif defined(HV_SERIAL_CONTRACT)
