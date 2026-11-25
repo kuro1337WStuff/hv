@@ -38,6 +38,10 @@ static void pkg_reset(UINT8 *vmcb)
 #elif defined(HV_CR4_GUARD)
 #include "long_guest.h"
 #include "cr4_guard.h"
+#elif defined(HV_CR4_GP)
+#define HV_GUEST_IDT
+#include "long_guest.h"
+#include "cr4_gp.h"
 #elif defined(HV_SERIAL_CONTRACT)
 #include "long_guest.h"
 #include "serial_contract.h"

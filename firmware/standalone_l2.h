@@ -3,7 +3,8 @@
 #include "fixed_vmcb.h"
 
 #if defined(HV_CPU_CONTRACT) || defined(HV_SERIAL_CONTRACT) || defined(HV_TICK_CONTRACT) || \
-    defined(HV_TX_CONTRACT) || defined(HV_POWER_CONTRACT) || defined(HV_PAGE_PAIR) || defined(HV_CR4_GUARD)
+    defined(HV_TX_CONTRACT) || defined(HV_POWER_CONTRACT) || defined(HV_PAGE_PAIR) || \
+    defined(HV_CR4_GUARD) || defined(HV_CR4_GP)
 #define HV_STANDALONE_CONTRACT
 #endif
 #ifdef HV_PACKAGE
@@ -159,6 +160,8 @@ static const char *run_standalone_l2(void *reservation, StandaloneSample *sample
     const char *error=page_pair_run(vmcb);
 #elif defined(HV_CR4_GUARD)
     const char *error=cr4_guard_run(vmcb);
+#elif defined(HV_CR4_GP)
+    const char *error=cr4_gp_run(vmcb);
 #elif defined(HV_FLOOR_CONTRACT)
     const char *error=floor_contract_run(vmcb);
 #elif defined(HV_CPU_CONTRACT)

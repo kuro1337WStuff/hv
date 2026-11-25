@@ -211,6 +211,8 @@ __declspec(noreturn) static void fail(const char *reason)
     screen("L1 PAGE PAIR FAIL", reason, 0xff00ff);
 #elif defined(HV_CR4_GUARD)
     screen("L1 CR4 GUARD FAIL", reason, 0xff00ff);
+#elif defined(HV_CR4_GP)
+    screen("L1 CR4 GP FAIL", reason, 0xff00ff);
 #elif defined(HV_CPU_CONTRACT)
     screen("L1 CPU CONTRACT FAIL", reason, 0xff00ff);
 #elif defined(HV_SERIAL_CONTRACT)
@@ -311,6 +313,8 @@ __declspec(noreturn) void L1OwnedMain(void)
     screen("L1 PAGE PAIR PASS", "GUEST PF AND NESTED FAULT", 0x00ff00);
 #elif defined(HV_CR4_GUARD)
     screen("L1 CR4 GUARD PASS", "WRITE REFUSED BEFORE EFFECT", 0x00ff00);
+#elif defined(HV_CR4_GP)
+    screen("L1 CR4 GP PASS", "FAULT FRAME AND IRETQ", 0x00ff00);
 #else
     screen("L1 CPU CONTRACT PASS", "ONE VIRTUAL CPU: FIXED GUEST", 0x00ff00);
 #endif
