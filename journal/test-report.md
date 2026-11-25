@@ -75,3 +75,13 @@ The guest instruction, ASID, nested root and read-only permissions stayed fixed.
 **Expected:** two distinct firmware processor IDs, each with its own VMCB and host-save page, read `0xA11A` from GPA `0x2000` before the BSP changes the shared read-only leaf. Each processor must then request its own `TLB_CONTROL=1` flush on entry and return `0xB22B`. Every acknowledgement requires the requested CPU identity, HLT exit `0x78`, RIP `0x1003`, and the correct register value. This is a quiesced rendezvous, not an IPI interrupting a running guest or an `INVLPGB` broadcast test.
 
 **Observed:** Hyper-V reported two configured vCPUs with nested extensions enabled on the 9950X lab host. The mounted ISO digest matched. The [UEFI console](images/npt-cross-010.png) reported `LocateProtocol status: 0x800000000000000E` (`EFI_NOT_FOUND`) for MP Services. The image stopped before either warm-up read, remap or acknowledgement. No stale translation was observed, and none was ruled out. Qualifying this case requires a supported way to dispatch and identify the second processor in L1; increasing the VM's configured CPU count alone does not supply that interface.
+
+### 011–013 · 2026-11-24 local · Supervised queue controls
+
+Lab: 9950X / `HV-SVM-L1`, nested SVM, two virtual processors. These are harness checks using existing ISOs, not new firmware builds. The finalized [runner](../lab/README.md) is revision `bafa241753`. Run 012 preceded the five-second between-profile countdown; run 013 exercised it. Raw JSONL, frozen image hashes and frames are preserved locally in `build/runs/<batch-id>/`.
+
+| ID | Batch ID | Scenario and observed result |
+| --- | --- | --- |
+| 011 | `9090d3dfb59b43acad8545a563923102` | `run l2` plus separate `watch` and `stop` clients. Both observers saw STOPPED (exit 2) during preparation. No elevation or VM change. |
+| 012 | `934f4ed6b3774ea5a4395d5c7f3e2c69` | Default queue. `l2`, `cpuid`, `npt-write`, `npt-remap` each matched their PASS console (ISOs from runs 005–008). `npt-cross` used the run 010 ISO and matched its [SKIP console](images/queue-012-skip.png); terminal ATTENTION, exit 3. No retry. |
+| 013 | `0711822374d14aba96de7d5368137a4b` | `run npt-remap l2`. Remap passed, then the separate `stop` client vetoed `l2` during NEXT. Terminal STOPPED, exit 2; the only BOOT was `npt-remap`. No subsequent mount or boot. |
