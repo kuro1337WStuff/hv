@@ -460,9 +460,15 @@ At virtual tick 31 no expiry; at 32 IMR=`FF`, IRR=`01`. Hardware delivered vecto
 
 **Pre-boot contract:** after the three independent 044 fault-precision controls, substitute an invalid RSI and then an out-of-RAM CR3 into the actual Linux entry state. Each must report the corresponding guard error and zero new assembly-site VMRUN attempts. Restore the real state; the same gate must permit exactly one attempt, followed by the original final-fetch NPF, unchanged entry RIP, independent walk and private guard. This qualification keeps Linux pages NX; no code from the kernel may execute.
 
+**2026-11-25 · [051 capture](images/l1-entry-guard-051.png), firmware PASS by review.** `firmware\build.cmd l1-entry-guard`; `python lab/hv_queue.py run --session l1-entry-guard`. ISO `AA9DA8340ACB3542473E4196C4C64862B52B1651EF2AFEA491F3D6D677E8E961`, batch `067e69eca606420086669749bcbc4f8a`, boot 17:58:34 UTC, 050 checkpointed. RSI refusal 8 and CR3 refusal 3, both with zero new entries. Valid-path CR0/CR4/EFER=`80010031/20/1D00`, RSP=`18000`, GDTR base=`12000`. One attempted NX entry: NPF `400`, INFO1 `100000015`, raw GPA `1000000`, saved RIP and walked GPA `1000200`, RSI `10000`, CR3 `13000`, initrd `7E97000`, private guard unchanged. Three precision controls completed first; “zero” is per refused arm. No Linux instruction executed. Host `entry_guard_test` and `linux_entry_test` passed. First frame ATTENTION, no retry.
+
+Independent readback (`lab/linux/verify_media.py`) from the frozen 33,607,680-byte 051 ISO, not the packer's input directory: the EFI boot catalog selected the inspected FAT image. Kernel (12,649,472 bytes), initramfs (1,476,964), and command line (123) matched the three published 042 hashes. Substituting an all-zero ISO digest failed before parsing.
+
 ### 052 · Single-vCPU feature floor across exits
 
 **Pre-boot contract (hex):** seven intercepted CPUIDs at 1010 through 1070 in steps of 10; inputs `0,1,1,80000000,80000001,40000000,7`, secondary leaf-1 request with ECX=A5A5A5A5. FMS `20F32`, bits `07008161`, extended `21008161`; CMPXCHG8B outcomes `9:9`, ZF `1:0`, CMOV `22:33`, NOP witness `6E6F706C`. XMM0 input 15, guest SSE2 result 2A, cookie 464C5231. Eight entries and eight caller restores. Stop on read MSR at RIP 1080, EXIT=7C/INFO1=0, RCX=DEADBEEF, RAX=2A. No ninth entry, native leaf passthrough or Linux boot.
+
+**2026-11-25 · [052 capture](images/l1-cpu-floor-052.png), firmware PASS by review.** Profile `l1-cpu-floor`, batch `893b7e2d1dc948fdb3fb6bca117ac2a7`, ISO `3F53FB1DAB67E719B930BE5C324D6599C1873E38D5E2935B4E736F4DF9DF5E88`, boot 18:00:39 UTC, prior 051 checkpointed. Seven request pairs including both leaf-1 subleaf values; independent guest reports `00020F32:07008161`, extended `21008161`, CX8 `9:9` with different ZF, CMOV `22:33`, NOP `6E6F706C`, SSE2 `2A`, cookie `464C5231`. Eight entries/eight caller restores, read MSR exit `7C`/INFO1 `0` at `1080`, RCX `DEADBEEF`, RAX `2A`. First-capture ATTENTION, no retry. No syscall/privilege-transition, guest TSC calibration or Linux compatibility claim.
 
 ### 053 · Paired guest and nested page faults
 

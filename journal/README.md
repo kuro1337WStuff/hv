@@ -2,6 +2,18 @@
 
 Development host: Ryzen 9 9950X. Firmware runs use the `HV-SVM-L1` Hyper-V VM; host-only checks are labeled separately. Neither qualifies the 9950X3D deployment target on bare metal.
 
+## 052 · 2026-11-25 · A guest checks the advertised instruction floor
+
+L2 used compare-exchange, conditional moves and SSE2 across seven virtual CPUID requests. It observed both outcomes of the comparison and returned 42 from the SIMD calculation. L1 checked its own state eight times, then stopped on the unimplemented MSR read without forwarding it. [Measured operands and terminal](test-report.md#052--single-vcpu-feature-floor-across-exits).
+
+![Seven CPUID requests, independent guest instruction outcomes, eight restores and the refused MSR](images/l1-cpu-floor-052.png)
+
+## 051 · 2026-11-25 · A bad handoff never reaches guest entry
+
+An invalid RSI and an out-of-range CR3 each produced a distinct refusal with **zero** new VMRUN attempts. Restoring the pinned state allowed one attempt, stopped by the intended NPT execute denial. The saved guest RIP still pointed at the first instruction. [Control states, media and batch](test-report.md#051--pre-entry-state-guard-for-the-pinned-nx-fetch).
+
+![Zero attempts for both malformed states, one denied fetch for the restored state](images/l1-entry-guard-051.png)
+
 ## 050 · 2026-11-25 · Shutdown is a port write, not a message
 
 Two guests printed the same `L2:S5` line. The first halted and remained waiting; the second set SLP_EN on virtual PM1a, and L1 stopped at that OUT without re-entering. Neither arm touched host power. [Build, counts and evidence](test-report.md#050--virtual-s5-request-versus-guest-text-and-hlt).
