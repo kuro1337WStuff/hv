@@ -1,4 +1,4 @@
-# Project status · through 085
+# Project status · through 086
 
 **On `main`:** firmware baseline [041](README.md), plus CI-only [#2](https://github.com/kuro1337WStuff/hv/pull/2) at `735c8b56` after both hosted checks passed on `54bace3b`. **On `feature/l1-handoff` only:** [#4](https://github.com/kuro1337WStuff/hv/pull/4) merged at `95abe46c`; [#10](https://github.com/kuro1337WStuff/hv/pull/10) retargeted, then squashed at `44fb6247`. The resulting firmware trees matched the source trees used in 060 and 063 respectively. Revert #10 first if both must be undone; #4 is a merge commit. No ordinary Linux boot or bare-metal qualification.
 
@@ -8,12 +8,14 @@
 
 | Work item | State | Next decision |
 | --- | --- | --- |
-| [PIC evidence #14](https://github.com/kuro1337WStuff/hv/issues/14) | [085](trials/085.md): #47 fixed the selector conflict only on the #12 topic. PIC and page-transition built. The legacy formatter refused the first long label; the separate corrected formatter fit all 15/24 rows. | No formatter change landed. #12 stays draft and A held. [068 FAIL](trials/068.md) still lacks four guest receipts. Prepare the shared formatter delta separately; no guest retry or screen approval. |
+| [PIC evidence #14](https://github.com/kuro1337WStuff/hv/issues/14) | [086](trials/086.md): #49 landed the shared formatter on the PIC topic only. All 15 host rows fit; the 17-character label and row 25 were refused. The corrected ISO (`0463d202…5a66`) is frozen off-runner. | #12 stays draft. A remains held; [068 FAIL](trials/068.md) still lacks four guest receipts. No replay, new screen approval or firmware promotion. |
 | [CPU, loader and reference recovery #15](https://github.com/kuro1337WStuff/hv/issues/15) | [083](trials/083.md): #42 resolved the #9 guide conflict; the combined ISO's selected EFI matched the linker output. No combined guest run. [069 NOT RUN](trials/069.md); original VM held at 057. | #9 stays draft. CPU ownership and loader criteria remain open. Keep 058 unbooted until a separate recovery decision. No ordinary guest or physical promotion. |
 | [Device integration #16](https://github.com/kuro1337WStuff/hv/issues/16) | [084](trials/084.md): the existing IRQ0 EFI differed only in timestamp and checksum fields; neither fresh ISO ran. [080](trials/080.md) covered PIT builds; #34 landed only on the #5 topic. [078](trials/078.md) froze UART media separately. | Hold #5 for combined guest evidence and #6 → #8 for qualified B and a distinct reservation using the retained 078 ISO (`262b1f47…0446b`). No new guest PASS, approved screen or clock calibration. |
 | [Test supervisor #17](https://github.com/kuro1337WStuff/hv/issues/17) | [085](trials/085.md#bench-b-checkout-review-not-a-rollout): retained B has the older worker and a local manifest change; its manifest records match integration, its worker digest does not. No active session was queried. | Keep B fenced. A rollout needs observed old-session closure, released locks and exactly one fresh stage with the reviewed worker. No admission from [081](trials/081.md) or a checkout change. |
 
 **Merge routing:** [Dated PR-by-PR audit](merge-audit-072.md) · [live open PRs](https://github.com/kuro1337WStuff/hv/pulls) · [workflow and rollback](project-workflow.md). #21's test merge did not promote #12. Check the actual base, scope and source revision before each integration.
+
+**Next independent host work:** [#50 · PIT channel 0 periodic reload](https://github.com/kuro1337WStuff/hv/issues/50) and [#51 · pinned init serial milestones](https://github.com/kuro1337WStuff/hv/issues/51). Neither requires a running VM or qualifies an ordinary guest.
 
 ## Feature evidence before the separate trial ledger
 
