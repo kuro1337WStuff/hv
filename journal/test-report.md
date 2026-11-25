@@ -63,3 +63,15 @@ L1 restored the initial byte, cleared the data leaf's write bit and requested a 
 | After remap: frame B | `0xB22B` | `0xB22B` | HLT `0x78` / `0x1003` |
 
 The guest instruction, ASID, nested root and read-only permissions stayed fixed. Both markers were initialized before entry; guest RAX was cleared before each load. L1 requested the conservative full flush (`TLB_CONTROL=1`) on entry. [VM console](images/npt-remap-008.png). This does not test a selective flush, cross-vCPU invalidation or the physical 9950X3D.
+
+### 009 · 2026-11-24 · Cross-vCPU image build
+
+**FAIL · build only.** The first `firmware\build.cmd npt-cross` attempt failed at link time: the freestanding image referenced `_disable`, `_enable` and `memset`. No bootable ISO or VM observation was produced. The next build used inline flag intrinsics and explicitly initialized callback fields instead of depending on runtime library symbols.
+
+### 010 · 2026-11-24 · Cross-vCPU full-flush rendezvous
+
+**SKIP · no L2 entries.** Source [`b650d8684a`](https://github.com/kuro1337WStuff/hv/commit/b650d8684aa5ca167dc0edf223e3403c258ed96d); `hv-npt-cross.iso` SHA-256 `bcf573780db9c60da387d9ec434dbe0d1b55a84388a7be4aeb321486f5a9f72d`. Built with `firmware\build.cmd npt-cross`; boot with `.\lab\Boot-HvProbe.ps1 -NptCross` in elevated PowerShell with the lab VM off.
+
+**Expected:** two distinct firmware processor IDs, each with its own VMCB and host-save page, read `0xA11A` from GPA `0x2000` before the BSP changes the shared read-only leaf. Each processor must then request its own `TLB_CONTROL=1` flush on entry and return `0xB22B`. Every acknowledgement requires the requested CPU identity, HLT exit `0x78`, RIP `0x1003`, and the correct register value. This is a quiesced rendezvous, not an IPI interrupting a running guest or an `INVLPGB` broadcast test.
+
+**Observed:** Hyper-V reported two configured vCPUs with nested extensions enabled on the 9950X lab host. The mounted ISO digest matched. The [UEFI console](images/npt-cross-010.png) reported `LocateProtocol status: 0x800000000000000E` (`EFI_NOT_FOUND`) for MP Services. The image stopped before either warm-up read, remap or acknowledgement. No stale translation was observed, and none was ruled out. Qualifying this case requires a supported way to dispatch and identify the second processor in L1; increasing the VM's configured CPU count alone does not supply that interface.
