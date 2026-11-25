@@ -1,6 +1,6 @@
 [
   {"profile":"probe","stem":null,"pass":"a255bc97bb907bcbf88474a182d6010dae63b696b7d43253efc9325055f26fc1"},
-  {"profile":"l1-handoff","stem":"hv-l1-handoff","pass":null},
+  {"profile":"l1-handoff","stem":"hv-l1-handoff","pass":"acf69d9f919886a6fb3bb7f797a1048b9a91ea67c2c4aeeda3685109156a3bca"},
   {"profile":"l2","stem":"hv-l2-smoke","pass":"36bcc11f3dbf69b38bef1466e06eb42ae3fc6b23697b49ee1a947842635164c2"},
   {"profile":"cpuid","stem":"hv-cpuid-resume","pass":"27b75d52c2332aa952d1f256b59a4104d7cfa4022af87a9027f51b6c3f063cfc"},
   {"profile":"npt-write","stem":"hv-npt-write","pass":"4aceae05f48c8e62541b279e0124295daf6ded6147ece66c928493b42a78030c"},

@@ -263,3 +263,11 @@ AMD64 APM Vol. 2 §§2.5.12 and 11.4.4 describe the format. The profile requires
 **Acceptance contract for the next boot:** successful `ExitBootServices` with the current map key, private stack within its 4-page reservation, correct readback at both ends of the first arena page, then rejection of a 9-page request against an 8-page arena without moving the cursor. The next 1-page allocation must return exactly the second page. After a COM1 request, require `HV:HANDOFF`, `HV:OWNED`, `HV:EXPECTED_OOM`, `HV:HALT` in order, plus the independently captured `L1 HANDOFF PASS` screen. The profile retains inherited address mappings; it does not launch L2. See UEFI 2.11 §§7.2.3 and 7.4.6 for the map and exit contract.
 
 **Host evidence only:** the session-client loopback check accepted the exact four-line transcript and rejected missing and truncated transcripts. That verifies evidence transfer, not firmware execution.
+
+### 036 · 2026-11-25 local · Standalone L1 handoff
+
+**Firmware PASS; queue ATTENTION (first-time framebuffer review).** `python lab/hv_queue.py run --session l1-handoff` booted the staged run 035 image in `HV-SVM-L1` on the Ryzen 9 9950X. Firmware source `d828ef04dc`; batch `9b242bb1b7a74aefbac03b0a21e8dc87`; ISO SHA-256 `0787BB201F8F9B873C0E36789421166FE1980E0C36366410CBAB1578F6119141`. The worker checkpointed the prior `vcpu-fpstate` PASS before booting.
+
+The COM1 capture contained exactly `HV:HANDOFF`, `HV:OWNED`, `HV:EXPECTED_OOM`, `HV:HALT`, in that order, each terminated by CRLF. Captured bytes SHA-256: `b21bb1e384b4d30b9e603a9921f8acf6b4a777d5bae44321295b78c8a49a9f40`. The [1024×768 framebuffer](images/l1-handoff-036.png) showed `L1 HANDOFF PASS` with the same four markers. The unreviewed framebuffer timed out as designed; this was not a queue COMPLETE or a second boot.
+
+The pass path requires successful `ExitBootServices`, a stack address inside the four reserved stack pages, and readback at both ends of the first arena page. Rejecting a nine-page request did not consume any of the seven remaining pages: the next successful allocation was page two. This verifies the bounded bootstrap arena with inherited address mappings, not a general physical allocator, a forced stale map-key retry, an L2 launch, or operation on the physical 9950X3D.

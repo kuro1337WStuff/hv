@@ -2,6 +2,14 @@
 
 Development host: Ryzen 9 9950X. Firmware runs use the `HV-SVM-L1` Hyper-V VM; host-only checks are labeled separately. Neither qualifies the 9950X3D deployment target on bare metal.
 
+## 036 · 2026-11-25 · L1 reports an allocation failure after UEFI handoff
+
+**Passed in `HV-SVM-L1`.** After `ExitBootServices`, L1 switched to its private stack and verified a page from its own arena. It rejected a nine-page request without advancing the allocator: the next one-page allocation returned exactly the second arena page. The worker received all four expected lines on COM1, and the VM framebuffer independently displayed the terminal below.
+
+![L1 HANDOFF PASS with matching handoff, ownership, expected OOM and halt markers](images/l1-handoff-036.png)
+
+The queue stopped for first-time screen review. The [run record](test-report.md#036--2026-11-25-local--standalone-l1-handoff) identifies the tested image and serial bytes. No L2 guest or bare-metal boot was part of this test.
+
 ## 034–035 · 2026-11-25 · First direct L1 memory handoff image
 
 **Image built; VM acceptance pending.** The new profile tests whether L1 can allocate memory, reject an oversized request, and report the outcome over COM1 after leaving UEFI boot services. The first build failed to link; the corrected image staged, but Windows canceled the worker elevation before any VM operation. There is no guest screenshot or serial result for these attempts. The [ledger](test-report.md#035--2026-11-25-local--standalone-l1-handoff-staged-not-booted) records the image digest and the exact criteria for the first boot.
