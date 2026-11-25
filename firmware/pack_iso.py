@@ -8,7 +8,7 @@ from pyfatfs.PyFat import PyFat
 from pyfatfs.PyFatFS import PyFatFS
 
 
-def pack(binary: Path, output: Path) -> None:
+def pack(binary: Path, output: Path, root_files=()) -> None:
     with TemporaryDirectory(dir=output.parent) as tmp:
         esp = Path(tmp) / 'esp.img'
         esp.touch()
@@ -19,10 +19,16 @@ def pack(binary: Path, output: Path) -> None:
             fs.makedirs('EFI/BOOT')
             with binary.open('rb') as src:
                 fs.upload('EFI/BOOT/BOOTX64.EFI', src)
+            for name, path in root_files:
+                with path.open('rb') as src:
+                    fs.upload(name, src)
         iso = pycdlib.PyCdlib()
-        iso.new(vol_ident='HVUEFIPROBE')
+        # Level 2 permits the four-character extension in limine.conf.
+        iso.new(vol_ident='HVUEFIPROBE', interchange_level=2 if root_files else 1)
         try:
             iso.add_file(str(esp), iso_path='/ESP.IMG;1')
+            for name, path in root_files:
+                iso.add_file(str(path), iso_path=f'/{name.upper()};1')
             iso.add_eltorito('/ESP.IMG;1', platform_id=0xef, efi=True)
             image = Path(tmp) / 'probe.iso'
             iso.write(str(image))

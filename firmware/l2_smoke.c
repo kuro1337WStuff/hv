@@ -13,8 +13,6 @@ enum {
 enum { Vmcb, HostSave, Pml4, Code=Pml4+NptTableCount, Iopm, Msrpm=Iopm+3, Pages=Msrpm+2 };
 #ifdef HV_NPT_WRITE
 enum { DataGpa=0x2000, InitialByte=0x5a, StoredByte=0xa5, Data=Pages, AllocPages=Pages+1 };
-#elif defined(HV_NPT_CROSS)
-enum { DataGpa=0x2000, FrameA=Pages, FrameB, ApVmcb, ApSave, AllocPages, MarkerA=0xa11a, MarkerB=0xb22b };
 #elif defined(HV_NPT_REMAP)
 enum { DataGpa=0x2000, FrameA=Pages, FrameB, AllocPages, MarkerA=0xa11a, MarkerB=0xb22b };
 typedef struct { UINT64 exit, ip, ax; } ReadSample;
@@ -47,10 +45,6 @@ static void hex(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *out, CHAR16 *label, UINT64 v)
     out->OutputString(out,label);
     out->OutputString(out,buf);
 }
-
-#ifdef HV_NPT_CROSS
-#include "cross_vcpu.h"
-#endif
 
 static void smoke(EFI_SYSTEM_TABLE *st)
 {
@@ -112,18 +106,16 @@ static void smoke(EFI_SYSTEM_TABLE *st)
     UINT64 control_exit, control_ip;
     UINT8 control_byte;
     BOOLEAN control_ok;
-#elif defined(HV_NPT_REMAP) || defined(HV_NPT_CROSS)
+#elif defined(HV_NPT_REMAP)
     /* MOV AX, word ptr DS:[2000h]; HLT. Neither backing frame changes between reads. */
     const UINT8 payload[]={0xa1,DataGpa & 0xff,DataGpa >> 8,0xf4};
     bs->CopyMem(vmcb+Code*EFI_PAGE_SIZE,(VOID *)payload,sizeof(payload));
     *(volatile UINT16 *)(vmcb+FrameA*EFI_PAGE_SIZE)=MarkerA;
     *(volatile UINT16 *)(vmcb+FrameB*EFI_PAGE_SIZE)=MarkerB;
     volatile UINT64 *leaf=&((FixedNpt *)(vmcb+Pml4*EFI_PAGE_SIZE))->table[3][DataGpa/NptPageBytes];
-#ifdef HV_NPT_REMAP
     ReadSample samples[2];
     UINTN reads=0;
     BOOLEAN matched=FALSE;
-#endif
 #else
     /* One read-only guest page, no guest I/O or arbitrary image loader: MOV AX,imm16; HLT. */
     const UINT8 payload[]={0xb8, MARKER & 0xff, MARKER >> 8, 0xf4};
@@ -156,9 +148,6 @@ static void smoke(EFI_SYSTEM_TABLE *st)
     FIELD(UINT64,Pat)=__readmsr(0x277);
     FIELD(UINT64,ExitCode)=~0ull; /* never confuse unmodified memory with success */
 
-#ifdef HV_NPT_CROSS
-    cross_vcpu(st,base,leaf);
-#else
 #ifdef HV_CPUID_RESUME
     out->OutputString(out,L"Entering L2: CPUID -> validate 4 replies -> HLT\r\n");
 #elif defined(HV_NPT_WRITE)
@@ -294,7 +283,6 @@ static void smoke(EFI_SYSTEM_TABLE *st)
         hex(out,L"EXITINFO1: ",FIELD(UINT64,Info1));
         hex(out,L"EXITINFO2: ",FIELD(UINT64,Info2));
     }
-#endif
 #endif
 #endif
     bs->FreePages(base,AllocPages);
