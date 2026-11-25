@@ -2,6 +2,14 @@
 
 Development host: Ryzen 9 9950X. Firmware runs use the `HV-SVM-L1` Hyper-V VM; host-only checks are labeled separately. Neither qualifies the 9950X3D deployment target on bare metal.
 
+## 021–022 · 2026-11-24 · One interrupt wakes a virtual CPU
+
+**Run 022 passed in `HV-SVM-L1`.** L2 reached HLT at `0x1002` with interrupts enabled, no handler entries, and no progress past HLT. L1 queued vector `0x41`. The guest handler ran once and recorded `0x1003` on its interrupt stack: the instruction immediately after HLT. After `IRETQ`, the guest checked its stack pointer, recorded forward progress and reached the success HLT at `0x1039`.
+
+![VM console showing one handler entry, the stacked post-HLT RIP, and resumed execution](images/irq-wake-022.png)
+
+The [ledger](test-report.md#022--2026-11-24-local--one-virtual-interrupt-wakes-l2) preserves the first fixture failure and corrected run separately. To reproduce: `python lab/hv_queue.py run --rebuild irq-wake`. This is an emulated guest halt and virtual interrupt, not a physical CPU sleep or a timer test.
+
 ## 019–020 · 2026-11-24 · A 64-bit vCPU keeps its integer registers across exits
 
 **Run 020 passed in `HV-SVM-L1`.** After each of two CPUID intercepts, L2 checked the four emulated replies and all twelve other integer registers, including RSP. Different values in the second round prevent a stale first-round frame from passing. Only after both checks did the guest set `RAX=0x50415353` and reach the success HLT.

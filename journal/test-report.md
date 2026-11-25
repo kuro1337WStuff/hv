@@ -20,6 +20,7 @@ The [journal](README.md) records these console observations on a Ryzen 9 9950X u
 | Forensic write report | `forensic-write`, same fixed store with permissions changed | Writable control: no protection event, HLT at `0x1005`, byte `0xA5`. Protected arm: final-data write protection NPF at RIP `0x1000`, GPA `0x2000`; decoding the saved instruction must independently yield `MOV byte [0x2000],0xA5`; backing byte must be `0x5A` before and after. |
 | All-processor nested GPA invalidation | `npt-broadcast`, opt-in on AMD Hyper-V | Both measured processor IDs must first read A through the same NPT root. With both L2s stopped, change the leaf, require success from one BSP `HvCallFlushGuestPhysicalAddressSpace` on that root, then require both L2s to read B at the original GPA and HLT site with no entry flush. Missing capability is SKIP, not PASS. No claim about which instruction L0 used. |
 | 64-bit integer state | `vcpu-gpr`, one L2 vCPU | Two ordered CPUID exits at distinct known instructions. On each resume L2 must check four zero-extended replies, all other GPRs (including high halves), and its round-specific stack pointer. Third exit must be HLT at the success label with a guest-generated PASS marker; a failure HLT is not interchangeable. |
+| Virtual HLT wake | `irq-wake`, fixed 64-bit L2 | Intercept the waiting HLT while IF is set and handler count and progress are zero. Queue one vector `0x41`. Require one handler entry, the post-HLT return RIP, restored stack pointer, guest progress, and the success marker at a separate terminal HLT. Do not credit a skipped HLT as a delivered interrupt. |
 
 **Target qualification:** No bare-metal Ryzen 9 9950X3D run is recorded here. Host-side checks and nested runs on the 9950X do not qualify that target.
 
@@ -144,3 +145,15 @@ The [captured console](images/npt-broadcast-017.png) meets the predeclared crite
 | 3 | Success HLT (`0x78`), `RAX=0x50415353` | `0x141F` |
 
 L1 compared all 16 integer-register values against the input pattern on each CPUID exit. L2 checked the four zero-extended replies and every other GPR after each resume, including RSP (`0x7FF0` then `0x7FC0`). The PASS marker was produced by L2, not supplied by the exit handler. The observed instruction addresses also match the two CPUID opcodes and success HLT in the built EFI payload. AMD64 APM Vol. 2, §15.5 and Appendix B describe the VMRUN/VMCB state boundary. No claim about extended state, stack-memory integrity, interrupts, migration or bare-metal behavior.
+
+### 021 · 2026-11-24 local · IRQ fixture rejected before guest entry
+
+**Firmware FAIL; no interrupt result.** On the nested Ryzen 9 9950X lab, `python lab/hv_queue.py run --rebuild irq-wake`, batch `28120f2866b74f85a614d84648264b02`, booted ISO SHA-256 `F3CE5FFBAD48F6A02158381C7CEADDA38DED28EE5F001CE9419847BE06C8433C`. The [live console](images/irq-wake-021.png) reported `FAIL: invalid fixed IRQ guest layout`; no L2 entry occurred. The queue stopped at ATTENTION, preserving the VM. The assembler listing placed the wait HLT and following instruction at offsets `2` and `3`; the optimized C listing went unconditionally to the layout error. The correction exports the offsets as assembler data instead of asking C to establish adjacency between separate external objects.
+
+### 022 · 2026-11-24 local · One virtual interrupt wakes L2
+
+**Firmware PASS; queue ATTENTION (first review of success screen).** Ryzen 9 9950X, `HV-SVM-L1`; source `78cf309c0a`; `firmware\build.cmd irq-wake` then `python lab/hv_queue.py run irq-wake`. Batch `de69637a7a4f4eb38b5da41f0e38ff9a`; ISO SHA-256 `44185BA59CB176120801B7BA44673E654EF795096F86195D4056702DB11049F5`. Before the retry, the operator authorized power-off of the isolated VM after a live identity, media and failure-screen match. The previous checkpoint and run 021 capture were retained.
+
+The [console](images/irq-wake-022.png) shows the first intercepted HLT at `0x1002`: IF=1, interrupt shadow=0, count=0, progress=0. L1 advanced past the fixed HLT and set `V_IRQ` with priority 4 and vector `0x41` for the second VMRUN. Only the guest IDT handler increments the count and reads the return address from the CPU-built stack frame. Count was `1`, stacked RIP `0x1003`, continuation progress `1`, final RIP `0x1039`, and final RAX `0x50415353`. PASS also required a cleared `V_IRQ`, restored RSP `0x7FF0`, IF set, and the final HLT intercept. Clearing `V_IRQ` alone is not proof that the handler ran: AMD APM Vol. 2 §15.21.4 states the processor clears it before accessing the IDT.
+
+The queue did not auto-advance or report COMPLETE. This covers one eligible maskable interrupt and return on one virtual CPU; it does not cover deferred delivery with IF clear, APIC timer/EOI emulation, or bare metal.
