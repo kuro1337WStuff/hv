@@ -2,6 +2,16 @@
 
 Development host: Ryzen 9 9950X. Firmware runs use the `HV-SVM-L1` Hyper-V VM; host-only checks are labeled separately. Neither qualifies the 9950X3D deployment target on bare metal.
 
+## 045 · 2026-11-25 · Staged input verification before VMRUN
+
+**Passed in the nested VM.** Changing one bit of the kernel, initramfs, or command line in L1's private staging memory caused L1 to identify that specific input and reject it with **zero guest entries**. File lengths and the mounted ISO did not change.
+
+Restoring the original bytes made the same check accept them. The instruction-site counter then recorded four `VMRUN` attempts: three non-executable control fetches and one denied Linux entry fetch. Linux did not boot.
+
+![Staged input trial: three distinct rejections with zero entries, followed by four restored-input NX fetches](images/l1-linux-inputs-045.png)
+
+The [test ledger](test-report.md#045--staged-linux-input-identity-before-guest-entry) records the hashes, mutation sites, host checks, and first-capture queue outcome.
+
 ## 044 · 2026-11-25 · Why the Linux entry fetch reported a page base
 
 **Admission passed with Linux execution still denied.** Two different byte offsets in one guest physical page returned the same raw fault address. Changing the mapped page changed that address. Saved RIP stayed exact throughout. The Linux entry then followed the same rule: RIP and the independent walk gave `0x1000200`, while `EXITINFO2` gave `0x1000000`. Run 043 correctly failed its exact-byte assertion; run 044 separates fault cause, instruction position and fault-address precision.

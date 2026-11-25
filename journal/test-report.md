@@ -391,3 +391,22 @@ Media cross-check after the stop: reopened the digest-named ISO, verified its wh
 | Linux entry | `0x1000200` | `0x1000200` | `0x1000000` |
 
 The raw field tracked the 4 KiB **guest physical page**, not the guest linear address or byte offset. The Linux arm agreed with all three controls, with RSI `0x10000`, CR3 `0x13000`, initrd `0x7E97000` and guard `0x50354E5847554152`. This explains the exact-byte mismatch in run 043 on this nested configuration. It does not identify whether L0 or the CPU chose the granularity, say anything about write-fault precision, or qualify a native AMD platform. Linux remained non-executable; zero boots to PID 1.
+
+### 045 · Staged Linux input identity before guest entry
+
+**Contract:** after `ExitBootServices`, compare SHA-256 of the actual private staging bytes with the three pins compiled into L1. Mutate one byte without changing the input length; call the real admission path; restore the byte before testing the next input. Require rejection of the specifically altered artifact before any `VMRUN`. With all bytes restored, the same gate must accept and reproduce run 044's four NX fetch exits. Count attempts at the instruction site, not at the request dispatcher. This test does not grant Linux execute permission.
+
+**Host verification:** compiled `lab/tests/sha256_test.c` with MSVC `/std:c11 /O2 /W4 /WX`; `build\sha256_test.exe` exited 0 on five known-answer vectors: empty, `abc`, 55 bytes, 56 bytes and a 256-byte binary message. `firmware\build.cmd l1-linux-admission` and `firmware\build.cmd l1-linux-inputs` both built from source `4c4ee9bbda`. The normal profile includes the hash gate; only the trial includes the deliberate byte changes and VMRUN counter. The staged pins are the three input digests from run 042, not values supplied by the boot volume.
+
+**2026-11-25 · Firmware PASS by framebuffer review.** Nested `HV-SVM-L1` on the 9950X, batch `8913ff0eb7544e6dba6f2e41a6cba424`, `python lab/hv_queue.py run --session l1-linux-inputs`. The broker checkpointed the run-044 PASS and booted ISO `3866B0BC8521F6C975FE4C893BE5906B2004D90E8AF1D10D0663F353B8E578E5` at 17:17:35 UTC. As this was a new profile, the queue stopped at `ATTENTION` (exit 3) and preserved the [first capture](images/l1-linux-inputs-045.png); it did not report `COMPLETE` or retry.
+
+| In-memory change, same input length | Observed rejected input ID | Measured VMRUN attempts |
+|---|---:|---:|
+| Kernel, low bit of last byte flipped | 1 (kernel) | 0 |
+| Initramfs, low bit of last byte flipped | 2 (initramfs) | 0 |
+| Command line, low bit of first byte flipped | 3 (command line) | 0 |
+| Original bytes restored | 0 (none) | 4 |
+
+In the restored arm, all four exits were `0x400` with `EXITINFO1=0x100000015`. For the Linux entry, saved RIP and independent walk were `0x1000200`; raw `EXITINFO2` was `0x1000000`. Guard `0x50354E5847554152` remained intact. The counter was incremented immediately before the assembly `VMRUN`, so a rejection with no entries is distinct from a guest that ran and then faulted. The measured gate authenticates these staged bytes relative to the trusted firmware's pins, not the firmware or boot chain. No executable Linux boot or physical qualification.
+
+After review, `Get-HvConsoleVerdict` classified the archived 045 framebuffer as `PASS` and the prior 044 framebuffer as `UNKNOWN` for `l1-linux-inputs`. This was an offline check of those captures, not a second boot.
