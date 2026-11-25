@@ -4,7 +4,7 @@ Development host: Ryzen 9 9950X. Firmware runs use the `HV-SVM-L1` Hyper-V VM; h
 
 **Start here:** [Current status, feature trials and integration order](status.md). The entries below describe the integrated baseline through 041. Later feature evidence is published on `main` independently of its implementation; see [how trials are published](project-workflow.md).
 
-Latest: [079 · current vs. historical lab worker; bench B refused](trials/079.md), [078 · frozen UART media and readback](trials/078.md), [077 · integrated lane and board controls](trials/077.md). All three were host-only. Earlier controls: [076 · UART EFI differences by field](trials/076.md), [073 · UART identity gate](trials/073.md), [074 · lane preflight](trials/074.md), [075 · external holds and STOP](trials/075.md). [072 · PIC formatter diagnosis](trials/072.md) does not change 068.
+Latest host-only trials: [080 · PIT integration and two profile builds](trials/080.md), [079 · current worker identity; B refused](trials/079.md), [078 · frozen UART media and readback](trials/078.md). Earlier: [077 · integrated lane and board controls](trials/077.md), [076 · UART EFI differences](trials/076.md), [073 · UART identity gate](trials/073.md), [074 · lane preflight](trials/074.md), [075 · external holds and STOP](trials/075.md). [072 · PIC formatter diagnosis](trials/072.md) does not change 068.
 
 ## 041 · 2026-11-25 · State, bounded exits, and timer wake after firmware handoff
 
