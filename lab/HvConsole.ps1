@@ -44,6 +44,7 @@ function Get-HvConsoleVerdict {
         'cpuid'     { '27b75d52c2332aa952d1f256b59a4104d7cfa4022af87a9027f51b6c3f063cfc' } # npt-006.png
         'npt-write' { '4aceae05f48c8e62541b279e0124295daf6ded6147ece66c928493b42a78030c' } # npt-write-007.png
         'forensic-write' { 'cf64cac4363291a8d1cab01816d3d854a99eb02adf6351bfdd2ba125abd3a24c' } # forensic-write-018.png
+        'vcpu-gpr' { 'deb4feb5f6706e8ce0f31a17e00deee2ad7f48792ad7a497981d63b2b5928d4f' } # vcpu-gpr-020.png
         'npt-remap' { 'b8a89c55ff3785983d41f30855c7af3e04fc0d5e87cb6122ab62a2c23affc061' } # npt-remap-008.png
         'npt-cross' { 'b4e0ee475d7add3a84c8294c3f69800fdf0244f315ba16375a645c1aa8f95d9e' } # npt-cross-015.png
         'npt-broadcast' { '7812af2f7444f89ad7c52b68fc8e72a202ce23c8a39e5a2eb98bf0a18863da7c' } # npt-broadcast-017.png

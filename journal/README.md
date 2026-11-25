@@ -2,6 +2,14 @@
 
 Development host: Ryzen 9 9950X. Firmware runs use the `HV-SVM-L1` Hyper-V VM; host-only checks are labeled separately. Neither qualifies the 9950X3D deployment target on bare metal.
 
+## 019–020 · 2026-11-24 · A 64-bit vCPU keeps its integer registers across exits
+
+**Run 020 passed in `HV-SVM-L1`.** After each of two CPUID intercepts, L2 checked the four emulated replies and all twelve other integer registers, including RSP. Different values in the second round prevent a stale first-round frame from passing. Only after both checks did the guest set `RAX=0x50415353` and reach the success HLT.
+
+![VM console showing two CPUID exits followed by the guest's success HLT and PASS marker](images/vcpu-gpr-020.png)
+
+Run: `python lab/hv_queue.py run --rebuild vcpu-gpr`. The [ledger](test-report.md#020--2026-11-24-local--two-64-bit-register-round-trips) records the earlier assembler error separately from the live run. This is one vCPU on the nested 9950X lab; SIMD/FPU state, interrupt delivery and physical hardware were not tested.
+
 ## 018 · 2026-11-24 · Distinguishing an attempted write from a committed write
 
 **PASS in `HV-SVM-L1`.** With writes allowed, L2 stored `0xA5` and reached HLT. With the same page read-only, L1 reported a write protection fault. The instruction at the saved RIP decoded as `MOV byte [0x2000], 0xA5`; its destination matched the fault address reported by the processor. A separate read of the backing byte showed `0x5A` both before and after the attempt.

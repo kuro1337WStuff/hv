@@ -19,6 +19,7 @@ The [journal](README.md) records these console observations on a Ryzen 9 9950X u
 | NPT write protection | `npt-write`, paired control and protected store | The writable store must reach HLT and change the target byte. After restoring the byte and revoking write permission, the same store must cause a final-data write protection NPF at the expected GPA and instruction, leaving the byte unchanged. |
 | Forensic write report | `forensic-write`, same fixed store with permissions changed | Writable control: no protection event, HLT at `0x1005`, byte `0xA5`. Protected arm: final-data write protection NPF at RIP `0x1000`, GPA `0x2000`; decoding the saved instruction must independently yield `MOV byte [0x2000],0xA5`; backing byte must be `0x5A` before and after. |
 | All-processor nested GPA invalidation | `npt-broadcast`, opt-in on AMD Hyper-V | Both measured processor IDs must first read A through the same NPT root. With both L2s stopped, change the leaf, require success from one BSP `HvCallFlushGuestPhysicalAddressSpace` on that root, then require both L2s to read B at the original GPA and HLT site with no entry flush. Missing capability is SKIP, not PASS. No claim about which instruction L0 used. |
+| 64-bit integer state | `vcpu-gpr`, one L2 vCPU | Two ordered CPUID exits at distinct known instructions. On each resume L2 must check four zero-extended replies, all other GPRs (including high halves), and its round-specific stack pointer. Third exit must be HLT at the success label with a guest-generated PASS marker; a failure HLT is not interchangeable. |
 
 **Target qualification:** No bare-metal Ryzen 9 9950X3D run is recorded here. Host-side checks and nested runs on the 9950X do not qualify that target.
 
@@ -127,3 +128,19 @@ The [captured console](images/npt-broadcast-017.png) meets the predeclared crite
 | Backing byte | `0xA5` after store | `0x5A` before and after |
 
 `EXITINFO1=0x100000007`: present, write, final translation; not an instruction fetch or a guest page-table walk. `EXITINFO2=0x2000`. Independently decoding the bytes at the saved RIP in the immutable fixture yielded destination `0x2000` and immediate `0xA5`. The fault was neither resumed nor emulated. The attempted value came from the instruction, not the NPF metadata. Reference: AMD64 Architecture Programmer’s Manual, Vol. 2, §15.25.7, pp. 575–576. No bare-metal run.
+
+### 019 · 2026-11-24 local · Register-test build stopped before VM staging
+
+**BUILD ERROR; no guest result.** `python lab/hv_queue.py run --rebuild vcpu-gpr`, batch `b72141a573554e87bebd673b91191b80`. ML64 rejected the branch to the byte-typed failure HLT label (`A2024`). No ISO was staged, no VM was changed and there was no console capture. The correction makes the target a code label; the failure HLT and round/register checks remain in the test.
+
+### 020 · 2026-11-24 local · Two 64-bit register round trips
+
+**Firmware PASS; queue ATTENTION for first-time screen review.** Ryzen 9 9950X, `HV-SVM-L1`; `python lab/hv_queue.py run --rebuild vcpu-gpr`; batch `a85336bc51fd445288dd2cb5aa33b22e`. Source `f3507d2e46`; ISO SHA-256 `C86508F837D37F99D1AA6B3172F7A96F565BB9438EF105F1EC6A7CBD5176CA8E`. The queue checkpointed the prior forensic-write PASS, booted the new profile and saved the [live console](images/vcpu-gpr-020.png). It did not report COMPLETE.
+
+| Entry | Observed exit | Guest RIP |
+| --- | --- | --- |
+| 1 | CPUID (`0x72`) | `0x1091` |
+| 2 | CPUID (`0x72`) | `0x12A7` |
+| 3 | Success HLT (`0x78`), `RAX=0x50415353` | `0x141F` |
+
+L1 compared all 16 integer-register values against the input pattern on each CPUID exit. L2 checked the four zero-extended replies and every other GPR after each resume, including RSP (`0x7FF0` then `0x7FC0`). The PASS marker was produced by L2, not supplied by the exit handler. The observed instruction addresses also match the two CPUID opcodes and success HLT in the built EFI payload. AMD64 APM Vol. 2, §15.5 and Appendix B describe the VMRUN/VMCB state boundary. No claim about extended state, stack-memory integrity, interrupts, migration or bare-metal behavior.
