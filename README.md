@@ -25,4 +25,5 @@ This builds `build/hv-cpuid-resume.iso`, stages a digest-named copy, and request
 - [Lab guide](lab/README.md) — profile commands, stop controls, and result handling.
 - [Development journal](journal/README.md) — milestones and reviewed console screenshots.
 - [Test ledger](journal/test-report.md) — commands, measured values, failed attempts, and limits of each result.
-- [Contributing](CONTRIBUTING.md) — what belongs in a commit and how to roll one back.
+- [Current status](journal/status.md) — integrated baseline, feature trials, open issues and next decisions.
+- [Project workflow](journal/project-workflow.md) — repository map, issue ownership, trial publication, merge order and rollback.
