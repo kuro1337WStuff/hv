@@ -31,6 +31,16 @@ static void pkg_reset(UINT8 *vmcb)
 #elif defined(HV_SERIAL_CONTRACT)
 #include "long_guest.h"
 #include "serial_contract.h"
+#elif defined(HV_TICK_CONTRACT)
+#define HV_GUEST_IDT
+#include "long_guest.h"
+#include "tick_contract.h"
+#elif defined(HV_TX_CONTRACT)
+#include "long_guest.h"
+#include "tx_contract.h"
+#elif defined(HV_POWER_CONTRACT)
+#include "long_guest.h"
+#include "power_fixture.h"
 #else
 #define HV_GUEST_IDT
 #include "long_guest.h"

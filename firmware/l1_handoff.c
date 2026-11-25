@@ -28,6 +28,9 @@ static UINT32 width, height, pitch;
 #elif defined(HV_PACKAGE)
 #define LOG_ROWS 42u
 #define LOG_Y(i) (80u + 16u * (i))
+#elif defined(HV_ENTRY_TEST)
+#define LOG_ROWS 35u /* 044 observations plus two refusals and restored state */
+#define LOG_Y(i) (80u + 16u * (i))
 #elif defined(HV_INPUT_TEST)
 #define LOG_ROWS 33u /* run 044 rows plus bad input ID and entry count for four arms */
 #define LOG_Y(i) (80u + 16u * (i))
@@ -206,8 +209,16 @@ __declspec(noreturn) static void fail(const char *reason)
     screen("L1 CPU CONTRACT FAIL", reason, 0xff00ff);
 #elif defined(HV_SERIAL_CONTRACT)
     screen("L1 SERIAL CONTRACT FAIL", reason, 0xff00ff);
+#elif defined(HV_TICK_CONTRACT)
+    screen("L1 PIT IRQ0 FAIL", reason, 0xff00ff);
+#elif defined(HV_TX_CONTRACT)
+    screen("L1 CONSOLE TX FAIL", reason, 0xff00ff);
+#elif defined(HV_POWER_CONTRACT)
+    screen("L1 POWER S5 FAIL", reason, 0xff00ff);
 #elif defined(HV_PACKAGE)
     screen("L1 PACKAGE FAIL", reason, 0xff00ff);
+#elif defined(HV_ENTRY_TEST)
+    screen("L1 ENTRY GUARD FAIL", reason, 0xff00ff);
 #elif defined(HV_INPUT_TEST)
     screen("L1 STAGED INPUT FAIL", reason, 0xff00ff);
 #elif defined(HV_LINUX_ADMISSION)
@@ -272,6 +283,8 @@ __declspec(noreturn) void L1OwnedMain(void)
     if (reason) fail(reason);
 #ifdef HV_INPUT_TEST
     screen("L1 STAGED INPUT PASS", "FETCH DENIED: NO LINUX BOOT", 0x00ff00);
+#elif defined(HV_ENTRY_TEST)
+    screen("L1 ENTRY GUARD PASS", "FETCH DENIED: NO LINUX BOOT", 0x00ff00);
 #else
     screen("L1 LINUX ADMISSION PASS", "FETCH DENIED: NO LINUX BOOT", 0x00ff00);
 #endif
@@ -280,6 +293,12 @@ __declspec(noreturn) void L1OwnedMain(void)
     if (reason) fail(reason);
 #ifdef HV_SERIAL_CONTRACT
     screen("L1 SERIAL CONTRACT PASS", "POLLED COM1: FIXED GUEST", 0x00ff00);
+#elif defined(HV_TICK_CONTRACT)
+    screen("L1 PIT IRQ0 PASS", "TWO IRQ0: SPECIFIC PIC EOI", 0x00ff00);
+#elif defined(HV_TX_CONTRACT)
+    screen("L1 CONSOLE TX PASS", "TWO PHASES: BOUNDED CAPTURE", 0x00ff00);
+#elif defined(HV_POWER_CONTRACT)
+    screen("L1 POWER S5 PASS", "FIXED GUEST: VIRTUAL POWER", 0x00ff00);
 #else
     screen("L1 CPU CONTRACT PASS", "ONE VIRTUAL CPU: FIXED GUEST", 0x00ff00);
 #endif

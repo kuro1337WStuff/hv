@@ -2,7 +2,8 @@
 #define HV_STANDALONE_L2_H
 #include "fixed_vmcb.h"
 
-#if defined(HV_CPU_CONTRACT) || defined(HV_SERIAL_CONTRACT)
+#if defined(HV_CPU_CONTRACT) || defined(HV_SERIAL_CONTRACT) || defined(HV_TICK_CONTRACT) || \
+    defined(HV_TX_CONTRACT) || defined(HV_POWER_CONTRACT)
 #define HV_STANDALONE_CONTRACT
 #endif
 #ifdef HV_PACKAGE
@@ -155,6 +156,12 @@ static const char *run_standalone_l2(void *reservation, StandaloneSample *sample
     const char *error=cpu_contract_run(vmcb);
 #elif defined(HV_SERIAL_CONTRACT)
     const char *error=serial_contract_run(vmcb);
+#elif defined(HV_TICK_CONTRACT)
+    const char *error=tick_contract_run(vmcb);
+#elif defined(HV_TX_CONTRACT)
+    const char *error=tx_contract_run(vmcb);
+#elif defined(HV_POWER_CONTRACT)
+    const char *error=power_fixture_run(vmcb);
 #elif defined(HV_PACKAGE)
     const char *error=pkg_run(vmcb,sample);
 #elif defined(HV_LINUX_ADMISSION)

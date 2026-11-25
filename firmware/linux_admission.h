@@ -5,6 +5,7 @@
 #include "linux_media.h"
 #include "linux_input_gate.h"
 #include "fetch_walk.h"
+#include "linux_entry_guard.h"
 
 /* Reservation indices are L1 pages, not GPAs. Only LinuxRamFirst..LinuxStageFirst-1
  * can supply leaf frames. The caller owns the adjacent stack separately. */
@@ -100,6 +101,17 @@ static void linux_fetch_vmcb(UINT8 *vmcb, UINT64 entry)
 
 #include "fetch_fixture.h"
 
+#if defined(HV_INPUT_TEST) || defined(HV_ENTRY_TEST)
+extern volatile unsigned linux_vmrun_count; /* assembly increments just before VMRUN */
+#endif
+
+static enum LinuxEntryFault linux_checked_fetch(UINT8 *vmcb, UINT64 frame[14], const UINT8 *ram)
+{
+    enum LinuxEntryFault fault=linux_entry_guard(vmcb,LinuxPage,frame[4],ram,LinuxRamBytes);
+    if (fault==LinuxEntryOK) RunGprGuest((UINTN)vmcb,frame);
+    return fault;
+}
+
 static const char *linux_verified_admit(UINT8 *base, enum LinuxInput *bad)
 {
     enum { RsiSlot=4 };
@@ -127,7 +139,31 @@ static const char *linux_verified_admit(UINT8 *base, enum LinuxInput *bad)
     __stosb((UINT8 *)frame,0,sizeof(frame));
     frame[RsiSlot]=LinuxParams;
     if (!linux_tree_ok(vmcb)) return "ADMIT NPT SETUP";
-    RunGprGuest((UINTN)base,frame); /* one entry only, no permission upgrade or resume */
+#ifdef HV_ENTRY_TEST
+    unsigned before=linux_vmrun_count;
+    frame[RsiSlot]=~0ull;
+    enum LinuxEntryFault fault=linux_checked_fetch(vmcb,frame,ram);
+    frame[RsiSlot]=LinuxParams;
+    pkg_observe("RSI FAULT ",fault);
+    pkg_observe("RSI ENTRIES ",linux_vmrun_count-before);
+    if (fault!=LinuxEntryRSI || linux_vmrun_count!=before) return "BAD RSI ADMITTED";
+    FIELD(UINT64,Cr3)=LinuxRamBytes;
+    fault=linux_checked_fetch(vmcb,frame,ram);
+    FIELD(UINT64,Cr3)=LinuxPml4;
+    pkg_observe("CR3 FAULT ",fault);
+    pkg_observe("CR3 ENTRIES ",linux_vmrun_count-before);
+    if (fault!=LinuxEntryCR3 || linux_vmrun_count!=before) return "BAD CR3 ADMITTED";
+    pkg_observe("ENTRY CR0 ",FIELD(UINT64,Cr0));
+    pkg_observe("ENTRY CR4 ",FIELD(UINT64,Cr4));
+    pkg_observe("ENTRY EFER ",FIELD(UINT64,GuestEfer));
+    pkg_observe("ENTRY RSP ",FIELD(UINT64,Rsp));
+    pkg_observe("ENTRY GDT ",FIELD(UINT64,0x468));
+#endif
+    if (linux_checked_fetch(vmcb,frame,ram)!=LinuxEntryOK) return "NX ENTRY CONTRACT";
+#ifdef HV_ENTRY_TEST
+    pkg_observe("NX ENTRIES ",linux_vmrun_count-before);
+    if (linux_vmrun_count-before!=1) return "NX ENTRY COUNT";
+#endif
 
     UINT64 exit=FIELD(UINT64,ExitCode), info=FIELD(UINT64,Info1), gpa=FIELD(UINT64,Info2);
     UINT64 rip=FIELD(UINT64,Rip), cr3=FIELD(UINT64,Cr3), guarded=guard[0];
@@ -155,7 +191,6 @@ static const char *linux_verified_admit(UINT8 *base, enum LinuxInput *bad)
 }
 
 #ifdef HV_INPUT_TEST
-extern volatile unsigned linux_vmrun_count; /* incremented immediately before VMRUN */
 #include "linux_input_trial.h"
 #endif
 

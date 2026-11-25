@@ -1,6 +1,6 @@
 option casemap:none
 
-IFDEF HV_INPUT_TEST
+IFDEF HV_COUNT_ENTRIES
 .data
 PUBLIC linux_vmrun_count
 linux_vmrun_count DWORD 0
@@ -47,7 +47,7 @@ RunGprGuest PROC FRAME
     mov r14, [rdx+12*8]
     mov r15, [rdx+13*8]
     mov rdx, [rdx+2*8]           ; load last: RDX was the frame pointer
-IFDEF HV_INPUT_TEST
+IFDEF HV_COUNT_ENTRIES
     inc linux_vmrun_count        ; BSP-only trial: count attempts at the instruction site
 ENDIF
     vmrun rax

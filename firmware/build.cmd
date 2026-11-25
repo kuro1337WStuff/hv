@@ -15,6 +15,7 @@ set "EXTRA_ASM_FLAGS="
 set "LINUX_MEDIA="
 if /i "%~1"=="l1-linux-admission" set "LINUX_MEDIA=1"
 if /i "%~1"=="l1-linux-inputs" set "LINUX_MEDIA=1"
+if /i "%~1"=="l1-entry-guard" set "LINUX_MEDIA=1"
 if /i "%~1"=="l2" (
   set "SRC=l2_smoke"
   set "EFI=L2SMOKE"
@@ -79,6 +80,30 @@ if /i "%~1"=="l2" (
   set "ASM_OBJ=build\l1_serial_handoff.obj"
   set "ASM_SRC=firmware\l1_handoff.asm"
   set "EXTRA_ASM=vcpu_gpr uart8250_guest"
+) else if /i "%~1"=="l1-pit-irq0" (
+  set "SRC=l1_handoff"
+  set "EFI=L1PITIRQ0"
+  set "ISO=hv-l1-pit-irq0"
+  set "CASE_FLAGS=/DHV_STANDALONE_L2 /DHV_PACKAGE /DHV_TICK_CONTRACT"
+  set "ASM_OBJ=build\l1_pit_handoff.obj"
+  set "ASM_SRC=firmware\l1_handoff.asm"
+  set "EXTRA_ASM=vcpu_gpr tick_guest"
+) else if /i "%~1"=="l1-console-tx" (
+  set "SRC=l1_handoff"
+  set "EFI=L1CONSOLETX"
+  set "ISO=hv-l1-console-tx"
+  set "CASE_FLAGS=/DHV_STANDALONE_L2 /DHV_PACKAGE /DHV_TX_CONTRACT"
+  set "ASM_OBJ=build\l1_tx_handoff.obj"
+  set "ASM_SRC=firmware\l1_handoff.asm"
+  set "EXTRA_ASM=vcpu_gpr tx_guest"
+) else if /i "%~1"=="l1-power-s5" (
+  set "SRC=l1_handoff"
+  set "EFI=L1POWERS5"
+  set "ISO=hv-l1-power-s5"
+  set "CASE_FLAGS=/DHV_STANDALONE_L2 /DHV_PACKAGE /DHV_POWER_CONTRACT"
+  set "ASM_OBJ=build\l1_power_handoff.obj"
+  set "ASM_SRC=firmware\l1_handoff.asm"
+  set "EXTRA_ASM=vcpu_gpr power_guest"
 ) else if defined LINUX_MEDIA (
   set "SRC=l1_handoff"
   set "EFI=L1LXADMIT"
@@ -91,7 +116,12 @@ if /i "%~1"=="l2" (
     set "EFI=L1LXINPUT"
     set "ISO=hv-l1-linux-inputs"
     set "CASE_FLAGS=/DHV_STANDALONE_L2 /DHV_LINUX_ADMISSION /DHV_INPUT_TEST"
-    set "EXTRA_ASM_FLAGS=/DHV_INPUT_TEST"
+    set "EXTRA_ASM_FLAGS=/DHV_COUNT_ENTRIES"
+  ) else if /i "%~1"=="l1-entry-guard" (
+    set "EFI=L1ENTRYGUARD"
+    set "ISO=hv-l1-entry-guard"
+    set "CASE_FLAGS=/DHV_STANDALONE_L2 /DHV_LINUX_ADMISSION /DHV_ENTRY_TEST"
+    set "EXTRA_ASM_FLAGS=/DHV_COUNT_ENTRIES"
   )
 ) else if /i "%~1"=="cpuid" (
   set "SRC=l2_smoke"
