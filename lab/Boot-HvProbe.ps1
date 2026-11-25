@@ -4,7 +4,8 @@
 [CmdletBinding(DefaultParameterSetName='Halt')]
 param(
     [Parameter(ParameterSetName='Halt')][switch]$L2Smoke,
-    [Parameter(ParameterSetName='Resume')][switch]$CpuidResume
+    [Parameter(ParameterSetName='Resume')][switch]$CpuidResume,
+    [Parameter(ParameterSetName='Protection')][switch]$NptWrite
 )
 $ErrorActionPreference = 'Stop'
 $vm = Get-VM -Name 'HV-SVM-L1'
@@ -14,7 +15,7 @@ if (!$inStore -or $vm.Generation -ne 2 -or @(Get-VMNetworkAdapter -VM $vm).Count
 $dvd = @(Get-VMDvdDrive -VM $vm)
 if ($dvd.Count -ne 1) { throw 'Expected exactly one lab DVD drive.' }
 $alpine = Join-Path $PSScriptRoot 'media\alpine-virt-3.24.4-x86_64.iso'
-$stem = if ($CpuidResume) { 'hv-cpuid-resume' } elseif ($L2Smoke) { 'hv-l2-smoke' } else { 'hv-probe' }
+$stem = if ($NptWrite) { 'hv-npt-write' } elseif ($CpuidResume) { 'hv-cpuid-resume' } elseif ($L2Smoke) { 'hv-l2-smoke' } else { 'hv-probe' }
 $image = (Resolve-Path (Join-Path $PSScriptRoot "..\build\$stem.iso")).Path
 $hash = (Get-FileHash $image).Hash
 $media = Join-Path $PSScriptRoot "media\$stem-$hash.iso"

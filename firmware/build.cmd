@@ -16,7 +16,12 @@ if /i "%~1"=="l2" (
   set "ISO=hv-cpuid-resume"
   set "CASE_FLAGS=/DHV_CPUID_RESUME"
   set "ASM_OBJ=build\cpuid_resume.obj"
-) else if not "%~1"=="" (echo Usage: build.cmd [l2 or cpuid] & exit /b 1)
+) else if /i "%~1"=="npt-write" (
+  set "SRC=l2_smoke"
+  set "EFI=NPTWRITE"
+  set "ISO=hv-npt-write"
+  set "CASE_FLAGS=/DHV_NPT_WRITE"
+) else if not "%~1"=="" (echo Usage: build.cmd [l2 or cpuid or npt-write] & exit /b 1)
 set "TOOLS=build\tools"
 set "INC_EDK=%TOOLS%\edk2\MdePkg\Include"
 set "PACK=%TOOLS%\packenv\Scripts\python.exe"

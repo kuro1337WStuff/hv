@@ -11,6 +11,11 @@ enum {
     Dr7=0x560, Dr6=0x568, Flags=0x570, Rip=0x578, Rsp=0x5d8, Rax=0x5f8, Pat=0x668
 };
 enum { Vmcb, HostSave, Pml4, Code=Pml4+NptTableCount, Iopm, Msrpm=Iopm+3, Pages=Msrpm+2 };
+#ifdef HV_NPT_WRITE
+enum { DataGpa=0x2000, InitialByte=0x5a, StoredByte=0xa5, Data=Pages, AllocPages=Pages+1 };
+#else
+enum { AllocPages=Pages };
+#endif
 _Static_assert(sizeof(FixedNpt)==NptTableCount*EFI_PAGE_SIZE, "NPT allocation size mismatch");
 #define MSR_EFER 0xc0000080u
 #define MSR_VM_CR 0xc0010114u
@@ -76,17 +81,28 @@ static void smoke(EFI_SYSTEM_TABLE *st)
     if (efer & SVME) { out->OutputString(out,L"SKIP: SVM already enabled; leaving existing state alone.\r\n"); return; }
 
     EFI_PHYSICAL_ADDRESS base=0;
-    if (EFI_ERROR(bs->AllocatePages(AllocateAnyPages,EfiLoaderData,Pages,&base))) {
+    if (EFI_ERROR(bs->AllocatePages(AllocateAnyPages,EfiLoaderData,AllocPages,&base))) {
         out->OutputString(out,L"FAIL: AllocatePages.\r\n"); return;
     }
     /* UEFI x64 boot services use identity mappings. All paging structures are private to L1. */
     UINT8 *vmcb=(UINT8 *)(UINTN)base;
-    bs->SetMem(vmcb, EFI_PAGES_TO_SIZE(Pages), 0);
+    bs->SetMem(vmcb, EFI_PAGES_TO_SIZE(AllocPages), 0);
     bs->SetMem(vmcb+Iopm*EFI_PAGE_SIZE, 5*EFI_PAGE_SIZE, 0xff);
     build_fixed_npt((FixedNpt *)(vmcb+Pml4*EFI_PAGE_SIZE),
                     base+Pml4*EFI_PAGE_SIZE, base+Code*EFI_PAGE_SIZE);
 #ifdef HV_CPUID_RESUME
     bs->CopyMem(vmcb+Code*EFI_PAGE_SIZE,(VOID *)L2Start,length);
+#elif defined(HV_NPT_WRITE)
+    /* 16-bit MOV byte ptr DS:[2000h], A5h; HLT. Code stays read-only in both arms. */
+    const UINT8 payload[]={0xc6,0x06,DataGpa & 0xff,DataGpa >> 8,StoredByte,0xf4};
+    bs->CopyMem(vmcb+Code*EFI_PAGE_SIZE,(VOID *)payload,sizeof(payload));
+    volatile UINT8 *target=vmcb+Data*EFI_PAGE_SIZE;
+    volatile UINT64 *leaf=&((FixedNpt *)(vmcb+Pml4*EFI_PAGE_SIZE))->table[3][DataGpa/NptPageBytes];
+    *target=InitialByte;
+    *leaf=(base+Data*EFI_PAGE_SIZE)|7;
+    UINT64 control_exit, control_ip;
+    UINT8 control_byte;
+    BOOLEAN control_ok;
 #else
     /* One read-only guest page, no guest I/O or arbitrary image loader: MOV AX,imm16; HLT. */
     const UINT8 payload[]={0xb8, MARKER & 0xff, MARKER >> 8, 0xf4};
@@ -121,6 +137,8 @@ static void smoke(EFI_SYSTEM_TABLE *st)
 
 #ifdef HV_CPUID_RESUME
     out->OutputString(out,L"Entering L2: CPUID -> validate 4 replies -> HLT\r\n");
+#elif defined(HV_NPT_WRITE)
+    out->OutputString(out,L"NPT store to GPA 2000: writable control, then read-only\r\n");
 #else
     out->OutputString(out,L"Entering fixed L2 guest: MOV AX,4C32h; HLT\r\n");
 #endif
@@ -149,6 +167,21 @@ static void smoke(EFI_SYSTEM_TABLE *st)
             RunCpuidGuest((UINTN)base,&frame);
         }
     }
+#elif defined(HV_NPT_WRITE)
+    __svm_vmrun((UINTN)base);
+    control_exit=FIELD(UINT64,ExitCode);
+    control_ip=FIELD(UINT64,Rip);
+    control_byte=*target;
+    control_ok=control_exit==0x78 && control_ip==FixedGuestGpa+sizeof(payload)-1 && control_byte==StoredByte;
+    if (control_ok) {
+        *target=InitialByte;
+        *leaf &= ~2ull; /* retain backing frame and all non-write attributes */
+        FIELD(UINT64,Rip)=FixedGuestGpa;
+        FIELD(UINT8,TlbControl)=1; /* revoke the cached writable translation before re-entry */
+        FIELD(UINT64,ExitCode)=~0ull;
+        FIELD(UINT64,Info1)=FIELD(UINT64,Info2)=0;
+        __svm_vmrun((UINTN)base);
+    }
 #else
     /* The fixed guest touches only AX. VMRUN saves host RAX and writes guest RAX to the VMCB. */
     __svm_vmrun((UINTN)base);
@@ -161,7 +194,30 @@ static void smoke(EFI_SYSTEM_TABLE *st)
     __writemsr(MSR_EFER,efer);
     bs->RestoreTPL(tpl);
 
-    UINT64 exit=FIELD(UINT64,ExitCode), ax=FIELD(UINT64,Rax), ip=FIELD(UINT64,Rip);
+    UINT64 exit=FIELD(UINT64,ExitCode), ip=FIELD(UINT64,Rip);
+#ifdef HV_NPT_WRITE
+    hex(out,L"RW EXITCODE: ",control_exit);
+    hex(out,L"RW RIP: ",control_ip);
+    hex(out,L"RW byte (expected A5): ",control_byte);
+    if (!control_ok) {
+        out->OutputString(out,L"FAIL: writable control; protected arm not entered.\r\n");
+    } else {
+        UINT64 info=FIELD(UINT64,Info1), gpa=FIELD(UINT64,Info2);
+        UINT8 protected_byte=*target;
+        hex(out,L"RO EXITCODE: ",exit);
+        hex(out,L"RO RIP: ",ip);
+        hex(out,L"RO EXITINFO1: ",info);
+        hex(out,L"RO fault GPA: ",gpa);
+        hex(out,L"RO byte (expected 5A): ",protected_byte);
+        /* P=1, W/R=1, RSVD=0, I/D=0; final data access, not a table walk. */
+        if (exit==0x400 && ip==FixedGuestGpa && gpa==DataGpa &&
+            (info & 0x30000001bull)==0x100000003ull && protected_byte==InitialByte)
+            out->OutputString(out,L"PASS: writable store retired; read-only store faulted.\r\n");
+        else
+            out->OutputString(out,L"FAIL: wrong nested fault, RIP, GPA or target byte.\r\n");
+    }
+#else
+    UINT64 ax=FIELD(UINT64,Rax);
 #ifdef HV_CPUID_RESUME
     hex(out,L"First EXITCODE: ",first_exit);
     hex(out,L"CPUID RIP: ",first_ip);
@@ -185,7 +241,8 @@ static void smoke(EFI_SYSTEM_TABLE *st)
         hex(out,L"EXITINFO1: ",FIELD(UINT64,Info1));
         hex(out,L"EXITINFO2: ",FIELD(UINT64,Info2));
     }
-    bs->FreePages(base,Pages);
+#endif
+    bs->FreePages(base,AllocPages);
 }
 
 EFI_STATUS EFIAPI EfiMain(EFI_HANDLE image, EFI_SYSTEM_TABLE *st)
