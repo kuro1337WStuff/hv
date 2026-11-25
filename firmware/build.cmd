@@ -12,6 +12,12 @@ if /i "%~1"=="l2" (
   set "SRC=l2_smoke"
   set "EFI=L2SMOKE"
   set "ISO=hv-l2-smoke"
+) else if /i "%~1"=="l1-handoff" (
+  set "SRC=l1_handoff"
+  set "EFI=L1HANDOFF"
+  set "ISO=hv-l1-handoff"
+  set "ASM_OBJ=build\l1_handoff_asm.obj"
+  set "ASM_SRC=firmware\l1_handoff.asm"
 ) else if /i "%~1"=="cpuid" (
   set "SRC=l2_smoke"
   set "EFI=CPUIDRES"
@@ -97,7 +103,7 @@ if /i "%~1"=="l2" (
 ) else if /i "%~1"=="npt-broadcast" (
   set "ISO=hv-npt-broadcast"
   set "CROSS_PROFILE=npt-broadcast"
-) else if not "%~1"=="" (echo Usage: build.cmd [l2 or cpuid or vcpu-gpr or vcpu-xmm or vcpu-mxcsr or vcpu-fpstate or exception-ud or irq-wake or irq-shadow or irq-priority or npt-write or npt-remap or npt-cross or npt-broadcast or forensic-write] & exit /b 1)
+) else if not "%~1"=="" (echo Usage: build.cmd [l1-handoff or l2 or cpuid or vcpu-gpr or vcpu-xmm or vcpu-mxcsr or vcpu-fpstate or exception-ud or irq-wake or irq-shadow or irq-priority or npt-write or npt-remap or npt-cross or npt-broadcast or forensic-write] & exit /b 1)
 set "TOOLS=build\tools"
 set "INC_EDK=%TOOLS%\edk2\MdePkg\Include"
 set "PACK=%TOOLS%\packenv\Scripts\python.exe"

@@ -10,7 +10,7 @@ $exe = Join-Path $PSHOME 'powershell.exe'
 $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
 $principal = [Security.Principal.WindowsPrincipal]::new($identity)
 
-# Only the broker and its two startup-pinned scripts execute elevated. Do not
+# Only the broker and its startup-pinned scripts execute elevated. Do not
 # resolve host tools or PowerShell modules from the caller's checkout or PATH.
 $windows = [Environment]::GetFolderPath('Windows')
 $programs = [Environment]::GetFolderPath('ProgramFiles')
@@ -124,6 +124,10 @@ function Invoke-SessionBatch($Client,$Stream,$Writer,[string]$Id) {
         foreach ($image in [IO.Directory]::EnumerateFiles($dst,'*.png')) {
             $Writer.WriteLine('IMAGE '+[IO.Path]::GetFileName($image)+' '+[Convert]::ToBase64String([IO.File]::ReadAllBytes($image)))
         }
+        $serial = Join-Path $dst 'l1-handoff.serial'
+        if ([IO.File]::Exists($serial)) {
+            $Writer.WriteLine('SERIAL '+[Convert]::ToBase64String([IO.File]::ReadAllBytes($serial)))
+        }
         $Writer.WriteLine('END '+$child.ExitCode)
         return $child.ExitCode
     } finally {
@@ -183,7 +187,8 @@ public static class HvSessionDirectory {
     $directoryLocks.Add((Lock-Directory (Join-Path $root 'build\runs')))
     $worker = Join-Path $private 'Invoke-HvQueue.ps1'
     $trusted = @{
-        'Invoke-HvQueue.ps1'='072752c03807f4bd25ccfea07089a68fed3a396fcceeb48482b5f3701af538d8'
+        'Invoke-HvQueue.ps1'='309d53290493c26c11c81a6282d15d29a9a35bed9da80b24de263c9b633e471b'
+        'Receive-HvHandoff.ps1'='87780e5797d51dd3f74ba1815491dbcf52f74d767d8a301f6b9fd2eb1084641b'
         'HvConsole.ps1'='921c4638be60b02d76930a7a881bb376a8fe599c61c6d8f5b3b3d36ca2510275'
     }
     foreach ($name in $trusted.Keys) {
@@ -195,7 +200,7 @@ public static class HvSessionDirectory {
     $listener.ExclusiveAddressUse = $true
     $listener.Start(1)
     $token = [guid]::NewGuid().ToString('N')
-    $data = @{port=$listener.LocalEndpoint.Port;token=$token;pid=$PID} | ConvertTo-Json -Compress
+    $data = @{port=$listener.LocalEndpoint.Port;token=$token;pid=$PID;handoffSerial=1} | ConvertTo-Json -Compress
     [IO.File]::WriteAllText($descriptor,$data,$utf8)
     Write-Host "LAB SESSION READY: $($vm.Name) / $($vm.Id). Press Q or close this window to revoke."
     while ($true) {

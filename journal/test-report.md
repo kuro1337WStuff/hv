@@ -251,3 +251,15 @@ L2 explicitly cleared the precision flag when selecting round-up before `VMMCALL
 The guest bank was initialized once. `RunLegacyVcpu` switched the 14 software-managed GPRs and an aligned 64-bit FXSAVE image together; RAX, RSP and RIP remained VMCB-managed. The fixture compared guest entry snapshots, exit banks, restored L1 state and the actual caller before/after the harness. It checked both halves of XMM0–15, the occupied 80-bit stack values, TOP and the physical tag mask, and both rounding controls. After resume, SSE produced `1` and x87 produced `12` (`0x0C`). Only then did L2 install its final state and halt.
 
 AMD64 APM Vol. 2 §§2.5.12 and 11.4.4 describe the format. The profile requires L1 `EFER.FFXSR=0` so CPL0 saves include XMM. This is not qualification of AVX/XSAVE, every x87 environment field, vCPU migration, or the physical 9950X3D.
+
+### 034 · 2026-11-25 local · Standalone L1 image failed to link
+
+**Host build only; no VM change.** `firmware\build.cmd l1-handoff` assembled and compiled but failed at link with `LNK2019` on `_disable`. The freestanding target has no runtime supplying that function. Moved the failure-path `CLI` into the profile's MASM module rather than linking a host runtime. No ISO or boot result from this attempt.
+
+### 035 · 2026-11-25 local · Standalone L1 handoff staged, not booted
+
+**NOT RUN in `HV-SVM-L1`.** `python lab/hv_queue.py run --rebuild l1-handoff`, batch `8e90e81c28d64fe0b856831d50a9ab09`. The corrected image built and staged: ISO SHA-256 `0787BB201F8F9B873C0E36789421166FE1980E0C36366410CBAB1578F6119141`. Windows reported that worker elevation was canceled. No worker started, no checkpoint or VM change was issued, and no COM1 transcript or guest screen was captured. The profile has no reviewed PASS digest.
+
+**Acceptance contract for the next boot:** successful `ExitBootServices` with the current map key, private stack within its 4-page reservation, correct readback at both ends of the first arena page, then rejection of a 9-page request against an 8-page arena without moving the cursor. The next 1-page allocation must return exactly the second page. After a COM1 request, require `HV:HANDOFF`, `HV:OWNED`, `HV:EXPECTED_OOM`, `HV:HALT` in order, plus the independently captured `L1 HANDOFF PASS` screen. The profile retains inherited address mappings; it does not launch L2. See UEFI 2.11 §§7.2.3 and 7.4.6 for the map and exit contract.
+
+**Host evidence only:** the session-client loopback check accepted the exact four-line transcript and rejected missing and truncated transcripts. That verifies evidence transfer, not firmware execution.

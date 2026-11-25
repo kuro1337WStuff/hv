@@ -224,6 +224,10 @@ def session_run(path, profiles, registry, manifest):
             type(info.get('port')) is not int or not 0 < info['port'] <= 65535 or \
             not isinstance(info.get('token'), str) or not re.fullmatch('[0-9a-f]{32}', info['token']):
         raise ValueError('Invalid session descriptor.')
+    wants_serial = 'l1-handoff' in profiles
+    if wants_serial and info.get('handoffSerial') != 1:
+        raise ValueError('This broker predates COM1 verification. Close it and start a fresh lab session, or run this batch without --session.')
+    got_serial = False
     images = {f'{prefix}{profile}.png' for profile in registry for prefix in ('guard-', 'prior-')}
     images.update(p + '.png' for p in profiles)
     terminal = None
@@ -257,6 +261,13 @@ def session_run(path, profiles, registry, manifest):
                     raise ValueError('Unexpected session evidence filename.')
                 images.remove(name)
                 save_png(path / name, data)
+            elif tag == b'SERIAL' and wants_serial and not got_serial:
+                data = base64.b64decode(value, validate=True)
+                if data != b'HV:HANDOFF\r\nHV:OWNED\r\nHV:EXPECTED_OOM\r\nHV:HALT\r\n':
+                    raise ValueError('Unexpected COM1 transcript.')
+                with (path / 'l1-handoff.serial').open('xb') as out:
+                    out.write(data)
+                got_serial = True
             elif tag == b'EVENT' and len(value) <= 16384 and terminal is None:
                 item = json.loads(value)
                 if not isinstance(item, dict) or any(not isinstance(item.get(k), str) for k in ('state', 'time', 'detail')) or \
@@ -269,6 +280,8 @@ def session_run(path, profiles, registry, manifest):
             elif tag == b'END' and value in (b'0', b'1', b'2', b'3') and terminal is not None:
                 if int(value) != {'COMPLETE': 0, 'ERROR': 1, 'STOPPED': 2, 'ATTENTION': 3}[terminal['state']]:
                     raise ValueError('Session status disagrees with verdict.')
+                if wants_serial and terminal['state'] == 'COMPLETE' and not got_serial:
+                    raise ValueError('Session ended without handoff serial evidence.')
                 record_event(path, terminal)
                 return int(value)
             elif tag == b'ERROR':

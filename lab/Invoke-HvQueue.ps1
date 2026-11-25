@@ -323,6 +323,10 @@ try {
         $vmId = $vms[0].Id
     }
     $view = Get-LabView
+    if ('l1-handoff' -in $queue.Profile) {
+        $com = Get-VMComPort -VM $view.VM -Number 1
+        if ($com.Path -ine '\\.\pipe\HV-SVM-L1-COM1') { Request-Attention 'Expected the lab COM1 pipe. No VM changes.' }
+    }
     $driveId = $view.DVD.Id
     $mounted = Get-MountedProfile $view
     $point = "HvQueue before $runId"
@@ -359,6 +363,18 @@ try {
         Start-VM -VM $view.VM -Confirm:$false
         $view = Get-LabView 'Running' $item.Path
         $mounted = $item.Profile
+        if ($activeProfile -ceq 'l1-handoff') {
+            Write-QueueEvent 'SERIAL' 'Requesting the post-handoff transcript from lab COM1.'
+            try {
+                & (Join-Path $PSScriptRoot 'Receive-HvHandoff.ps1') -OutputPath (Join-Path $RunDir 'l1-handoff.serial') -ShouldStop { Assert-QueueActive; return $false }
+            } catch {
+                if ($finalState -eq 'STOPPED') { throw }
+                $frame = Get-HvConsoleFrame -VmId $view.VM.Id
+                if ($null -ne $frame) { Save-Evidence $frame 'l1-handoff.png' }
+                Request-Attention "Serial verification failed: $($_.Exception.Message)"
+            }
+            Write-QueueEvent 'SERIAL' 'Verified four ordered markers from COM1; saved l1-handoff.serial.'
+        }
         Write-QueueEvent 'WATCHING' 'Waiting up to 60 seconds for reviewed live console evidence.'
         Wait-ConsoleResult $item
     }

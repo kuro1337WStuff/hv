@@ -22,13 +22,15 @@ Leave the visible **LAB SESSION READY** window open. The ordinary build terminal
 python lab/hv_queue.py run --session --rebuild vcpu-mxcsr
 ```
 
-`--session` never falls back to elevation. The foreground process accepts a run ID and bounded JSON data on loopback, not commands or scripts. Anyone running as your account can submit lab batches while it is open. It pins the `HV-SVM-L1` VM ID; the existing media digest, offline-network, checkpoint and console checks still apply. Guest images and the declarative `hv-profiles.json` can change between batches. Review new screenshots before adding PASS digests. The privileged worker and console code are hash-checked and copied at launch; changes to that code require a fresh session. Build tools, the repo and the submitting terminal get no administrator token.
+`--session` never falls back to elevation. The foreground process accepts a run ID and bounded JSON data on loopback, not commands or scripts. Anyone running as your account can submit lab batches while it is open. It pins the `HV-SVM-L1` VM ID; the existing media digest, offline-network, checkpoint and console checks still apply. Guest images and the declarative `hv-profiles.json` can change between batches. Review new screenshots before adding PASS digests. The privileged worker, console reader and fixed COM1 collector are hash-checked and copied at launch; changes to that code require a fresh session. Build tools, the repo and the submitting terminal get no administrator token.
 
 **Revoke:** press **Q** in the session window or close it. An active batch can also be stopped using the run-specific `stop` command. A cooperative STOP ends the session; it does not undo an issued Hyper-V operation. Closing the session installs no task, service, or logon trigger. Per-batch events and PNGs arrive in `build/runs/<id>/`; the protected worker copies and recovery artifacts are under the checkout-specific `HvLabSession-*` directory in native Program Files. Do not share its session descriptor.
 
 For a manual handoff instead, `run --stage-only` builds/stages without starting a worker and prints a command for an existing administrator console. Staging is not a guest PASS.
 
 ### Test profiles
+
+`l1-handoff` tests L1 without an L2 guest. Run `python lab/hv_queue.py run --session --rebuild l1-handoff`. Use a fresh session that supports serial capture, or omit `--session` to use a one-batch worker. The VM must already expose COM1 at `\\.\pipe\HV-SVM-L1-COM1`; close any serial viewer first. The worker requests evidence after boot and saves `l1-handoff.serial` in the run directory. Acceptance requires the ordered handoff, memory ownership, expected allocation failure and halt markers **and** the matching framebuffer terminal. A screenshot alone is not a serial test.
 
 `npt-cross` uses its own two-processor L1 payload. Rebuild with `firmware\build.cmd npt-cross`, then run `python lab/hv_queue.py run npt-cross`. The builder caches hash-pinned Limine v8 UEFI loader/header and Zig 0.13 tools under `build/tools`; first build needs network access. Other profiles remain UEFI applications. The cross test is read-only with respect to guest disks: it exits boot services via Limine, measures both local APIC IDs, runs four fixed L2 loads and halts on its evidence screen. Do not install this lab image as a host bootloader.
 
