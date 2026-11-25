@@ -3,7 +3,12 @@
 #include "fixed_vmcb.h"
 
 enum { StandaloneGuestPages=Pages };
+#ifdef HV_CPUID_RESUME
+#include "fixed_cpuid.h"
+typedef CpuidSample StandaloneSample;
+#else
 typedef struct { UINT64 exitcode, rip, rax; } StandaloneSample;
+#endif
 
 /* BSP only, interrupts already disabled. reservation is a contiguous identity
  * mapping retained by L1 after ExitBootServices; no firmware calls below. */
@@ -14,6 +19,13 @@ static const char *run_standalone_l2(void *reservation, StandaloneSample *sample
     int r[4];
     sample->exitcode=~0ull;
     sample->rip=sample->rax=0;
+#ifdef HV_CPUID_RESUME
+    sample->first_exit=~0ull;
+    sample->first_rip=sample->leaf=sample->subleaf=sample->resume_rip=sample->entries=0;
+    sample->nrips=FALSE;
+    UINTN length=(UINTN)L2End-(UINTN)L2Start;
+    if (!cpuid_layout_ok(length)) return "CPUID GUEST LAYOUT";
+#endif
     if (!base || (base & (EFI_PAGE_SIZE-1)) || base>MAX_UINTN-(StandaloneGuestPages*EFI_PAGE_SIZE-1))
         return "GUEST RESERVATION";
     __cpuid(r,0);
@@ -28,6 +40,9 @@ static const char *run_standalone_l2(void *reservation, StandaloneSample *sample
     __cpuid(r,(int)0x80000001u);
     if (!(r[2]&4)) return "NO SVM";
     __cpuid(r,(int)0x8000000au);
+#ifdef HV_CPUID_RESUME
+    sample->nrips=(r[3] & (1u<<3))!=0;
+#endif
     if (!(r[3]&1)) return "NO NESTED PAGING";
     if ((UINT32)r[1]<2) return "NO GUEST ASID";
     if (__readcr4() & (1u<<12)) return "HOST PAGING";
@@ -38,8 +53,15 @@ static const char *run_standalone_l2(void *reservation, StandaloneSample *sample
     __stosb(vmcb,0,Iopm*EFI_PAGE_SIZE);
     __stosb(vmcb+Iopm*EFI_PAGE_SIZE,0xff,(Pages-Iopm)*EFI_PAGE_SIZE);
     build_fixed_npt((FixedNpt *)(vmcb+Pml4*EFI_PAGE_SIZE),base+Pml4*EFI_PAGE_SIZE,base+Code*EFI_PAGE_SIZE);
+#ifdef HV_CPUID_RESUME
+    __movsb(vmcb+Code*EFI_PAGE_SIZE,L2Start,length);
+#else
     __movsb(vmcb+Code*EFI_PAGE_SIZE,fixed_mov_hlt,sizeof(fixed_mov_hlt));
+#endif
     fixed_vmcb_defaults(vmcb,base);
+#ifdef HV_CPUID_RESUME
+    FIELD(UINT32,Intercepts)|=1u<<18;
+#endif
     fixed_real_mode_state(vmcb);
 
     UINT64 cr2=__readcr2(), dr6=__readdr(6), dr7=__readdr(7);
@@ -47,7 +69,11 @@ static const char *run_standalone_l2(void *reservation, StandaloneSample *sample
     UINT64 hsave=__readmsr(MSR_HSAVE);
     __svm_clgi();
     __writemsr(MSR_HSAVE,base+HostSave*EFI_PAGE_SIZE);
+#ifdef HV_CPUID_RESUME
+    const char *error=fixed_cpuid_run(vmcb,sample);
+#else
     __svm_vmrun(base);
+#endif
     __writecr2(cr2);
     __writedr(6,dr6);
     __writedr(7,dr7);
@@ -55,6 +81,9 @@ static const char *run_standalone_l2(void *reservation, StandaloneSample *sample
     __svm_stgi();
     __writemsr(MSR_EFER,efer);
 
+#ifdef HV_CPUID_RESUME
+    return error;
+#else
     sample->exitcode=FIELD(UINT64,ExitCode);
     sample->rip=FIELD(UINT64,Rip);
     sample->rax=FIELD(UINT64,Rax);
@@ -62,5 +91,6 @@ static const char *run_standalone_l2(void *reservation, StandaloneSample *sample
     if (sample->rip!=FixedGuestGpa+sizeof(fixed_mov_hlt)-1) return "UNEXPECTED RIP";
     if (sample->rax!=MARKER) return "UNEXPECTED RAX";
     return NULL;
+#endif
 }
 #endif

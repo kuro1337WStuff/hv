@@ -23,7 +23,13 @@ static UINTN arena_used;
 static __declspec(align(16)) UINT8 map_storage[128 * 1024];
 static volatile UINT32 *pixels;
 static UINT32 width, height, pitch;
-static const char *log_lines[4];
+#if defined(HV_STANDALONE_L2) && defined(HV_CPUID_RESUME)
+#define LOG_ROWS 10u  /* HANDOFF and nine sampled values */
+#else
+#define LOG_ROWS 4u
+#endif
+#define LOG_Y(i) (80u + 20u * (i))
+static const char *log_lines[LOG_ROWS];
 static unsigned logged;
 
 /* Five-column alphabet used by firmware/cross/main.c. Drawing uses only
@@ -72,7 +78,7 @@ static void screen(const char *title, const char *reason, UINT32 color)
     }
     draw_line(20, title, color);
     if (reason) draw_line(48, reason, 0xffffff);
-    for (unsigned i = 0; i < logged; ++i) draw_line(80 + 20 * i, log_lines[i], 0xffffff);
+    for (unsigned i = 0; i < logged; ++i) draw_line(LOG_Y(i), log_lines[i], 0xffffff);
     _mm_sfence();
 }
 
@@ -85,6 +91,7 @@ static int use_gop(EFI_GRAPHICS_OUTPUT_PROTOCOL *gop)
     if (i->Version != 0 || (i->PixelFormat != PixelBlueGreenRedReserved8BitPerColor &&
         i->PixelFormat != PixelRedGreenBlueReserved8BitPerColor)) return 0;
     if (i->HorizontalResolution < 320 || i->VerticalResolution < 200 ||
+        i->VerticalResolution < LOG_Y(LOG_ROWS - 1) + 14 ||
         i->PixelsPerScanLine < i->HorizontalResolution || !m->FrameBufferBase ||
         (m->FrameBufferBase & 3) || m->FrameBufferSize > MAX_UINTN - m->FrameBufferBase ||
         (UINT64)i->PixelsPerScanLine * i->VerticalResolution > m->FrameBufferSize / 4) return 0;
@@ -170,7 +177,9 @@ static void log_hex(char *line, const char *label, UINT64 value)
 __declspec(noreturn) static void fail(const char *reason)
 {
     L1DisableInterrupts();
-#ifdef HV_STANDALONE_L2
+#if defined(HV_STANDALONE_L2) && defined(HV_CPUID_RESUME)
+    screen("L1 CPUID FAIL", reason, 0xff00ff);
+#elif defined(HV_STANDALONE_L2)
     screen("L1 L2 FAIL", reason, 0xff00ff);
 #else
     screen("L1 HANDOFF FAIL", reason, 0xff00ff);
@@ -202,12 +211,25 @@ __declspec(noreturn) void L1OwnedMain(void)
     if (!reservation || (UINTN)reservation != owned_base || arena_used != ARENA_PAGES) fail("ARENA");
     StandaloneSample sample;
     const char *reason = run_standalone_l2(reservation, &sample);
-    char lines[3][sizeof("EXITCODE ") + 16];
-    log_hex(lines[0], "EXITCODE ", sample.exitcode);
-    log_hex(lines[1], "RIP ", sample.rip);
-    log_hex(lines[2], "RAX ", sample.rax);
+    static char lines[LOG_ROWS - 1][sizeof("EXITCODE ") + 16];
+    unsigned n = 0;
+#ifdef HV_CPUID_RESUME
+    log_hex(lines[n++], "1ST EXIT ", sample.first_exit);
+    log_hex(lines[n++], "1ST RIP ", sample.first_rip);
+    log_hex(lines[n++], "LEAF ", sample.leaf);
+    log_hex(lines[n++], "SUBLEAF ", sample.subleaf);
+    log_hex(lines[n++], sample.nrips ? "TO NRIP " : "TO FIXED ", sample.resume_rip);
+    log_hex(lines[n++], "ENTRIES ", sample.entries);
+#endif
+    log_hex(lines[n++], "EXITCODE ", sample.exitcode);
+    log_hex(lines[n++], "RIP ", sample.rip);
+    log_hex(lines[n++], "RAX ", sample.rax);
     if (reason) fail(reason);
+#ifdef HV_CPUID_RESUME
+    screen("L1 CPUID PASS", NULL, 0x00ff00);
+#else
     screen("L1 L2 PASS", NULL, 0x00ff00);
+#endif
     L1Halt();
 #else
     volatile UINT32 *page = take_pages(1);
@@ -262,7 +284,9 @@ EFI_STATUS EFIAPI EfiMain(EFI_HANDLE image, EFI_SYSTEM_TABLE *st)
     uart_init();
 #endif
     if (!find_screen(bs, st->ConsoleOutHandle)) {
-#ifdef HV_STANDALONE_L2
+#if defined(HV_STANDALONE_L2) && defined(HV_CPUID_RESUME)
+        if (st->ConOut) st->ConOut->OutputString(st->ConOut, L"L1 CPUID FAIL: NO DIRECT FRAMEBUFFER\r\n");
+#elif defined(HV_STANDALONE_L2)
         if (st->ConOut) st->ConOut->OutputString(st->ConOut, L"L1 L2 FAIL: NO DIRECT FRAMEBUFFER\r\n");
 #else
         if (st->ConOut) st->ConOut->OutputString(st->ConOut, L"L1 HANDOFF FAIL: NO DIRECT FRAMEBUFFER\r\n");

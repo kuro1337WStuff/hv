@@ -7,6 +7,7 @@ set "ISO=hv-probe"
 set "CASE_FLAGS="
 set "ASM_OBJ="
 set "ASM_SRC="
+set "CPUID_OBJ="
 set "CROSS_PROFILE="
 if /i "%~1"=="l2" (
   set "SRC=l2_smoke"
@@ -25,6 +26,14 @@ if /i "%~1"=="l2" (
   set "CASE_FLAGS=/DHV_STANDALONE_L2"
   set "ASM_OBJ=build\l1_l2_asm.obj"
   set "ASM_SRC=firmware\l1_handoff.asm"
+) else if /i "%~1"=="l1-cpuid" (
+  set "SRC=l1_handoff"
+  set "EFI=L1CPUID"
+  set "ISO=hv-l1-cpuid"
+  set "CASE_FLAGS=/DHV_STANDALONE_L2 /DHV_CPUID_RESUME"
+  set "ASM_OBJ=build\l1_cpuid_handoff.obj"
+  set "ASM_SRC=firmware\l1_handoff.asm"
+  set "CPUID_OBJ=build\l1_cpuid_guest.obj"
 ) else if /i "%~1"=="cpuid" (
   set "SRC=l2_smoke"
   set "EFI=CPUIDRES"
@@ -110,7 +119,7 @@ if /i "%~1"=="l2" (
 ) else if /i "%~1"=="npt-broadcast" (
   set "ISO=hv-npt-broadcast"
   set "CROSS_PROFILE=npt-broadcast"
-) else if not "%~1"=="" (echo Usage: build.cmd [l1-handoff or l1-l2 or l2 or cpuid or vcpu-gpr or vcpu-xmm or vcpu-mxcsr or vcpu-fpstate or exception-ud or irq-wake or irq-shadow or irq-priority or npt-write or npt-remap or npt-cross or npt-broadcast or forensic-write] & exit /b 1)
+) else if not "%~1"=="" (echo Usage: build.cmd [l1-handoff or l1-l2 or l1-cpuid or l2 or cpuid or vcpu-gpr or vcpu-xmm or vcpu-mxcsr or vcpu-fpstate or exception-ud or irq-wake or irq-shadow or irq-priority or npt-write or npt-remap or npt-cross or npt-broadcast or forensic-write] & exit /b 1)
 set "TOOLS=build\tools"
 set "INC_EDK=%TOOLS%\edk2\MdePkg\Include"
 set "PACK=%TOOLS%\packenv\Scripts\python.exe"
@@ -132,8 +141,11 @@ call "%VCVARS%" >nul || exit /b 1
 if defined ASM_OBJ (
   ml64 /nologo /c /I"%~dp0." /Fo"%ASM_OBJ%" "%ASM_SRC%" || exit /b 1
 )
+if defined CPUID_OBJ (
+  ml64 /nologo /c /Fo"%CPUID_OBJ%" firmware\cpuid_resume.asm || exit /b 1
+)
 cl /nologo /c /TC /std:c11 /O1 /GS- /Zl /W4 /WX %CASE_FLAGS% /I"%INC_EDK%\X64" /I"%INC_EDK%" /Fobuild\%EFI%.obj firmware\%SRC%.c || exit /b 1
-link /nologo /nodefaultlib /incremental:no /machine:x64 /subsystem:efi_application /entry:EfiMain /out:build\%EFI%.EFI build\%EFI%.obj %ASM_OBJ% || exit /b 1
+link /nologo /nodefaultlib /incremental:no /machine:x64 /subsystem:efi_application /entry:EfiMain /out:build\%EFI%.EFI build\%EFI%.obj %ASM_OBJ% %CPUID_OBJ% || exit /b 1
 "%PACK%" firmware\pack_iso.py build\%EFI%.EFI build\%ISO%.iso || exit /b 1
 goto :done
 :cross

@@ -30,14 +30,7 @@ enum { AllocPages=Pages };
 #endif
 
 #ifdef HV_CPUID_RESUME
-/* Register order and symbol addresses are shared with cpuid_resume.asm. */
-typedef struct { UINT64 bx, cx, dx; } CpuidFrame;
-extern void RunCpuidGuest(UINTN vmcb_pa, CpuidFrame *frame);
-extern const UINT8 L2Start[], L2Cpuid[], L2AfterCpuid[], L2PassHlt[], L2End[];
-static UINT64 guest_ip(const UINT8 *label)
-{
-    return FixedGuestGpa + ((UINTN)label - (UINTN)L2Start);
-}
+#include "fixed_cpuid.h"
 #endif
 
 static void hex(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *out, CHAR16 *label, UINT64 v)
@@ -134,11 +127,12 @@ static void smoke(EFI_SYSTEM_TABLE *st)
     BOOLEAN nrips=(r[3] & (1u<<3))!=0;
 #endif
 #ifdef HV_CPUID_RESUME
-    CpuidFrame frame={0,0,0};
-    UINT64 first_exit, first_ip, leaf, subleaf, resume_ip=0;
-    BOOLEAN resumed=FALSE;
+    CpuidSample cpuid;
+    cpuid.resume_rip=0;
+    cpuid.nrips=nrips;
+    const char *cpuid_error;
     UINTN length=(UINTN)L2End-(UINTN)L2Start;
-    if (length>EFI_PAGE_SIZE || guest_ip(L2AfterCpuid)!=guest_ip(L2Cpuid)+2) {
+    if (!cpuid_layout_ok(length)) {
         out->OutputString(out,L"FAIL: invalid fixed CPUID guest layout.\r\n"); return;
     }
 #elif defined(HV_VCPU_GPR)
@@ -307,24 +301,7 @@ static void smoke(EFI_SYSTEM_TABLE *st)
     __svm_clgi();
     __writemsr(MSR_HSAVE,base+HostSave*EFI_PAGE_SIZE);
 #ifdef HV_CPUID_RESUME
-    RunCpuidGuest((UINTN)base,&frame);
-    first_exit=FIELD(UINT64,ExitCode);
-    first_ip=FIELD(UINT64,Rip);
-    leaf=FIELD(UINT64,Rax);
-    subleaf=frame.cx;
-    if (first_exit==0x72 && first_ip==guest_ip(L2Cpuid) && leaf==0x400000fe && subleaf==7) {
-        /* No general instruction decoder: the only accepted site is our known 0F A2. */
-        resume_ip=nrips ? FIELD(UINT64,NextRip) : first_ip+2;
-        if (resume_ip==guest_ip(L2AfterCpuid)) {
-            FIELD(UINT64,Rax)=0x11223344u;
-            frame.bx=0x55667788u; frame.cx=0x99aabbccu; frame.dx=0xddeeff00u;
-            FIELD(UINT64,Rip)=resume_ip;
-            FIELD(UINT8,TlbControl)=0; /* same ASID and unmodified mappings */
-            FIELD(UINT64,ExitCode)=~0ull;
-            resumed=TRUE;
-            RunCpuidGuest((UINTN)base,&frame);
-        }
-    }
+    cpuid_error=fixed_cpuid_run(vmcb,&cpuid);
 #elif defined(HV_VCPU_GPR)
     gpr_run(vmcb,frame,nrips,&trace);
 #elif defined(HV_VCPU_XMM)
@@ -409,7 +386,11 @@ static void smoke(EFI_SYSTEM_TABLE *st)
         ? L"PASS: same GPA read A then B after remap.\r\n"
         : L"FAIL: unexpected halt or backing-frame marker.\r\n");
 #else
+#ifdef HV_CPUID_RESUME
+    UINT64 exit=cpuid.exitcode, ip=cpuid.rip, ax=cpuid.rax;
+#else
     UINT64 exit=FIELD(UINT64,ExitCode), ip=FIELD(UINT64,Rip);
+#endif
 #ifdef HV_NPT_WRITE
     hex(out,L"RW EXITCODE: ",control_exit);
     hex(out,L"RW RIP: ",control_ip);
@@ -440,20 +421,21 @@ static void smoke(EFI_SYSTEM_TABLE *st)
 #endif
     }
 #else
-    UINT64 ax=FIELD(UINT64,Rax);
 #ifdef HV_CPUID_RESUME
-    hex(out,L"First EXITCODE: ",first_exit);
-    hex(out,L"CPUID RIP: ",first_ip);
-    hex(out,L"Leaf: ",leaf);
-    hex(out,L"Subleaf: ",subleaf);
-    hex(out,nrips ? L"Resume RIP (nRIP): " : L"Resume RIP (fixed length): ",resume_ip);
-    hex(out,L"VMRUN count: ",resumed ? 2 : 1);
+    hex(out,L"First EXITCODE: ",cpuid.first_exit);
+    hex(out,L"CPUID RIP: ",cpuid.first_rip);
+    hex(out,L"Leaf: ",cpuid.leaf);
+    hex(out,L"Subleaf: ",cpuid.subleaf);
+    hex(out,nrips ? L"Resume RIP (nRIP): " : L"Resume RIP (fixed length): ",cpuid.resume_rip);
+    hex(out,L"VMRUN count: ",cpuid.entries);
+#else
+    UINT64 ax=FIELD(UINT64,Rax);
 #endif
     hex(out,L"EXITCODE: ",exit);
     hex(out,L"Guest RAX: ",ax);
     hex(out,L"Guest RIP: ",ip);
 #ifdef HV_CPUID_RESUME
-    if (resumed && exit==0x78 && ax==0x50415353 && ip==guest_ip(L2PassHlt))
+    if (!cpuid_error)
         out->OutputString(out,L"PASS: L2 validated EAX/EBX/ECX/EDX after resume.\r\n");
 #else
     if (exit==0x78 && ax==MARKER && ip==FixedGuestGpa+sizeof(fixed_mov_hlt)-1)
