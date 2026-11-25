@@ -27,7 +27,14 @@ static void pkg_reset(UINT8 *vmcb)
 #ifdef HV_CPU_CONTRACT
 #include "long_guest.h"
 #include "vcpu_fpstate.h"
+#ifdef HV_FLOOR_CONTRACT
+#include "floor_contract.h"
+#else
 #include "cpu_contract.h"
+#endif
+#elif defined(HV_PAGE_PAIR)
+#include "long_guest.h"
+#include "page_pair.h"
 #elif defined(HV_SERIAL_CONTRACT)
 #include "long_guest.h"
 #include "serial_contract.h"

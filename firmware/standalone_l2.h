@@ -3,7 +3,7 @@
 #include "fixed_vmcb.h"
 
 #if defined(HV_CPU_CONTRACT) || defined(HV_SERIAL_CONTRACT) || defined(HV_TICK_CONTRACT) || \
-    defined(HV_TX_CONTRACT) || defined(HV_POWER_CONTRACT)
+    defined(HV_TX_CONTRACT) || defined(HV_POWER_CONTRACT) || defined(HV_PAGE_PAIR)
 #define HV_STANDALONE_CONTRACT
 #endif
 #ifdef HV_PACKAGE
@@ -109,7 +109,7 @@ static const char *run_standalone_l2(void *reservation, StandaloneSample *sample
     if ((UINT32)r[0]<0x8000000au) return "NO SVM LEAF";
     __cpuid(r,(int)0x80000001u);
     if (!(r[2]&4)) return "NO SVM";
-#ifdef HV_LINUX_ADMISSION
+#if defined(HV_LINUX_ADMISSION) || defined(HV_PAGE_PAIR)
     if (!(r[3] & (1u<<20))) return "NX REQUIRED";
 #endif
     __cpuid(r,(int)0x8000000au);
@@ -122,6 +122,9 @@ static const char *run_standalone_l2(void *reservation, StandaloneSample *sample
     if (__readmsr(MSR_VM_CR) & (1u<<4)) return "SVM DISABLED";
     UINT64 efer=__readmsr(MSR_EFER);
     if (efer & SVME) return "SVM IN USE";
+#ifdef HV_PAGE_PAIR
+    if (!(efer & (1u<<11))) return "HOST NXE REQUIRED";
+#endif
 
 #if defined(HV_PACKAGE) || defined(HV_LINUX_ADMISSION)
     __stosb(vmcb+HostSave*EFI_PAGE_SIZE,0,EFI_PAGE_SIZE);
@@ -152,7 +155,11 @@ static const char *run_standalone_l2(void *reservation, StandaloneSample *sample
     UINT64 hsave=__readmsr(MSR_HSAVE);
     __svm_clgi();
     __writemsr(MSR_HSAVE,base+HostSave*EFI_PAGE_SIZE);
-#ifdef HV_CPU_CONTRACT
+#if defined(HV_PAGE_PAIR)
+    const char *error=page_pair_run(vmcb);
+#elif defined(HV_FLOOR_CONTRACT)
+    const char *error=floor_contract_run(vmcb);
+#elif defined(HV_CPU_CONTRACT)
     const char *error=cpu_contract_run(vmcb);
 #elif defined(HV_SERIAL_CONTRACT)
     const char *error=serial_contract_run(vmcb);

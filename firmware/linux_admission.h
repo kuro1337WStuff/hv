@@ -139,6 +139,7 @@ static const char *linux_verified_admit(UINT8 *base, enum LinuxInput *bad)
     __stosb((UINT8 *)frame,0,sizeof(frame));
     frame[RsiSlot]=LinuxParams;
     if (!linux_tree_ok(vmcb)) return "ADMIT NPT SETUP";
+    if (!linux_guard_ok(base)) return "ADMIT PRIVATE GUARD";
 #ifdef HV_ENTRY_TEST
     unsigned before=linux_vmrun_count;
     frame[RsiSlot]=~0ull;
