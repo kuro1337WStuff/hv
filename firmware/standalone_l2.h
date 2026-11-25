@@ -2,9 +2,9 @@
 #define HV_STANDALONE_L2_H
 #include "fixed_vmcb.h"
 
-#if defined(HV_CPU_CONTRACT) || defined(HV_SERIAL_CONTRACT) || defined(HV_TICK_CONTRACT) || \
+#if defined(HV_CPU_CONTRACT) || defined(HV_SERIAL_CONTRACT) || \
+    defined(HV_PIC_INIT) || defined(HV_TICK_CONTRACT) || \
     defined(HV_TX_CONTRACT) || defined(HV_POWER_CONTRACT) || defined(HV_PAGE_PAIR) || \
-    defined(HV_PIC_INIT) || \
     defined(HV_CR4_GUARD) || defined(HV_CR4_GP)
 #define HV_STANDALONE_CONTRACT
 #endif
