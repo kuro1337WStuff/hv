@@ -3,8 +3,6 @@ import argparse
 import hashlib
 from pathlib import Path
 
-from pack_iso import pack
-
 
 INPUTS = Path(__file__).resolve().parents[1] / 'build/linux-inputs'
 # Independent of the generated SHA256SUMS: pins, not a user-provided manifest.
@@ -19,6 +17,8 @@ FILES = (
 
 
 def pack_linux(binary: Path, output: Path) -> None:
+    from pack_iso import pack  # Only packaging requires ISO/FAT dependencies.
+
     files = []
     for source, name, size, digest in FILES:
         with (INPUTS / source).open('rb') as stream:
