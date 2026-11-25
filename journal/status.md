@@ -1,4 +1,4 @@
-# Project status · through 101
+# Project status · through 102
 
 **On `main`:** firmware baseline [041](README.md), plus CI-only [#2](https://github.com/kuro1337WStuff/hv/pull/2) at `735c8b56` after both hosted checks passed on `54bace3b`. **On `feature/l1-handoff` only:** [#4](https://github.com/kuro1337WStuff/hv/pull/4) merged at `95abe46c`; [#10](https://github.com/kuro1337WStuff/hv/pull/10) retargeted, then squashed at `44fb6247`. The resulting firmware trees matched the source trees used in 060 and 063 respectively. Revert #10 first if both must be undone; #4 is a merge commit. No ordinary Linux boot or bare-metal qualification.
 
@@ -15,7 +15,7 @@
 
 **Merge routing:** [Dated PR-by-PR audit](merge-audit-072.md) · [live open PRs](https://github.com/kuro1337WStuff/hv/pulls) · [workflow and rollback](project-workflow.md). #21's test merge did not promote #12. Check the actual base, scope and source revision before each integration.
 
-**Platform work:** [099](trials/099.md) distinguished a present COM1 from absent COM2–4. [100](trials/100.md) verified four ACPI event-register byte lanes, without interrupt delivery or shutdown. Both are host results, integrated on `feature/l1-handoff` at `17c5a001`. Next release checks: [#90 · linked kernel entry page](https://github.com/kuro1337WStuff/hv/issues/90) and [#91 · pinned initramfs interpreter chain](https://github.com/kuro1337WStuff/hv/issues/91). Neither grants VM admission.
+**Boot and platform work:** [102](trials/102.md) independently accounted for every byte on the uncompressed ELF entry page. It did not grant execute permission. [#91](https://github.com/kuro1337WStuff/hv/issues/91) checks the pinned initramfs interpreter chain separately. [099](trials/099.md) and [100](trials/100.md) remain host device results, not Linux driver execution or VM admission.
 
 **Reporting:** [101](trials/101.md) publishes the [selected trial results](reports/feature-phase.svg) from source records. The project remains in feature qualification, not optimization. Windows 10 is a future offline guest in the nested lab; no Windows guest or physical boot has been qualified.
 
