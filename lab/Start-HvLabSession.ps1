@@ -16,6 +16,11 @@ $windows = [Environment]::GetFolderPath('Windows')
 $programs = [Environment]::GetFolderPath('ProgramFiles')
 $lab = $PSScriptRoot
 $root = [IO.Path]::GetDirectoryName($lab)
+$vmName = switch ([IO.Path]::GetFileName($root)) {
+    'hv-lane-a' { 'HV-SVM-L1-A' }
+    'hv-lane-b' { 'HV-SVM-L1-B' }
+    default { 'HV-SVM-L1' }
+}
 $utf8 = [Text.UTF8Encoding]::new($false, $true)
 function Get-TextDigest([string]$Text) {
     $sha = [Security.Cryptography.SHA256]::Create()
@@ -162,8 +167,17 @@ $private = Join-Path $sessionRoot ([guid]::NewGuid().ToString('N'))
 $directoryLocks = [Collections.Generic.List[IDisposable]]::new()
 $listener = $null
 try {
-    $vm = Get-VM -Name 'HV-SVM-L1' -ErrorAction Stop
-    if (@($vm).Count -ne 1 -or $vm.Generation -ne 2) { throw 'Expected one Generation 2 HV-SVM-L1.' }
+    $vm = Get-VM -Name $vmName -ErrorAction Stop
+    if (@($vm).Count -ne 1 -or $vm.Name -ne $vmName -or $vm.Generation -ne 2) {
+        throw "Expected one Generation 2 VM named $vmName."
+    }
+    $store = if ($vmName -eq 'HV-SVM-L1') { Join-Path $lab "machines\$vmName" }
+             else { Join-Path $programs "HvLabMachine-$vmName" }
+    $location = [IO.Path]::GetFullPath($vm.ConfigurationLocation).TrimEnd('\')
+    if ($location -ine $store -and !$location.StartsWith($store + '\', [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'VM configuration is outside the expected checkout store.'
+    }
+    Assert-Plain $location
     $privateRuns = Join-Path $private 'runs'
     $null = [IO.Directory]::CreateDirectory($privateRuns)
     $env:TEMP = $private; $env:TMP = $private
@@ -187,7 +201,7 @@ public static class HvSessionDirectory {
     $directoryLocks.Add((Lock-Directory (Join-Path $root 'build\runs')))
     $worker = Join-Path $private 'Invoke-HvQueue.ps1'
     $trusted = @{
-        'Invoke-HvQueue.ps1'='309d53290493c26c11c81a6282d15d29a9a35bed9da80b24de263c9b633e471b'
+        'Invoke-HvQueue.ps1'='b1ec9193b5d93ad851c19a5a1eff545adfb8fd08f47393afcfa3f71c89fea6e2'
         'Receive-HvHandoff.ps1'='87780e5797d51dd3f74ba1815491dbcf52f74d767d8a301f6b9fd2eb1084641b'
         'HvConsole.ps1'='921c4638be60b02d76930a7a881bb376a8fe599c61c6d8f5b3b3d36ca2510275'
     }
@@ -200,7 +214,7 @@ public static class HvSessionDirectory {
     $listener.ExclusiveAddressUse = $true
     $listener.Start(1)
     $token = [guid]::NewGuid().ToString('N')
-    $data = @{port=$listener.LocalEndpoint.Port;token=$token;pid=$PID;handoffSerial=1} | ConvertTo-Json -Compress
+    $data = @{port=$listener.LocalEndpoint.Port;token=$token;pid=$PID;handoffSerial=[int]($vmName -eq 'HV-SVM-L1')} | ConvertTo-Json -Compress
     [IO.File]::WriteAllText($descriptor,$data,$utf8)
     Write-Host "LAB SESSION READY: $($vm.Name) / $($vm.Id). Press Q or close this window to revoke."
     while ($true) {

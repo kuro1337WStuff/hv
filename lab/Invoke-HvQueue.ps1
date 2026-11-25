@@ -12,7 +12,6 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$vmName = 'HV-SVM-L1'
 $sessionMode = $PSCmdlet.ParameterSetName -eq 'Session'
 $images = @{}
 $events = $null
@@ -184,6 +183,17 @@ function Get-LabView([string]$ExpectedState, [string]$ExpectedPath) {
         @(Get-VMNetworkAdapter -VM $vm).Count -ne 0 -or $drives.Count -ne 1) {
         Request-Attention 'Expected two nested vCPUs, no network adapters and exactly one DVD.'
     }
+    if ($dedicatedLane) {
+        if ($vm.MemoryStartup -ne 2GB -or $vm.DynamicMemoryEnabled -ne $false -or
+            @(Get-VMHardDiskDrive -VM $vm).Count -ne 0 -or
+            @(Get-VMComPort -VM $vm | Where-Object { $_.Path }).Count -ne 0) {
+            Request-Attention 'Lane VMs require fixed 2 GiB RAM, no hard disks and no forwarded COM ports.'
+        }
+        if ($vm.AutomaticStartAction -ne 'Nothing') { Request-Attention 'Lane AutomaticStartAction must be Nothing.' }
+        if ($vm.AutomaticCheckpointsEnabled -ne $false) { Request-Attention 'Lane automatic checkpoints must be disabled.' }
+        if ($vm.CheckpointType -ne 'Standard') { Request-Attention 'Lane CheckpointType must be Standard.' }
+        if ((Get-VMFirmware -VM $vm).SecureBoot -ne 'Off') { Request-Attention 'Lane Secure Boot must be Off.' }
+    }
     $state = [string]$vm.State
     $path = [string]$drives[0].Path
     if ($state -notin 'Off','Running' -or ($ExpectedState -and
@@ -277,8 +287,17 @@ try {
     } else {
         $runs = Join-Path (Split-Path -Parent $lab) 'build\runs'
     }
+    # Session workers run from a private copy; bind to the broker's checkout, not that copy.
+    $vmName = switch ([IO.Path]::GetFileName([IO.Path]::GetDirectoryName($lab))) {
+        'hv-lane-a' { 'HV-SVM-L1-A' }
+        'hv-lane-b' { 'HV-SVM-L1-B' }
+        default { 'HV-SVM-L1' }
+    }
+    $dedicatedLane = $vmName -ne 'HV-SVM-L1'
     $media = Join-Path $lab 'media'
-    $store = Join-Path $lab "machines\$vmName"
+    $store = if ($dedicatedLane) {
+        Join-Path ([Environment]::GetFolderPath('ProgramFiles')) "HvLabMachine-$vmName"
+    } else { Join-Path $lab "machines\$vmName" }
     $RunDir = [IO.Path]::GetFullPath($ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($RunDir)).TrimEnd('\')
     $runId = [IO.Path]::GetFileName($RunDir)
     if ($runId -cnotmatch '\A[0-9a-fA-F]{32}\z' -or [IO.Path]::GetDirectoryName($RunDir) -ine $runs -or
@@ -308,12 +327,6 @@ try {
     if (!$ownsMutex) { Request-Attention 'Another worker owns the lab VM. No changes made.' }
 
     $interactive = $Host.Name -eq 'ConsoleHost' -and [Environment]::UserInteractive -and ![Console]::IsInputRedirected
-    Write-QueueEvent 'PREFLIGHT' 'Three-second stop window before any VM change. Press Q or create STOP in this run.'
-    Wait-Interruptible 3000
-    . (Join-Path $PSScriptRoot 'HvConsole.ps1')
-    Assert-PlainPath $manifest
-    $profiles = Read-HvProfiles $manifest
-    $queue = @(Read-Worklist)
     $vms = @(Get-VM -Name $vmName)
     if ($vms.Count -ne 1) { Request-Attention 'Expected exactly one lab VM by name.' }
     if ($sessionMode) {
@@ -323,7 +336,14 @@ try {
         $vmId = $vms[0].Id
     }
     $view = Get-LabView
+    Write-QueueEvent 'PREFLIGHT' "VM=$vmName ID=$vmId. Three-second stop window before any VM change. Press Q or create STOP in this run."
+    Wait-Interruptible 3000
+    . (Join-Path $PSScriptRoot 'HvConsole.ps1')
+    Assert-PlainPath $manifest
+    $profiles = Read-HvProfiles $manifest
+    $queue = @(Read-Worklist)
     if ('l1-handoff' -in $queue.Profile) {
+        if ($dedicatedLane) { Request-Attention 'Serial handoff is disabled on lane VMs. No VM changes.' }
         $com = Get-VMComPort -VM $view.VM -Number 1
         if ($com.Path -ine '\\.\pipe\HV-SVM-L1-COM1') { Request-Attention 'Expected the lab COM1 pipe. No VM changes.' }
     }
