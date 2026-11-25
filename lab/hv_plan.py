@@ -63,12 +63,15 @@ def load(directory):
 
 
 def save(directory, records):
-    # Commit the reservation before launching the worker. A crash is an uncertain
-    # attempt, not permission for a second boot. Readers see old or new JSON.
-    with tempfile.NamedTemporaryFile('w', encoding='utf-8', dir=directory, delete=False) as f:
+    # A crash after reserving an attempt is not permission for a second boot.
+    _save_json(directory / 'receipts.json', records)
+
+
+def _save_json(path, data):
+    with tempfile.NamedTemporaryFile('w', encoding='utf-8', dir=path.parent, delete=False) as f:
         tmp = Path(f.name)
         try:
-            json.dump(records, f, sort_keys=True, indent=2)
+            json.dump(data, f, sort_keys=True, indent=2)
             f.flush()
             os.fsync(f.fileno())
         except BaseException:
@@ -76,23 +79,53 @@ def save(directory, records):
             tmp.unlink(missing_ok=True)
             raise
     try:
-        os.replace(tmp, directory / 'receipts.json')
+        os.replace(tmp, path)
     finally:
         tmp.unlink(missing_ok=True)
+
+
+def _operator_text(value):
+    return isinstance(value, str) and bool(value.strip()) and value.isprintable()
+
+
+def external_holds(directory):
+    """Replay this board's operator decisions; an invalid journal cannot admit a card."""
+    try:
+        events = json.loads((directory / 'external-holds.json').read_bytes())
+    except FileNotFoundError:
+        return [], {}
+    if not isinstance(events, list):
+        raise ValueError('Invalid external hold journal; refusing admissions.')
+    held = {}
+    for event in events:
+        if (not isinstance(event, dict) or event.get('lane') not in ('a', 'b') or
+                not _operator_text(event.get('reason')) or not _operator_text(event.get('time'))):
+            raise ValueError('Invalid external hold entry; refusing admissions.')
+        lane = event['lane']
+        if event.get('action') == 'hold' and lane not in held:
+            held[lane] = event['reason']
+        elif event.get('action') == 'unhold' and lane in held:
+            del held[lane]
+        else:
+            raise ValueError('Invalid external hold transition; refusing admissions.')
+    return events, held
 
 
 def binding(card):
     return [card.lane, card.profile, card.iso, card.screen, sorted(card.after)]
 
 
-def assess(cards, records):
+def assess(cards, records, external, admitted=None):
     """History takes precedence over a checkbox. A regression never closes its parent."""
     passed = {c.id for c in cards if c.checked and not c.automatic and c.id not in records}
     for c in cards:
         row = records.get(c.id)
         if row and row['state'] == 'COMPLETE' and row.get('binding') == binding(c):
             passed.add(c.id)
-    held = {r['lane']: r['run'] for r in records.values() if r['state'] != 'COMPLETE' and not r.get('released')}
+    held = {lane: [f'external: {reason}'] for lane, reason in external.items()}
+    for key, row in records.items():
+        if row['state'] != 'COMPLETE' and not row.get('released'):
+            held.setdefault(row['lane'], []).append(f"{key} {row['state']} {row['run']}")
     states = {}
     for c in cards:
         row = records.get(c.id)
@@ -109,15 +142,21 @@ def assess(cards, records):
         elif not c.id.startswith('R'):
             raise ValueError(f'{c.id}: only separate Rnn regression cards can dispatch a VM')
         elif c.lane in held:
-            states[c.id] = ('LANE-HOLD', held[c.lane])
+            states[c.id] = ('LANE-HOLD', '; '.join(held[c.lane]))
+        elif admitted is not None and admitted.get(c.id) != binding(c):
+            states[c.id] = ('DEFERRED', 'new or edited contract; start a new bounded invocation')
         else:
             states[c.id] = ('READY', f'{c.lane}: {c.profile}')
-    return states
+    return states, held
 
 
-def report(cards, states):
+def report(cards, records, external, admitted=None):
+    states, held = assess(cards, records, external, admitted)
     outstanding = [c for c in cards if states[c.id][0] != 'DONE']
     print(f'{len(outstanding)} remaining / {len(cards)} board cards', flush=True)
+    for lane in sorted(held):
+        for reason in held[lane]:
+            print(f'LANE-HOLD {lane}: {reason}', flush=True)
     for c in outstanding:
         state, reason = states[c.id]
         print(f'{c.id} {state:10} {reason}', flush=True)
@@ -136,6 +175,7 @@ def drive(board, parent, limit, minutes, *, submit=execute):
     stop = directory / 'STOP'
     with lease(directory), ThreadPoolExecutor(max_workers=2) as pool:
         records = load(directory)
+        _, external = external_holds(directory)  # hold and unhold require this same lease
         active = {}
         admitted = {c.id: binding(c) for c in read_board(board) if c.automatic and not c.checked}
         count = 0
@@ -150,10 +190,7 @@ def drive(board, parent, limit, minutes, *, submit=execute):
                 if rescan:
                     try:
                         cards = read_board(board)
-                        states = assess(cards, records)
-                        for card in cards:
-                            if states[card.id][0] == 'READY' and admitted.get(card.id) != binding(card):
-                                states[card.id] = ('DEFERRED', 'new or edited contract; start a new bounded invocation')
+                        states, _ = assess(cards, records, external, admitted)
                     except (OSError, ValueError) as exc:
                         print(f'Board unreadable: {exc}; stopping admissions.', file=sys.stderr, flush=True)
                         stop.touch(exist_ok=True)
@@ -172,16 +209,17 @@ def drive(board, parent, limit, minutes, *, submit=execute):
                             run = uuid.uuid4().hex
                             records[c.id] = dict(run=run, lane=c.lane, profile=c.profile, binding=binding(c), started=utc(), state='ACTIVE')
                             save(directory, records)
-                            print(f'START {c.id} lane={c.lane} profile={c.profile} run={run}', flush=True)
                             if stop.exists():
                                 records[c.id].update(state='STOPPED', ended=utc())
                                 save(directory, records)
                                 break
                             active[pool.submit(submit, parent / ('hv-lane-' + c.lane), run, c)] = c.id
+                            print(f'START {c.id} lane={c.lane} profile={c.profile} run={run}', flush=True)
                             busy.add(c.lane)
                             count += 1
                         if not active:
-                            report(cards, states)
+                            # STOP may have landed after an ACTIVE save but before submission.
+                            report(cards, records, external, None if stop.exists() else admitted)
                             print('STOP requested' if stop.exists() else 'No more admissions in this invocation.', flush=True)
                             return 2 if stop.exists() else (1 if problem else 0)
                     rescan = False
@@ -210,16 +248,22 @@ def drive(board, parent, limit, minutes, *, submit=execute):
                 send_stops(directory, records, parent)
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action', choices=('status', 'run', 'stop', 'resume', 'release'))
+    parser.add_argument('action', choices=('status', 'run', 'stop', 'resume', 'release', 'hold', 'unhold'))
     parser.add_argument('board', type=Path)
     parser.add_argument('--lanes-root', type=Path, default=Path(__file__).resolve().parents[2], help='Parent of the dedicated hv-lane-a and hv-lane-b checkouts')
     parser.add_argument('--max-cards', type=int, default=8, help='Maximum new admissions in this invocation (1-64)')
     parser.add_argument('--minutes', type=float, default=60, help='Admission window (up to 900 minutes); already admitted finite batches may finish')
+    parser.add_argument('--lane', choices=('a', 'b'), help='External lane to hold or unhold')
     parser.add_argument('--run-id', help='Exact held run to release after manual inspection')
-    parser.add_argument('--reason', help='Recovery evidence for releasing the lane, never a PASS')
-    a = parser.parse_args()
+    parser.add_argument('--reason', help='External hold reason, or recovery evidence for unhold/release')
+    a = parser.parse_args(argv)
+    if a.action in ('hold', 'unhold'):
+        if not a.lane or not _operator_text(a.reason) or a.run_id is not None:
+            parser.error(f'{a.action} requires --lane and a nonblank single-line --reason, not --run-id')
+    elif a.lane is not None:
+        parser.error('--lane is only for hold and unhold; release requires the exact --run-id')
     board, parent = a.board.resolve(), a.lanes_root.resolve()
     directory = state_dir(board)
     if not 1 <= a.max_cards <= 64 or not 0 < a.minutes <= 900:
@@ -229,7 +273,8 @@ def main():
     if a.action == 'status':
         cards = read_board(board)
         print('Admissions stopped.' if (directory / 'STOP').exists() else 'Admission stop not set.')
-        report(cards, assess(cards, load(directory)))
+        _, external = external_holds(directory)
+        report(cards, load(directory), external)
     elif a.action == 'stop':
         directory.mkdir(parents=True, exist_ok=True)
         (directory / 'STOP').touch(exist_ok=True)
@@ -240,6 +285,15 @@ def main():
             if a.action == 'resume':
                 (directory / 'STOP').unlink(missing_ok=True)
                 print('Global stop cleared. No run submitted; lane holds remain.')
+            elif a.action in ('hold', 'unhold'):
+                events, held = external_holds(directory)
+                if a.action == 'hold' and a.lane in held:
+                    raise ValueError(f'Lane {a.lane} already has an external hold: {held[a.lane]}')
+                if a.action == 'unhold' and a.lane not in held:
+                    raise ValueError(f'Lane {a.lane} has no external hold.')
+                events.append(dict(lane=a.lane, action=a.action, time=utc(), reason=a.reason.strip()))
+                _save_json(directory / 'external-holds.json', events)
+                print(f'External hold {"set" if a.action == "hold" else "cleared"} on lane {a.lane}; receipts unchanged.')
             else:
                 if not a.run_id or not a.reason or not a.reason.strip():
                     parser.error('release requires --run-id and --reason')
@@ -249,7 +303,7 @@ def main():
                     raise ValueError('No single unreleased held attempt with that ID')
                 matches[0]['released'] = {'time': utc(), 'reason': a.reason.strip()}
                 save(directory, records)
-                print('Lane released; attempt remains non-passing and cannot run again.')
+                print('Run hold released; other lane holds remain. The attempt is non-passing and cannot run again.')
     return 0
 
 
