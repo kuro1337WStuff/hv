@@ -2,6 +2,14 @@
 
 Development host: Ryzen 9 9950X. Firmware runs use the `HV-SVM-L1` Hyper-V VM; host-only checks are labeled separately. Neither qualifies the 9950X3D deployment target on bare metal.
 
+## 042–043 · 2026-11-25 · Linux layout verified; first-fetch admission stopped
+
+The pinned Alpine kernel, initramfs and command line produced the same hashes in two offline preparations. The host verifier checked their placement, the reserved hole, guest page tables and boot parameters. In the nested VM, L1 then staged those inputs and attempted one kernel-entry fetch while keeping guest RAM non-executable.
+
+**043 failed.** SVM reported a final instruction-fetch protection fault, and saved RIP matched the entry `0x1000200`. The reported fault GPA was `0x1000000` instead of the expected `0x1000200`. These are the same 4 KiB page, **not the same address**. The private guard remained intact. The test did not resume or enable execution; there was no Linux userspace result. The [ledger](test-report.md#043--2026-11-25--linux-first-fetch-admission-failed) records the original oracle, raw fields, checkpoint, and next diagnostic.
+
+![Failed Linux admission framebuffer showing the different fault GPA and entry RIP](images/l1-linux-admission-043.png)
+
 ## 041 · 2026-11-25 · State, bounded exits, and timer wake after firmware handoff
 
 **Passed on the nested 9950X.** After a `VMMCALL`, the resumed guest used its changed rounding state to calculate 1 (SSE) and 12 (x87); L1 independently checked its registers at both exits. Rejecting an unsupported CPUID request took exactly one entry and left RIP on the instruction. In a fresh guest, L1 reinjected `#UD` at the faulting `UD2`, and the guest handler ran once and returned past it.

@@ -354,3 +354,19 @@ ISO SHA-256: `l1-package` `AEDF74D3E4C8E9E416A0C6B78C05BE3003C0FFECA4CF1BB63CFD8
 Ran the [MSVC host verifier](../lab/README.md) with those three input files. It materialized real payload bytes after the `0x4000`-byte setup section in a 128 MiB buffer: kernel `0x1000000+0xC0C400`, initialization window `0x260A000` bytes, initrd `0x7E97000+0x168964`, command line `0x11000+123`. Entry `0x1000200`, RSI `0x10000`, CR3 `0x13000`, GDTR `0x12000:0x1F`, CS/DS `0x10/0x18`, RSP `0x18000`. Verified all initial guest-paging entries, the untouched/unmapped reserved hole, e820, and rejection of truncated or overlapping layouts. These guest page tables are **not** proof of NPT isolation.
 
 The userspace oracle is ordered `HV:P5:USER pid=1 kernel=6.18.60-0-virt`, `HV:P5:TIMER` with measured forward progress across a two-second sleep, and `HV:P5:SHUTDOWN`, followed by a distinct L1-observed poweroff operation. None of those events occurred in this host test.
+
+### 043 · 2026-11-25 · Linux first-fetch admission failed
+
+**Firmware FAIL; queue ATTENTION, exit 3.** Source `140ac045dd`; `firmware\build.cmd l1-linux-admission`, then `python lab/hv_queue.py run --session l1-linux-admission`. Nested Ryzen 9 9950X. Batch `184bfa9f9e6943579cf08854e34f9813`, ISO SHA-256 `610041BD3F138A32733BB6FBEBC762EA7F004095524C527DB54423127153FF6F`. The worker recognized the preceding `l1-package` PASS and saved `HvQueue before 184bfa9f9e6943579cf08854e34f9813`. No rollback or retry was performed.
+
+L1 read the three pinned inputs from the frozen ISO before `ExitBootServices`. After handoff it populated owned guest RAM, built and checked a 67-page NPT with NX on every present leaf, left the e820 hole absent, and issued one VMRUN. The fail-closed oracle required a final protection NPF on an instruction fetch, exact fault GPA and saved RIP `0x1000200`, intact entry state and private guard. The guest trap flag plus intercepted `#DB` provided a secondary stop, not an alternative pass.
+
+| Observation | Measured on the [failed terminal](images/l1-linux-admission-043.png) |
+|---|---|
+| VMEXIT | `0x400` (nested page fault) |
+| EXITINFO1 | `0x100000015`: present, user, instruction fetch, final GPA; not a guest-table walk |
+| EXITINFO2 versus RIP | `0x1000000` versus `0x1000200` — differs by `0x200` |
+| Entry values | RSI `0x10000`, CR3 `0x13000`, initrd `0x7E97000` |
+| Private guard | `0x50354E5847554152` unchanged |
+
+The whole-tree and private guard checks succeeded before the code returned `ADMIT FETCH NPF`. Neither a wrong mapping nor a Hyper-V defect is established by the byte-offset difference. AMD64 APM Vol. 2 (24593 rev. 3.46), §15.25.7 p. 576 describes EXITINFO2 as the faulting GPA and defines the observed flag bits; that passage does not establish byte-offset behavior for this nested fetch. Keep the original assertion and this result. The next diagnostic is a **distinct** fixed NX-fetch experiment that varies the entry offset and page independently, recording raw EXITINFO2, saved RIP and an independent guest page walk. Do not turn this capture into PASS or retry over the evidence. No userspace boots, shutdown events, native hardware tests or release sign-off.

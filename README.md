@@ -4,6 +4,8 @@ This project builds small x86-64 hypervisor images to test AMD Secure Virtual Ma
 
 **Verified environment:** nested Hyper-V on a Ryzen 9 9950X. The journal records L2 entry and resume, NPT write protection and remapping, cross-vCPU invalidation, integer-register preservation, and virtual interrupt delivery. The Ryzen 9 9950X3D is the intended bare-metal target, not a verified platform. These are lab images, not a host bootloader or a general-purpose hypervisor. Other AMD processors are not qualified by these runs; Intel VMX is out of scope.
 
+The standalone L1 now has a [reviewed post-handoff runtime test](journal/test-report.md#041--2026-11-25--standalone-runtime-package-and-two-processor-control) for vCPU state, reject-without-resume, exception return, private memory and timer wake. [Diskless Linux input preparation](journal/test-report.md#042--2026-11-25--pinned-diskless-linux-inputs-and-host-handoff-verification) is tracked separately: preparing a kernel, initramfs and boot parameters is not a userspace boot.
+
 ## Build and run one guest
 
 Start with `cpuid`: the guest executes `CPUID`, L1 handles the exit, and L2 must resume and reach its success halt. Booting an ISO alone does not pass the test.
