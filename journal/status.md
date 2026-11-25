@@ -1,4 +1,4 @@
-# Project status · through 090
+# Project status · through 091
 
 **On `main`:** firmware baseline [041](README.md), plus CI-only [#2](https://github.com/kuro1337WStuff/hv/pull/2) at `735c8b56` after both hosted checks passed on `54bace3b`. **On `feature/l1-handoff` only:** [#4](https://github.com/kuro1337WStuff/hv/pull/4) merged at `95abe46c`; [#10](https://github.com/kuro1337WStuff/hv/pull/10) retargeted, then squashed at `44fb6247`. The resulting firmware trees matched the source trees used in 060 and 063 respectively. Revert #10 first if both must be undone; #4 is a merge commit. No ordinary Linux boot or bare-metal qualification.
 
@@ -15,7 +15,7 @@
 
 **Merge routing:** [Dated PR-by-PR audit](merge-audit-072.md) · [live open PRs](https://github.com/kuro1337WStuff/hv/pulls) · [workflow and rollback](project-workflow.md). #21's test merge did not promote #12. Check the actual base, scope and source revision before each integration.
 
-**Feature integration, host evidence only:** [089](trials/089.md) exercised periodic IRQ0 mask, service and EOI; [090](trials/090.md) checked pinned init bytes against an independent virtual S5 stop. No new guest run or ordinary Linux shutdown. Next: [#62 · one-shot transition and disable](https://github.com/kuro1337WStuff/hv/issues/62) and [#63 · PM1a event registers](https://github.com/kuro1337WStuff/hv/issues/63). Neither card reserves a bench.
+**Feature integration, host evidence only:** [091](trials/091.md) verified periodic → one-shot → disable on one virtual PIT channel, including an IRQ that was pending at disable. [090](trials/090.md) covers independently reviewed virtual shutdown evidence. Neither is a Linux boot. Next: [#63 · advertised ACPI event registers](https://github.com/kuro1337WStuff/hv/issues/63); no bench reserved.
 
 ## Feature evidence before the separate trial ledger
 
