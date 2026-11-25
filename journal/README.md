@@ -4,6 +4,8 @@ Development host: Ryzen 9 9950X. Firmware runs use the `HV-SVM-L1` Hyper-V VM; h
 
 **Start here:** [Current status, feature trials and integration order](status.md). The entries below describe the integrated baseline through 041. Later feature evidence is published on `main` independently of its implementation; see [how trials are published](project-workflow.md).
 
+**[089 · Periodic IRQ0 service](trials/089.md):** masked rising edges coalesced; a new request during service survived the specific EOI. No guest interrupt was injected.
+
 **[088 · Pinned init serial milestones](trials/088.md):** eight offline tests passed. A synthetic capture kept its `ATTENTION` disposition; genuine 047 UART bytes were rejected as Linux init evidence.
 
 **[087 · PIT channel 0 periodic reload](trials/087.md):** the host observed the first and repeated rising edges, deferred reload, and one latched edge after a long jump. No guest IRQ or clock calibration.
