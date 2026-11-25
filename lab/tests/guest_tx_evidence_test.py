@@ -12,7 +12,8 @@ from tempfile import TemporaryDirectory
 import unittest
 
 from lab.guest_tx_evidence import (
-    Attempt, InitMilestones, ReviewedStop, line_offsets, observe_init_milestones, verify_guest_tx,
+    Attempt, InitMilestones, ReviewedS5Stop, ReviewedStop, line_offsets, observe_init_milestones,
+    observe_init_shutdown, verify_guest_tx,
 )
 
 
@@ -77,7 +78,7 @@ class SerialEvidenceTest(unittest.TestCase):
                 verify_guest_tx(candidate, A047, STOP047, TX047)
 
 
-class InitMilestonesTest(unittest.TestCase):
+class _BoundInitCase(unittest.TestCase):
     user = b'HV:P5:USER pid=1 kernel=6.18.60-0-virt'
     timer = b'HV:P5:TIMER before=9.99 after=10.00'
     shutdown = b'HV:P5:SHUTDOWN'
@@ -110,6 +111,8 @@ class InitMilestonesTest(unittest.TestCase):
         return ReviewedStop(a, sha256(record).hexdigest(), sha256(self.frame).hexdigest(),
                             len(self.raw), sha256(self.raw).hexdigest(), False)
 
+
+class InitMilestonesTest(_BoundInitCase):
     def test_offsets_values_and_unchanged_disposition(self):
         user_at = len(self.prefix)
         timer_at = user_at + len(self.user) + 2 + len(self.between)
@@ -176,6 +179,71 @@ class InitMilestonesTest(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, reason):
                     observe_init_milestones(self.directory, self.attempt, self.review, self.raw)
                 path.write_bytes(original)
+
+
+class InitShutdownTest(_BoundInitCase):
+    def witness(self, review):
+        # Hypothetical, separately transcribed L1 fields. No historical run
+        # supplies these values; neither the raw TX nor the API computes them.
+        return ReviewedS5Stop(binding=replace(review), terminal_cause='PM1a S5',
+                              exit_code=0x7b, io_info1=0x06040020, operand=0x3401, lifecycle=2,
+                              faulting_rip=0x1234, terminal_rip=0x1234,
+                              faulting_entries=37, terminal_entries=37)
+
+    def test_reviewed_final_out_preserves_bound_milestones(self):
+        for state in ('ATTENTION', 'COMPLETE'):
+            with self.subTest(state=state):
+                review = self.stage_stop(state)
+                result = observe_init_shutdown(self.directory, self.attempt, review, self.raw,
+                                               self.witness(review))
+                self.assertEqual(result, InitMilestones(
+                    state, self.raw.index(self.user), self.raw.index(self.timer),
+                    self.raw.rindex(self.shutdown), b'9.99', b'10.00'))
+
+    def test_one_wrong_terminal_field_is_not_shutdown(self):
+        s5 = self.witness(self.review)
+        for change in (
+                {'terminal_cause': 'timeout'}, {'exit_code': 0x78}, {'lifecycle': 1},
+                {'io_info1': 0x06040021},  # IN
+                {'io_info1': 0x06040024}, {'io_info1': 0x06040028},  # STR or REP
+                {'io_info1': 0x06040010}, {'io_info1': 0x06040040}, {'io_info1': 0x06040030},
+                {'io_info1': 0x06000020}, {'operand': 0x1401}, {'operand': 0x13401},
+                {'terminal_rip': 0x1236}, {'terminal_entries': 38}, {'terminal_entries': 36},
+                {'faulting_entries': 0, 'terminal_entries': 0},
+                {'faulting_entries': True, 'terminal_entries': True},
+                {'faulting_rip': None, 'terminal_rip': None}):
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                observe_init_shutdown(self.directory, self.attempt, self.review, self.raw,
+                                      replace(s5, **change))
+
+    def test_terminal_review_cannot_cross_artifacts(self):
+        s5 = self.witness(self.review)
+        for other in (replace(self.review, attempt=replace(self.attempt, run_id='other')),
+                      replace(self.review, attempt=replace(self.attempt, profile='other')),
+                      replace(self.review, attempt=replace(self.attempt, media_sha256='CD' * 32)),
+                      replace(self.review, frame_sha256='01' * 32),
+                      replace(self.review, events_sha256='02' * 32),
+                      replace(self.review, tx_sha256='03' * 32)):
+            with self.subTest(other=other), self.assertRaisesRegex(ValueError, 'same reviewed stop'):
+                observe_init_shutdown(self.directory, self.attempt, self.review, self.raw,
+                                      replace(s5, binding=other))
+        # Two agreeing reviews are not sufficient if the actual file differs.
+        (self.directory / (self.attempt.profile + '.png')).write_bytes(b'substituted frame')
+        with self.assertRaisesRegex(ValueError, 'not the reviewed L1 stop frame'):
+            observe_init_shutdown(self.directory, self.attempt, self.review, self.raw, s5)
+
+    def test_neither_guest_text_nor_review_alone_is_evidence(self):
+        raw = self.raw + b'reboot: Power down\nPM1a S5 port=0x604 data=0x3401\n'
+        review = replace(self.review, count=len(raw), tx_sha256=sha256(raw).hexdigest())
+        with self.assertRaisesRegex(ValueError, 'no S5 review'):
+            observe_init_shutdown(self.directory, self.attempt, review, raw, None)
+        with self.assertRaisesRegex(ValueError, 'no S5 review'):
+            observe_init_shutdown(self.directory, self.attempt, None, raw, self.witness(review))
+        # Bind the ambiguous TX so rejection comes from the real milestone parser.
+        raw += self.shutdown + b'\n'
+        review = replace(review, count=len(raw), tx_sha256=sha256(raw).hexdigest())
+        with self.assertRaisesRegex(ValueError, 'extra HV:P5: record'):
+            observe_init_shutdown(self.directory, self.attempt, review, raw, self.witness(review))
 
 
 if __name__ == '__main__':

@@ -133,3 +133,54 @@ def observe_init_milestones(directory: Path, requested: Attempt, review: Reviewe
     if shutdown != b'HV:P5:SHUTDOWN':
         raise ValueError(f'expected SHUTDOWN record at byte {shutdown_offset}')
     return InitMilestones(disposition, user_offset, timer_offset, shutdown_offset, before, after)
+
+
+@dataclass(frozen=True)
+class ReviewedS5Stop:
+    """Independent L1 terminal review, bound to the existing reviewed artifact set.
+
+    The reviewer records the *final cause* separately from the last observed
+    intercept: e.g. a timeout can leave an old IOIO exit in the VMCB. io_info1
+    is AMD IOIO EXITINFO1, operand is the width-sized write data, lifecycle is
+    the virtual PM1 lifecycle. Read RIP and the cumulative, non-resetting entry
+    count at the faulting OUT and at the terminal stop for that same L2.
+    Unknown/ambiguous evidence cannot issue a witness. Do not derive these
+    fields from TX, a kernel poweroff message, or a broker disposition.
+    """
+    binding: ReviewedStop
+    terminal_cause: str  # 'PM1a S5' only for an independently reviewed shutdown
+    exit_code: int
+    io_info1: int
+    operand: int
+    lifecycle: int
+    faulting_rip: int
+    terminal_rip: int
+    faulting_entries: int
+    terminal_entries: int
+
+
+def observe_init_shutdown(directory: Path, requested: Attempt, review: ReviewedStop | None,
+                          raw: bytes, s5: ReviewedS5Stop | None) -> InitMilestones:
+    """Correlate the pinned init observations with a reviewed, unresumed virtual S5.
+
+    Example: obs = observe_init_shutdown(run_dir, frozen_attempt, tx_review, raw_tx, s5_review)
+    The result retains the milestones and original broker disposition, even
+    ATTENTION. Only existing offline artifacts are read; there is no new
+    capture, guest launch, host power action or authentication of the reviewer.
+    """
+    if s5 is None or review is None or s5.binding != review:
+        raise ValueError('no S5 review bound to the same reviewed stop')
+    for field in (s5.exit_code, s5.io_info1, s5.operand, s5.lifecycle, s5.faulting_rip,
+                  s5.terminal_rip, s5.faulting_entries, s5.terminal_entries):
+        if type(field) is not int or not 0 <= field < 1 << 64:
+            raise ValueError('expected unsigned integer S5 evidence')
+    # power_fixture.h: AMD IOIO; EXITINFO1 port [31:16], width [6:4],
+    # REP [3], STR [2], IN [0]. Address-size/segment do not select the operand.
+    if (s5.terminal_cause != 'PM1a S5' or s5.exit_code != 0x7b or
+            (s5.io_info1 >> 16) & 0xffff != 0x604 or s5.io_info1 & 0x7d != 0x20 or
+            s5.operand != 0x3401 or s5.lifecycle != 2):  # power_request.h: PowerStopped
+        raise ValueError('not a stopped virtual PM1a S5 word OUT')
+    if (s5.faulting_rip != s5.terminal_rip or not s5.faulting_entries or
+            s5.faulting_entries != s5.terminal_entries):
+        raise ValueError('terminal RIP or entry count does not establish an unresumed OUT')
+    return observe_init_milestones(directory, requested, review, raw)
