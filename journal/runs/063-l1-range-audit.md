@@ -1,0 +1,5 @@
+# 063 · Pinned relocated-range ownership audit
+
+**Before boot, lane B:** The pinned `vmlinuz-virt` SHA-256 is `1e8ac7aebfab3f0fcb443eae94ad320efbbda51be91b928c32ca1740b44ebe9d`. Independently reading setup and syssize gives a `4000h` setup and `C0C400h`-byte payload. Destination `[29C3000h,35CF400h)` covers `C0Dh` pages, only `400h` payload bytes in the last. The exact payload hashes to `5b9cce2561688939c31e7a015e8822dcdc3c7ec40864505966c2aa9f4e0baa26`. Require owned, non-executable backing for the full copy, correct last partial page, no effective writable aliases, and distinguish a corrupted byte from a writable alias. Never grant execute or enter the kernel in any arm. An audit PASS does not qualify the later decompression or runtime mappings.
+
+Expected gates: clean `0`, one changed byte `1`, one additional writable mapping `2`, out-of-bounds and wrapping destinations both `3`, restored `0`. Source and destination each cover `C0Dh` read-only/NX pages. Final writers, VMRUN entries and execution marker must all be zero.

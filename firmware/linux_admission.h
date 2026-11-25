@@ -30,11 +30,25 @@ static UINT8 *linux_stage(UINT8 *base)
  * bit-for-bit before and after VMRUN, without masking any hardware changes. */
 #define LINUX_LINK_FLAGS 0x27ull
 #define LINUX_LEAF_FLAGS ((1ull<<63)|0x67ull)
+#ifdef HV_RANGE_AUDIT
+/* E06, Relocated entry page witness: the copy, not the relocated branch target. */
+enum {
+    RangeSetup=0x4000, RangeSrc=EntryKernel, RangeDst=0x29c3000, RangeBytes=EntryKernelBytes,
+    RangePages=(RangeBytes-1)/LinuxPage+1, RangeSpan=RangePages*LinuxPage
+};
+static BOOLEAN linux_range_page(UINTN gpa)
+{
+    return (gpa>=RangeSrc && gpa-RangeSrc<RangeSpan) ||
+           (gpa>=RangeDst && gpa-RangeDst<RangeSpan);
+}
+#endif
 /* In the opt-in ACPI map, the immutable descriptor page is read-only/NX;
  * the dedicated FACS page can hold guest-owned writable NVS, still NX. */
 static UINT64 linux_npt_rights(UINTN gpa)
 {
-#ifdef HV_ACPI_MAP
+#ifdef HV_RANGE_AUDIT
+    if (linux_range_page(gpa)) return LINUX_LEAF_FLAGS & ~2ull;
+#elif defined(HV_ACPI_MAP)
     if (gpa==PowerRsdpGpa) return LINUX_LEAF_FLAGS & ~2ull;
 #else
     (void)gpa;
@@ -55,6 +69,19 @@ static void linux_build_npt(UINT8 *base)
     }
 }
 
+static UINT64 linux_expected_slot(UINT8 *base, UINTN page, UINTN slot)
+{
+    if ((page<2 && slot==0) || (page==2 && slot<LinuxPtCount))
+        return (UINTN)(base+(LinuxNptFirst+page+1+slot)*LinuxPage)|LINUX_LINK_FLAGS;
+    if (page>=3) {
+        UINTN pfn=(page-3)*512+slot;
+        if (pfn<LinuxHoleStart/LinuxPage || pfn>=LinuxHighRam/LinuxPage)
+            return (UINTN)(base+(LinuxRamFirst+pfn)*LinuxPage)|linux_npt_rights(pfn*LinuxPage);
+    }
+    return 0;
+}
+
+#ifndef HV_RANGE_AUDIT
 static BOOLEAN linux_tree_ok(UINT8 *vmcb)
 {
     volatile UINT64 (*npt)[512]=(volatile UINT64 (*)[512])(vmcb+LinuxNptFirst*LinuxPage);
@@ -63,19 +90,12 @@ static BOOLEAN linux_tree_ok(UINT8 *vmcb)
      * dereference a PA from a PTE, even when reporting a corrupted tree. */
     for (UINTN page=0; page<LinuxNptCount; ++page) {
         for (UINTN slot=0; slot<512; ++slot) {
-            UINT64 want=0;
-            if ((page<2 && slot==0) || (page==2 && slot<LinuxPtCount))
-                want=(UINTN)npt[page+1+slot]|LINUX_LINK_FLAGS;
-            else if (page>=3) {
-                UINTN pfn=(page-3)*512+slot;
-                if (pfn<LinuxHoleStart/LinuxPage || pfn>=LinuxHighRam/LinuxPage)
-                    want=(UINTN)(vmcb+(LinuxRamFirst+pfn)*LinuxPage)|linux_npt_rights(pfn*LinuxPage);
-            }
-            if (npt[page][slot]!=want) return 0;
+            if (npt[page][slot]!=linux_expected_slot(vmcb,page,slot)) return 0;
         }
     }
     return 1;
 }
+#endif
 
 #define LINUX_GUARD_WORD UINT64_C(0x50354e5847554152)
 static BOOLEAN linux_guard_ok(UINT8 *base)
@@ -86,6 +106,9 @@ static BOOLEAN linux_guard_ok(UINT8 *base)
     return TRUE;
 }
 
+#ifdef HV_RANGE_AUDIT
+#include "linux_range_audit.h"
+#else
 static void linux_fetch_vmcb(UINT8 *vmcb, UINT64 entry)
 {
     enum { Gdtr=0x460 };
@@ -242,4 +265,5 @@ static const char *linux_admit(UINT8 *base)
     return linux_verified_admit(base,&bad);
 #endif
 }
+#endif /* !HV_RANGE_AUDIT */
 #endif
