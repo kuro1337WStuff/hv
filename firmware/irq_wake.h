@@ -13,8 +13,7 @@ extern const struct { UINT32 size, wait, after, handler, pass, fail; } IrqLayout
 _Static_assert(sizeof(IrqLayout)==6*sizeof(UINT32), "IRQ wake layout ABI mismatch");
 #endif
 
-enum { IrqVector=0x41, IrqPriority=IrqVector>>4, VIrq=1u<<8, IntShadow=0x068,
-       Gdtr=0x460, Idtr=0x480, DescGpa=0x6000, IdtOffset=0x100 };
+enum { IrqVector=0x41, IrqPriority=IrqVector>>4, VIrq=1u<<8, IntShadow=0x068 };
 
 typedef struct { UINT64 count, return_ip, progress, captured_phase; } IrqEvidence;
 typedef struct {
@@ -65,26 +64,6 @@ static BOOLEAN irq_layout_ok(UINTN length)
     return IrqLayout.after==IrqLayout.wait+1 && IrqStart[IrqLayout.wait]==0xf4 &&
            IrqStart[IrqLayout.pass]==0xf4 && IrqStart[IrqLayout.fail]==0xf4;
 #endif
-}
-
-static void irq_guest_tables(UINT8 *vmcb, EFI_PHYSICAL_ADDRESS base)
-{
-    UINT64 *gdt=(UINT64 *)(vmcb+GuestDescriptors*EFI_PAGE_SIZE);
-    FixedNpt *guest=(FixedNpt *)(vmcb+GuestTables*EFI_PAGE_SIZE);
-    FixedNpt *npt=(FixedNpt *)(vmcb+Pml4*EFI_PAGE_SIZE);
-    guest->table[3][DescGpa/EFI_PAGE_SIZE]=DescGpa|0x21;
-    npt->table[3][DescGpa/EFI_PAGE_SIZE]=(base+GuestDescriptors*EFI_PAGE_SIZE)|5;
-    /* Pre-accessed 64-bit code and flat data; the descriptor page is read-only. */
-    gdt[1]=0x00af9b000000ffffull;
-    gdt[2]=0x00cf93000000ffffull;
-    FIELD(UINT32,Gdtr+4)=3*8-1;
-    FIELD(UINT64,Gdtr+8)=DescGpa;
-    UINT64 handler=irq_ip(IrqLayout.handler);
-    UINT64 *gate=gdt+(IdtOffset+16*IrqVector)/8;
-    gate[0]=(handler&0xffff)|(8ull<<16)|(0x8eull<<40)|((handler&0xffff0000)<<32);
-    gate[1]=handler>>32; /* present DPL0 interrupt gate, IST=0, selector 8 */
-    FIELD(UINT32,Idtr+4)=16*(IrqVector+1)-1;
-    FIELD(UINT64,Idtr+8)=DescGpa+IdtOffset;
 }
 
 static void irq_run(UINT8 *vmcb, IrqTrace *trace)

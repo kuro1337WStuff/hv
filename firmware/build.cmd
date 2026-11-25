@@ -26,6 +26,13 @@ if /i "%~1"=="l2" (
   set "CASE_FLAGS=/DHV_VCPU_GPR"
   set "ASM_OBJ=build\vcpu_gpr.obj"
   set "ASM_SRC=firmware\vcpu_gpr.asm"
+) else if /i "%~1"=="exception-ud" (
+  set "SRC=l2_smoke"
+  set "EFI=EXCEPTUD"
+  set "ISO=hv-exception-ud"
+  set "CASE_FLAGS=/DHV_EXCEPTION_UD"
+  set "ASM_OBJ=build\exception_ud.obj"
+  set "ASM_SRC=firmware\exception_ud.asm"
 ) else if /i "%~1"=="irq-priority" (
   set "SRC=l2_smoke"
   set "EFI=IRQPRIORITY"
@@ -69,7 +76,7 @@ if /i "%~1"=="l2" (
 ) else if /i "%~1"=="npt-broadcast" (
   set "ISO=hv-npt-broadcast"
   set "CROSS_PROFILE=npt-broadcast"
-) else if not "%~1"=="" (echo Usage: build.cmd [l2 or cpuid or vcpu-gpr or irq-wake or irq-shadow or npt-write or npt-remap or npt-cross or npt-broadcast or forensic-write] & exit /b 1)
+) else if not "%~1"=="" (echo Usage: build.cmd [l2 or cpuid or vcpu-gpr or exception-ud or irq-wake or irq-shadow or irq-priority or npt-write or npt-remap or npt-cross or npt-broadcast or forensic-write] & exit /b 1)
 set "TOOLS=build\tools"
 set "INC_EDK=%TOOLS%\edk2\MdePkg\Include"
 set "PACK=%TOOLS%\packenv\Scripts\python.exe"

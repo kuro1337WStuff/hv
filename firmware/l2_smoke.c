@@ -11,9 +11,12 @@ enum {
     Dr7=0x560, Dr6=0x568, Flags=0x570, Rip=0x578, Rsp=0x5d8, Rax=0x5f8, Pat=0x668
 };
 enum { Vmcb, HostSave, Pml4, Code=Pml4+NptTableCount, Iopm, Msrpm=Iopm+3, Pages=Msrpm+2 };
-#if defined(HV_VCPU_GPR) || defined(HV_IRQ_WAKE)
+#if defined(HV_IRQ_WAKE) || defined(HV_EXCEPTION_UD)
+#define HV_GUEST_IDT
+#endif
+#if defined(HV_VCPU_GPR) || defined(HV_GUEST_IDT)
 enum { GuestTables=Pages, GuestStack=GuestTables+NptTableCount,
-#ifdef HV_IRQ_WAKE
+#ifdef HV_GUEST_IDT
        GuestDescriptors=GuestStack+1, AllocPages=GuestDescriptors+1
 #else
        AllocPages=GuestStack+1
@@ -54,13 +57,15 @@ static void hex(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *out, CHAR16 *label, UINT64 v)
     out->OutputString(out,buf);
 }
 
-#if defined(HV_VCPU_GPR) || defined(HV_IRQ_WAKE)
+#if defined(HV_VCPU_GPR) || defined(HV_GUEST_IDT)
 #include "long_guest.h"
 #endif
 #ifdef HV_VCPU_GPR
 #include "vcpu_gpr.h"
 #elif defined(HV_IRQ_WAKE)
 #include "irq_wake.h"
+#elif defined(HV_EXCEPTION_UD)
+#include "exception_ud.h"
 #endif
 
 #ifdef HV_FORENSIC_WRITE
@@ -143,6 +148,12 @@ static void smoke(EFI_SYSTEM_TABLE *st)
         out->OutputString(out,L"FAIL: invalid fixed IRQ guest layout.\r\n"); return;
     }
     IrqTrace trace; /* irq_run fills the checkpoint snapshot before any return. */
+#elif defined(HV_EXCEPTION_UD)
+    UINTN length=UdLayout.size;
+    if (!ud_layout_ok(length)) {
+        out->OutputString(out,L"FAIL: invalid fixed #UD guest layout.\r\n"); return;
+    }
+    UdTrace trace;
 #endif
     if (!(r[3]&1) || (UINT32)r[1]<2 || (__readcr4() & (1u<<12))) {
         out->OutputString(out,L"SKIP: need nested paging, guest ASID 1 and four-level host paging.\r\n"); return;
@@ -167,6 +178,8 @@ static void smoke(EFI_SYSTEM_TABLE *st)
     bs->CopyMem(vmcb+Code*EFI_PAGE_SIZE,(VOID *)GprStart,length);
 #elif defined(HV_IRQ_WAKE)
     bs->CopyMem(vmcb+Code*EFI_PAGE_SIZE,(VOID *)IrqStart,length);
+#elif defined(HV_EXCEPTION_UD)
+    bs->CopyMem(vmcb+Code*EFI_PAGE_SIZE,(VOID *)UdStart,length);
 #elif defined(HV_NPT_WRITE)
     /* 16-bit MOV byte ptr DS:[2000h], A5h; HLT. Code stays read-only in both arms. */
     const UINT8 payload[]={0xc6,0x06,DataGpa & 0xff,DataGpa >> 8,StoredByte,0xf4};
@@ -216,10 +229,12 @@ static void smoke(EFI_SYSTEM_TABLE *st)
 #endif
     FIELD(UINT64,NpEnable)=1;
     FIELD(UINT64,NestedCr3)=base+Pml4*EFI_PAGE_SIZE;
-#if defined(HV_VCPU_GPR) || defined(HV_IRQ_WAKE)
+#if defined(HV_VCPU_GPR) || defined(HV_GUEST_IDT)
     long_guest_state(vmcb,base);
 #ifdef HV_IRQ_WAKE
-    irq_guest_tables(vmcb,base);
+    long_guest_gate(vmcb,base,IrqVector,irq_ip(IrqLayout.handler));
+#elif defined(HV_EXCEPTION_UD)
+    long_guest_gate(vmcb,base,6,FixedGuestGpa+UdLayout.handler);
 #endif
 #else
     for (UINTN seg=Es; seg<=Ds; seg+=16) {
@@ -244,6 +259,8 @@ static void smoke(EFI_SYSTEM_TABLE *st)
     out->OutputString(out,L"Entering L2: CPUID -> validate 4 replies -> HLT\r\n");
 #elif defined(HV_VCPU_GPR)
     out->OutputString(out,L"Entering 64-bit L2: two CPUID GPR save/restore rounds\r\n");
+#elif defined(HV_EXCEPTION_UD)
+    out->OutputString(out,L"Exception return: intercept UD2, inject #UD at fault RIP\r\n");
 #elif defined(HV_IRQ_WAKE)
 #ifdef HV_IRQ_SHADOW
     out->OutputString(out,L"Masked IRQ: VMMCALL checkpoint, STI shadow, vector 41h\r\n");
@@ -290,6 +307,8 @@ static void smoke(EFI_SYSTEM_TABLE *st)
     gpr_run(vmcb,frame,nrips,&trace);
 #elif defined(HV_IRQ_WAKE)
     irq_run(vmcb,&trace);
+#elif defined(HV_EXCEPTION_UD)
+    ud_run(vmcb,&trace);
 #elif defined(HV_NPT_WRITE)
     __svm_vmrun((UINTN)base);
     control_exit=FIELD(UINT64,ExitCode);
@@ -343,6 +362,8 @@ static void smoke(EFI_SYSTEM_TABLE *st)
     gpr_report(out,vmcb,&trace);
 #elif defined(HV_IRQ_WAKE)
     irq_report(out,vmcb,&trace);
+#elif defined(HV_EXCEPTION_UD)
+    ud_report(out,vmcb,&trace);
 #elif defined(HV_NPT_REMAP)
     for (UINTN i=0; i<reads; ++i) {
         out->OutputString(out,i ? L"Frame B:\r\n" : L"Frame A:\r\n");

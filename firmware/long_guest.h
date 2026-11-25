@@ -29,4 +29,26 @@ static void long_guest_state(UINT8 *vmcb, EFI_PHYSICAL_ADDRESS base)
     FIELD(UINT64,Cr0)=0x80010031u; /* PG/WP/NE/ET/PE */
     FIELD(UINT64,Rsp)=LongInitialRsp;
 }
+
+#ifdef HV_GUEST_IDT
+static void long_guest_gate(UINT8 *vmcb, EFI_PHYSICAL_ADDRESS base, UINT8 vector, UINT64 handler)
+{
+    enum { Gdtr=0x460, Idtr=0x480, DescGpa=0x6000, IdtOffset=0x100 };
+    UINT64 *gdt=(UINT64 *)(vmcb+GuestDescriptors*EFI_PAGE_SIZE);
+    FixedNpt *guest=(FixedNpt *)(vmcb+GuestTables*EFI_PAGE_SIZE);
+    FixedNpt *npt=(FixedNpt *)(vmcb+Pml4*EFI_PAGE_SIZE);
+    guest->table[3][DescGpa/EFI_PAGE_SIZE]=DescGpa|0x21;
+    npt->table[3][DescGpa/EFI_PAGE_SIZE]=(base+GuestDescriptors*EFI_PAGE_SIZE)|5;
+    /* Pre-accessed 64-bit code and flat data; the descriptor page is read-only. */
+    gdt[1]=0x00af9b000000ffffull;
+    gdt[2]=0x00cf93000000ffffull;
+    FIELD(UINT32,Gdtr+4)=3*8-1;
+    FIELD(UINT64,Gdtr+8)=DescGpa;
+    UINT64 *gate=gdt+(IdtOffset+16*vector)/8;
+    gate[0]=(handler&0xffff)|(8ull<<16)|(0x8eull<<40)|((handler&0xffff0000)<<32);
+    gate[1]=handler>>32; /* present DPL0 interrupt gate, IST=0, selector 8 */
+    FIELD(UINT32,Idtr+4)=16*(vector+1)-1;
+    FIELD(UINT64,Idtr+8)=DescGpa+IdtOffset;
+}
+#endif
 #endif
