@@ -85,3 +85,24 @@ Lab: 9950X / `HV-SVM-L1`, nested SVM, two virtual processors. These are harness 
 | 011 | `9090d3dfb59b43acad8545a563923102` | `run l2` plus separate `watch` and `stop` clients. Both observers saw STOPPED (exit 2) during preparation. No elevation or VM change. |
 | 012 | `934f4ed6b3774ea5a4395d5c7f3e2c69` | Default queue. `l2`, `cpuid`, `npt-write`, `npt-remap` each matched their PASS console (ISOs from runs 005–008). `npt-cross` used the run 010 ISO and matched its [SKIP console](images/queue-012-skip.png); terminal ATTENTION, exit 3. No retry. |
 | 013 | `0711822374d14aba96de7d5368137a4b` | `run npt-remap l2`. Remap passed, then the separate `stop` client vetoed `l2` during NEXT. Terminal STOPPED, exit 2; the only BOOT was `npt-remap`. No subsequent mount or boot. |
+
+### 014 · 2026-11-24 local · Operator replay of original queue
+
+Batch `281294cc0f27481681aae4c630138f16`: `l2`, `cpuid`, `npt-write` and `npt-remap` passed. The original `npt-cross` ISO from 010 again produced SKIP, not an L2 result. The queue stopped at ATTENTION. No processor IDs were inferred from this batch.
+
+### 015 · 2026-11-24 local · Two measured L1 processor IDs and shared-NPT remap
+
+**Guest PASS; queue ATTENTION pending screen review.** Batch `d0782ede6ed14e21bcc40940f047cb6e` booted [`a2da063bb9`](https://github.com/kuro1337WStuff/hv/commit/a2da063bb9c9c6244fea99513da7f3d7a33f610f), `hv-npt-cross.iso` SHA-256 `9d7a5434bd3a5253155dbd4318e362cf8c30edd0a090162a2c0e1eb99f3aab24`, in the isolated 9950X Hyper-V VM. Build: `firmware\build.cmd npt-cross`. Run: `python lab/hv_queue.py run npt-cross`.
+
+Before guest entry, the bootstrap processor and application processor independently executed CPUID leaf 1 and returned initial APIC IDs `0` and `1`, respectively; each matched its Limine routing ID. Expected: both CPUs read marker A, then both read B after replacing the shared read-only leaf at GPA `0x2000`. Both epochs used ASID 1 and a local full flush at each guest entry. Neither frame's contents changed.
+
+| L1 APIC ID | Observed guest AX, frame A | Observed guest AX, frame B | Exit / RIP on both reads |
+| --- | --- | --- | --- |
+| 0 (BSP) | `0xA11A` | `0xB22B` | HLT `0x78` / `0x1003` |
+| 1 (AP) | `0xA11A` | `0xB22B` | HLT `0x78` / `0x1003` |
+
+[Reviewed console with IDs and all four samples](images/npt-cross-015.png). The queue correctly treated the previously unseen display as unknown until review. Architecture reference: AMD64 Architecture Programmer’s Manual, Vol. 2, §§15.16–15.16.1 (combined manual PDF pp. 1013–1014), and §15.25.1 (p. 1034). The result demonstrates a coordinated **quiesced** remap with local flushes on two virtual processors, not a broadcast shootdown, an interrupt of a running L2, or bare-metal qualification.
+
+### 016 · 2026-11-24 local · Supervised replay after screen review
+
+**PASS / COMPLETE.** `python lab/hv_queue.py run l2 npt-cross`, batch `c59455d8d942473caf588dd7c18f2daf`. The intervening `l2` image (run 005 digest) reached its distinct PASS screen before the worker mounted and booted the run 015 cross ISO again. The fresh cross console matched the independently reviewed run 015 screen, and the queue exited 0. Per-run frames and `events.jsonl` remain under the local batch directory; the VM was left at cross-vCPU PASS.

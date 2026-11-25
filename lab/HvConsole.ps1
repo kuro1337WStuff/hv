@@ -44,7 +44,7 @@ function Get-HvConsoleVerdict {
         'cpuid'     { '27b75d52c2332aa952d1f256b59a4104d7cfa4022af87a9027f51b6c3f063cfc' } # npt-006.png
         'npt-write' { '4aceae05f48c8e62541b279e0124295daf6ded6147ece66c928493b42a78030c' } # npt-write-007.png
         'npt-remap' { 'b8a89c55ff3785983d41f30855c7af3e04fc0d5e87cb6122ab62a2c23affc061' } # npt-remap-008.png
-        'npt-cross' { 'cb02560cd2e1b5326916326ffd46c3cf91e6cb6238e6153a453648dbb8d3de18' } # npt-cross-010.png
+        'npt-cross' { 'b4e0ee475d7add3a84c8294c3f69800fdf0244f315ba16375a645c1aa8f95d9e' } # npt-cross-015.png
         default     { return 'UNKNOWN' }
     }
     if (!(Test-HvConsoleFrame $Frame)) { return 'UNKNOWN' }
@@ -53,8 +53,10 @@ function Get-HvConsoleVerdict {
     $sha = [Security.Cryptography.SHA256]::Create()
     try { $digest = $sha.ComputeHash($Frame.ImageData, ($Frame.ImageData.Length - $size), $size) }
     finally { $sha.Dispose() }
-    if ([BitConverter]::ToString($digest).Replace('-', '') -ne $expected) { return 'UNKNOWN' }
-    if ($Profile -eq 'npt-cross') { return 'SKIP' } # No MP Services; no L2 entry.
+    $actual = [BitConverter]::ToString($digest).Replace('-', '')
+    # The original UEFI-only image may still be mounted: its reviewed screen is SKIP, never PASS.
+    if ($Profile -eq 'npt-cross' -and $actual -eq 'cb02560cd2e1b5326916326ffd46c3cf91e6cb6238e6153a453648dbb8d3de18') { return 'SKIP' }
+    if ($actual -ne $expected) { return 'UNKNOWN' }
     return 'PASS'
 }
 
