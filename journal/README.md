@@ -2,6 +2,24 @@
 
 Development host: Ryzen 9 9950X. Firmware runs use the `HV-SVM-L1` Hyper-V VM; host-only checks are labeled separately. Neither qualifies the 9950X3D deployment target on bare metal.
 
+## 050 · 2026-11-25 · Shutdown is a port write, not a message
+
+Two guests printed the same `L2:S5` line. The first halted and remained waiting; the second set SLP_EN on virtual PM1a, and L1 stopped at that OUT without re-entering. Neither arm touched host power. [Build, counts and evidence](test-report.md#050--virtual-s5-request-versus-guest-text-and-hlt).
+
+![Same six transmitted bytes; different PM1a values, terminal exits and lifecycle states](images/l1-power-s5-050.png)
+
+## 049 · 2026-11-25 · Bounded guest console capture
+
+Both polled transmit phases reached the receiver byte-for-byte. With capacity reduced to 24, L1 stopped on the next OUT rather than silently truncating or inventing a guest completion marker. Not a Linux tty handover. [Transcript and independent exit](test-report.md#049--two-phase-console-and-bounded-capture).
+
+![Full 32-byte transcript and the short arm stopped on the first overflowing byte](images/l1-console-tx-049.png)
+
+## 048 · 2026-11-25 · A pending IRQ and a later HLT wake
+
+The first virtual PIT expiry stayed pending while IRQ0 was masked. The second woke a halted guest at its programmed tick, not one tick earlier. L2 recorded both return addresses, and L1 observed two specific EOIs. No Linux calibration or native latency is inferred. [Deadlines and exit accounting](test-report.md#048--pit-one-shot-legacy-irq0-and-a-specific-eoi).
+
+![Two guest IRQ return addresses and two independent virtual PIC acknowledgements](images/l1-pit-irq0-048.png)
+
 ## 047 · 2026-11-25 · Serial bytes from the guest, not the monitor
 
 **Passed in `HV-SVM-L1`.** The fixed L2 initialized virtual COM1 for 8N1, selected divisor 1, and polled until its last byte drained. L1 captured exactly `L2:8250` followed by LF. Both sides counted eight busy polls, and L2 reached its success halt. Programming the divisor did not accidentally transmit a byte.

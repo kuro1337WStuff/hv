@@ -435,3 +435,35 @@ After review, `Get-HvConsoleVerdict` classified the archived 045 framebuffer as 
 | Refused COM2 arm | Exit `0x7B`, `EXITINFO1=0x02F80210`, RIP `0x11A5`, next IP `0x11A6`, DX `0x2F8`, AL `0xA5`. Refusal 1; no RIP advance or re-entry; final count and captured bytes unchanged. |
 
 Scope: fixed guest and one-way, polled COM1 subset. Read-driven busy intervals are deterministic test behavior, not baud timing. No UART IRQ, receive stream, physical wire, Linux earlycon/tty driver, or PID 1 was run.
+
+### 048 · PIT one-shot, legacy IRQ0 and a specific EOI
+
+**Pre-boot contract:** use two distinct PIT channel-0 one-shots on a controlled tick timeline (32 then 64 PIT ticks), never host port I/O. Latch the first edge while IRQ0 is masked, deliver vector `0x30` only after unmask, and save the hardware-stacked return IP in L2. Arm the second deadline and reach HLT before it; resume at HLT+1 only when due. Require two ISR executions, two guest acknowledgements via master PIC command `OUT 0x20,0x60`, second post-wake progress and terminal guest cookie `0x04871001`. A separate arm's out-of-contract EOI `0x61` must not retire IRQ0 or resume. Observe negative/boundary cases on host. Not a kernel boot, real-time calibration, LAPIC timer, full 8259 model or general hardware compatibility result.
+
+**2026-11-25 · Firmware PASS, reviewed [048 capture](images/l1-pit-irq0-048.png).** Built with `firmware\build.cmd l1-pit-irq0`, verified `lab/tests/pit_pic_test.c` under MSVC `/O2 /W4 /WX`, then `python lab/hv_queue.py run --session l1-pit-irq0`. Batch `635d3b98d9de4aafaca281ceb9b598ef`, ISO `6CC2D9E1DDF181B11ABD594BD23A044D6C1AB64FA35A629AB04F5B4E30A2FC8F`, boot 17:51:47 UTC. The broker checkpointed the prior 047 terminal and stopped at first-capture `ATTENTION`, exit 3. No VM retry.
+
+At virtual tick 31 no expiry; at 32 IMR=`FF`, IRR=`01`. Hardware delivered vector `30h` after unmask, stacking `1037h`. The second HLT was at `10A6h`; no wake at tick 95, then tick 96 stacked `10A7h` and resumed. Two EOIs, two L2 ISR entries, one post-wake marker, cookie `04871001`, successful HLT at `1120h`. An independent arm refused byte `61h` on port `20h` at `1184h`. Both arms together used 19 VM exits. Logical expirations are `arm + N`, not a physical 8254 output waveform or a measured guest TSC frequency. The pinned kernel still needs a timebase, discovery/initialization and calibration not exercised here.
+
+### 049 · Two-phase console and bounded capture
+
+**Pre-boot contract:** L2 transmits `EARLY:console!\r\n` then `LATE:terminal!\r\n`. Full arm: match all 32 bytes and L2's completion cookie `B060CAFE`, drained line, independent success HLT. Short arm: capacity 24; refuse byte 25 (`6D`) at the OUT before RIP advance; preserve exactly the first 24 bytes and no terminal guest cookie. No actual console handover by Linux.
+
+**2026-11-25 · Firmware PASS, reviewed [049 capture](images/l1-console-tx-049.png).** Built `firmware\build.cmd l1-console-tx` and ran `python lab/hv_queue.py run --session l1-console-tx`. Batch `3a30e97c38b043368eb58a28ae9710c1`, ISO `1A26E6B6B703E505DA8097D8B28BD6A0AFE1BC0D35F0DB8A21B74D07495DB6CB`, boot 17:53:49 UTC. Prior 048 checkpointed; first new terminal `ATTENTION` (3). No VM retry. Full 32 bytes in four wire-order words: `4541524C593A636F 6E736F6C65210D0A 4C4154453A746572 6D696E616C210D0A`. Guest cookie `B060CAFE`, final hash `765B6B87`, independent HLT RIP `1006h` after 98 entries. The short arm stopped on entry 74 at OUT `1004h`, AL=`6Dh`, first 24 bytes unchanged, overflow=1, no guest cookie. This extends 047's init/register checks with a bounded transcript, not an interrupt-driven tty test.
+
+### 050 · Virtual S5 request versus guest text and HLT
+
+**Pre-boot contract:** identical guest serial marker in both fixed arms. Accept a documented 16-bit PM1a preparation and S5 enable write on guest-only port `0x604`, and stop on the latter without re-entry. The comparison arm with no valid enable request must not reach the shutdown state, even if it prints the same marker and halts. Record terminal exit/RIP, data and latch from the decoder separately from the marker. No host power, firmware or ACPI namespace execution.
+
+**2026-11-25 · [050 capture](images/l1-power-s5-050.png), firmware PASS by review.** Build profile `l1-power-s5`, batch `308ca8df03ea41efaa1f43e3e8e63977`, ISO `E16D7190184B71BC63D2830585BCFFCEFF2DBBB39EE0E031D599F563E55A844F`, cold boot 17:56:24 UTC. Same six bytes `4C323A53350A` and guest cookie `53354701` in both arms. No enable: PM1a `1401h`, 22 entries, HLT exit `78h` at `1073h`, waiting state 1. S5 enable: `3401h`, 21 entries, IOIO exit `7Bh` stopped on the OUT at `1066h`, stopped state 2. Neither HLT nor guest text was accepted as shutdown. First capture ATTENTION, no retry. Prior 049 PASS checkpointed by broker. Host `power_tables_test` accepted the guest AML and tables and refused corrupt and dangling references; this guest did not discover them through Linux.
+
+### 051 · Pre-entry state guard for the pinned NX fetch
+
+**Pre-boot contract:** after the three independent 044 fault-precision controls, substitute an invalid RSI and then an out-of-RAM CR3 into the actual Linux entry state. Each must report the corresponding guard error and zero new assembly-site VMRUN attempts. Restore the real state; the same gate must permit exactly one attempt, followed by the original final-fetch NPF, unchanged entry RIP, independent walk and private guard. This qualification keeps Linux pages NX; no code from the kernel may execute.
+
+### 052 · Single-vCPU feature floor across exits
+
+**Pre-boot contract (hex):** seven intercepted CPUIDs at 1010 through 1070 in steps of 10; inputs `0,1,1,80000000,80000001,40000000,7`, secondary leaf-1 request with ECX=A5A5A5A5. FMS `20F32`, bits `07008161`, extended `21008161`; CMPXCHG8B outcomes `9:9`, ZF `1:0`, CMOV `22:33`, NOP witness `6E6F706C`. XMM0 input 15, guest SSE2 result 2A, cookie 464C5231. Eight entries and eight caller restores. Stop on read MSR at RIP 1080, EXIT=7C/INFO1=0, RCX=DEADBEEF, RAX=2A. No ninth entry, native leaf passthrough or Linux boot.
+
+### 053 · Paired guest and nested page faults
+
+**Pre-boot contract (hex):** five fresh one-entry arms. A: owned RX fetch halts 78/1812E/50353038. G: guest NX returns intercepted #PF 4E/RIP 18123/error 11/raw GVA 18123; separate leaf walk GPA 8123. N: nested NX returns NPF 400/RIP 19123/final fetch/raw GPA page 9000; walk 9123. W: accepted store halts at 18137 with byte B6. R: denied write at 18134 returns final write-protection NPF/raw GPA A000 with byte 5A unchanged. Ignore only the NPF U/S bit, not the fault stage or address. Private guard and out-of-map witness remain unchanged; five total assembly-site entries. Fixed layout, not executable Linux RAM.
