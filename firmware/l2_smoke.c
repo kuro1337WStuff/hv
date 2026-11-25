@@ -14,7 +14,10 @@ enum { Vmcb, HostSave, Pml4, Code=Pml4+NptTableCount, Iopm, Msrpm=Iopm+3, Pages=
 #if defined(HV_IRQ_WAKE) || defined(HV_EXCEPTION_UD)
 #define HV_GUEST_IDT
 #endif
-#if defined(HV_VCPU_GPR) || defined(HV_VCPU_XMM) || defined(HV_GUEST_IDT)
+#if defined(HV_VCPU_XMM) || defined(HV_VCPU_MXCSR)
+#define HV_GUEST_SSE2
+#endif
+#if defined(HV_VCPU_GPR) || defined(HV_GUEST_SSE2) || defined(HV_GUEST_IDT)
 #define HV_LONG_GUEST
 enum { GuestTables=Pages, GuestStack=GuestTables+NptTableCount,
 #ifdef HV_GUEST_IDT
@@ -67,6 +70,8 @@ static void hex(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *out, CHAR16 *label, UINT64 v)
 #include "vcpu_gpr.h"
 #elif defined(HV_VCPU_XMM)
 #include "vcpu_xmm.h"
+#elif defined(HV_VCPU_MXCSR)
+#include "vcpu_mxcsr.h"
 #elif defined(HV_IRQ_WAKE)
 #include "irq_wake.h"
 #elif defined(HV_EXCEPTION_UD)
@@ -119,7 +124,7 @@ static void smoke(EFI_SYSTEM_TABLE *st)
     }
     __cpuid(r,1);
     if (!((UINT32)r[2] & (1u<<31))) { out->OutputString(out,L"SKIP: VM-only test.\r\n"); return; }
-#ifdef HV_VCPU_XMM
+#ifdef HV_GUEST_SSE2
     const UINT32 sse2_features=(1u<<24)|(1u<<25)|(1u<<26); /* FXSR, SSE, SSE2 */
     if (((UINT32)r[3]&sse2_features)!=sse2_features ||
         (__readcr0()&((1u<<2)|(1u<<3))) || !(__readcr4()&(1u<<9))) {
@@ -160,6 +165,12 @@ static void smoke(EFI_SYSTEM_TABLE *st)
         out->OutputString(out,L"FAIL: invalid fixed XMM guest layout.\r\n"); return;
     }
     XmmTrace trace;
+#elif defined(HV_VCPU_MXCSR)
+    UINTN length=MxLayout.size;
+    if (!mx_layout_ok(length)) {
+        out->OutputString(out,L"FAIL: invalid fixed MXCSR guest layout.\r\n"); return;
+    }
+    MxTrace trace;
 #elif defined(HV_IRQ_WAKE)
     UINTN length=IrqLayout.size;
     if (!irq_layout_ok(length)) {
@@ -196,6 +207,8 @@ static void smoke(EFI_SYSTEM_TABLE *st)
     bs->CopyMem(vmcb+Code*EFI_PAGE_SIZE,(VOID *)GprStart,length);
 #elif defined(HV_VCPU_XMM)
     bs->CopyMem(vmcb+Code*EFI_PAGE_SIZE,(VOID *)XmmStart,length);
+#elif defined(HV_VCPU_MXCSR)
+    bs->CopyMem(vmcb+Code*EFI_PAGE_SIZE,(VOID *)MxStart,length);
 #elif defined(HV_IRQ_WAKE)
     bs->CopyMem(vmcb+Code*EFI_PAGE_SIZE,(VOID *)IrqStart,length);
 #elif defined(HV_EXCEPTION_UD)
@@ -251,7 +264,7 @@ static void smoke(EFI_SYSTEM_TABLE *st)
     FIELD(UINT64,NestedCr3)=base+Pml4*EFI_PAGE_SIZE;
 #ifdef HV_LONG_GUEST
     long_guest_state(vmcb,base);
-#ifdef HV_VCPU_XMM
+#ifdef HV_GUEST_SSE2
     FIELD(UINT64,Cr4)|=1u<<9; /* OSFXSR; guest CR0 already has EM=TS=0. */
 #endif
 #ifdef HV_IRQ_WAKE
@@ -284,6 +297,8 @@ static void smoke(EFI_SYSTEM_TABLE *st)
     out->OutputString(out,L"Entering 64-bit L2: two CPUID GPR save/restore rounds\r\n");
 #elif defined(HV_VCPU_XMM)
     out->OutputString(out,L"XMM0-15: check L1 and L2 register banks across two entries\r\n");
+#elif defined(HV_VCPU_MXCSR)
+    out->OutputString(out,L"MXCSR: host and guest rounding across VMMCALL and resume\r\n");
 #elif defined(HV_EXCEPTION_UD)
     out->OutputString(out,L"Exception return: intercept UD2, inject #UD at fault RIP\r\n");
 #elif defined(HV_IRQ_WAKE)
@@ -332,6 +347,8 @@ static void smoke(EFI_SYSTEM_TABLE *st)
     gpr_run(vmcb,frame,nrips,&trace);
 #elif defined(HV_VCPU_XMM)
     xmm_run(vmcb,&trace);
+#elif defined(HV_VCPU_MXCSR)
+    mx_run(vmcb,&trace);
 #elif defined(HV_IRQ_WAKE)
     irq_run(vmcb,&trace);
 #elif defined(HV_EXCEPTION_UD)
@@ -389,6 +406,8 @@ static void smoke(EFI_SYSTEM_TABLE *st)
     gpr_report(out,vmcb,&trace);
 #elif defined(HV_VCPU_XMM)
     xmm_report(out,vmcb,&trace);
+#elif defined(HV_VCPU_MXCSR)
+    mx_report(out,vmcb,&trace);
 #elif defined(HV_IRQ_WAKE)
     irq_report(out,vmcb,&trace);
 #elif defined(HV_EXCEPTION_UD)

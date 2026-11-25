@@ -33,6 +33,13 @@ if /i "%~1"=="l2" (
   set "CASE_FLAGS=/DHV_VCPU_XMM"
   set "ASM_OBJ=build\vcpu_xmm.obj"
   set "ASM_SRC=firmware\vcpu_xmm.asm"
+) else if /i "%~1"=="vcpu-mxcsr" (
+  set "SRC=l2_smoke"
+  set "EFI=VCPUMXCS"
+  set "ISO=hv-vcpu-mxcsr"
+  set "CASE_FLAGS=/DHV_VCPU_MXCSR"
+  set "ASM_OBJ=build\vcpu_mxcsr.obj"
+  set "ASM_SRC=firmware\vcpu_mxcsr.asm"
 ) else if /i "%~1"=="exception-ud" (
   set "SRC=l2_smoke"
   set "EFI=EXCEPTUD"
@@ -83,7 +90,7 @@ if /i "%~1"=="l2" (
 ) else if /i "%~1"=="npt-broadcast" (
   set "ISO=hv-npt-broadcast"
   set "CROSS_PROFILE=npt-broadcast"
-) else if not "%~1"=="" (echo Usage: build.cmd [l2 or cpuid or vcpu-gpr or vcpu-xmm or exception-ud or irq-wake or irq-shadow or irq-priority or npt-write or npt-remap or npt-cross or npt-broadcast or forensic-write] & exit /b 1)
+) else if not "%~1"=="" (echo Usage: build.cmd [l2 or cpuid or vcpu-gpr or vcpu-xmm or vcpu-mxcsr or exception-ud or irq-wake or irq-shadow or irq-priority or npt-write or npt-remap or npt-cross or npt-broadcast or forensic-write] & exit /b 1)
 set "TOOLS=build\tools"
 set "INC_EDK=%TOOLS%\edk2\MdePkg\Include"
 set "PACK=%TOOLS%\packenv\Scripts\python.exe"
