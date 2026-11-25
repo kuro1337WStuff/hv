@@ -23,7 +23,7 @@ static UINTN arena_used;
 static __declspec(align(16)) UINT8 map_storage[128 * 1024];
 static volatile UINT32 *pixels;
 static UINT32 width, height, pitch;
-#ifdef HV_STANDALONE_CONTRACT
+#if defined(HV_STANDALONE_CONTRACT) || defined(HV_RANGE_AUDIT)
 #define LOG_ROWS 24u
 #elif defined(HV_PACKAGE)
 #define LOG_ROWS 42u
@@ -227,6 +227,8 @@ __declspec(noreturn) static void fail(const char *reason)
     screen("L1 POWER S5 FAIL", reason, 0xff00ff);
 #elif defined(HV_PACKAGE)
     screen("L1 PACKAGE FAIL", reason, 0xff00ff);
+#elif defined(HV_RANGE_AUDIT)
+    screen("L1 RANGE AUDIT FAIL", reason, 0xff00ff);
 #elif defined(HV_ACPI_MAP)
     screen("L1 ACPI MAP FAIL", reason, 0xff00ff);
 #elif defined(HV_ENTRY_TEST)
@@ -297,6 +299,8 @@ __declspec(noreturn) void L1OwnedMain(void)
     screen("L1 STAGED INPUT PASS", "FETCH DENIED: NO LINUX BOOT", 0x00ff00);
 #elif defined(HV_ENTRY_TEST)
     screen("L1 ENTRY GUARD PASS", "FETCH DENIED: NO LINUX BOOT", 0x00ff00);
+#elif defined(HV_RANGE_AUDIT)
+    screen("L1 RANGE AUDIT PASS", "COPY AUDITED: STILL NX", 0x00ff00);
 #elif defined(HV_ACPI_MAP)
     screen("L1 ACPI MAP PASS", "OWNED TABLES: NO LINUX BOOT", 0x00ff00);
 #else
