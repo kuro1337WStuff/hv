@@ -105,3 +105,11 @@ Offline admission checks do not boot the VM. With an archived `l1-entry-guard` I
 **Results:** `build/runs/RUN_ID/` contains the frozen queue (`queue.json`), timestamped events (`events.jsonl`) and captured console evidence. An exact match to a reviewed guest success screen is required to advance. A reviewed skip is not a pass; an unrecognized screen times out for operator review. A booted VM, an exit code from the launcher, or text printed by a build is not guest evidence. New guest output requires independent review before changing the expected result. Exit codes: `0` complete, `2` stopped, `3` attention, `1` runner error.
 
 Only known firmware profiles in the isolated project VM are eligible. Each batch preserves the starting state with a checkpoint; inspect checkpoint storage as it accumulates. No host boot changes, networking changes, background source edits, automatic commits, or retries of failures. Review evidence before adding it to the [journal](../journal/README.md). Raw batch artifacts stay local.
+
+## Host-only legacy PIC discovery and setup
+
+From the root, compile `cc -std=c11 -Wall -Wextra -Werror lab/tests/pic8259_test.c -o pic8259_test` and run `./pic8259_test`. No firmware, VM or privileged I/O is involved. The pinned protocol follows [`probe_8259A()` and `init_8259A(0)` in Linux v6.18.60](https://github.com/gregkh/linux/blob/v6.18.60/arch/x86/kernel/i8259.c):
+
+- Write `ff` to `a1`, write `fb` to `21`, then read `fb` at `21` (all hex, scalar bytes).
+- Start each chip with `11` at its command port. Master: `20←11`, then `21←30,04,01`; slave: `a0←11`, then `a1←38,02,01`. Each has its own sequence; a partial sequence cannot consume a peer's word. Data reads during that chip's sequence are outside the contract. Only after ICW4 is its data port an IMR again; restore the cached masks there and read them back.
+- The selected bases, cascade wiring and 8086 normal-EOI mode are fixed, not arbitrary configuration. A mask bit can be read back without any IRQ source being modeled. This gate does not implement interrupt arbitration, cascade/SCI delivery, command-port status, polling or EOIs. The separate `pit_pic.h` IRQ0 fixture retains its own restricted mask/EOI policy. A host test is neither a guest observation nor evidence that Linux selected a PIC.
