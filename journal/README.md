@@ -2,6 +2,14 @@
 
 Development host: Ryzen 9 9950X. Firmware runs use the `HV-SVM-L1` Hyper-V VM; host-only checks are labeled separately. Neither qualifies the 9950X3D deployment target on bare metal.
 
+## 027 · 2026-11-24 · The guest handles an invalid opcode and returns
+
+**Run 027 passed in `HV-SVM-L1`.** L2 executed `UD2` at `0x100C`. L1 intercepted `#UD` and delivered vector 6 without advancing the guest RIP. The guest handler ran once and found `0x100C` on its exception stack, not the address after the fault. Only the handler moved that saved address past the two-byte `UD2`. After `IRETQ`, L2 checked its restored stack and reached the success halt at `0x104F`.
+
+![VM console showing matching intercepted and stacked fault addresses, a single handler entry, and the final guest halt](images/exception-ud-027.png)
+
+Reproduce with `python lab/hv_queue.py run --rebuild exception-ud`. See the [test record](test-report.md#027--2026-11-24-local--invalid-opcode-delivery-and-return) for the injection fields and image digest.
+
 ## 026 · 2026-11-24 · Equal interrupt priority stays pending
 
 **Run 026 passed in `HV-SVM-L1`.** At `V_TPR=4`, a queued priority-4 interrupt remained pending even though guest interrupts were enabled and there was no interrupt shadow. The handler count was zero. L1 lowered `V_TPR` to 3 without queuing another interrupt. The handler ran once and saved return RIP `0x100F`, the first instruction after the checkpoint. The guest returned from the handler, recorded progress and halted.

@@ -190,3 +190,15 @@ L1 did not reassert the IRQ or set IF at the checkpoint. Guest `STI` set IF, the
 | Guest returns and halts | Pending bit clears; guest advances and restores its stack | `V_TPR=3`, `V_IRQ=0`, IF=1, shadow=0, phase=2, RSP `0x7FF0`, RIP `0x1050`, HLT exit `0x78`, RAX `0x50415353` |
 
 The only interrupt-control change on resume was the priority threshold. AMD64 APM Vol. 2, §§15.21.2 and 15.21.4 (pp. 556–557): without `V_IGN_TPR`, the pending interrupt's priority must be **greater than** `V_TPR`. This tests one pending vector on one nested vCPU, not arbitration between vectors, guest CR8 writes, APIC EOI, a timer, or bare metal.
+
+### 027 · 2026-11-24 local · Invalid-opcode delivery and return
+
+**Firmware PASS; queue ATTENTION for first-time screen review.** Ryzen 9 9950X, nested `HV-SVM-L1`; source `7bb2e4aaa3`. `python lab/hv_queue.py run --rebuild exception-ud`, batch `61ad1e1ce42746c49dfb0be37d3ef5a5`, ISO SHA-256 `952D72208651AA53FAD56C92ACED79E877AD4A7A3623CFFA0885E29764FDBACE`. The worker checkpointed the preceding `irq-priority` PASS and saved the [console capture](images/exception-ud-027.png). This first batch stopped for review and did not report COMPLETE.
+
+| Observation | Expected | Observed |
+| --- | --- | --- |
+| First exit on the guest's `UD2` | Exception intercept for vector 6, RIP still at the opcode | `EXITCODE=0x46`, RIP `0x100C` |
+| Re-entry without changing RIP | Deliver `#UD` with no error code; handler sees the original fault address once | Submitted `EVENTINJ=0x80000306`; handler count 1, stacked RIP `0x100C` |
+| Return past the fixed two-byte opcode | Guest continuation runs with the original stack and reaches its success HLT | Phase 3, RSP `0x7FF0`, HLT exit `0x78` at `0x104F`, RAX `0x50415353` |
+
+All exception intercepts remained enabled on re-entry. The guest validated its exception frame and the `0F 0B` bytes before advancing the saved RIP to `0x100E`. Skipping the fault in L1 would leave the handler count at zero; returning to the fault unchanged would produce another `#UD` exit instead of HLT. Reference: AMD64 APM Vol. 2, §§8.2.7 and 15.20. This covers one no-error-code fault on a single nested vCPU, not page faults, nested exceptions, or bare-metal delivery.

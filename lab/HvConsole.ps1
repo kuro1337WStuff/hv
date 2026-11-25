@@ -48,6 +48,7 @@ function Get-HvConsoleVerdict {
         'irq-wake'  { 'dd0cd66333528c1938541b88a921ad6e05d823446d9fbc3213ed2c8c4a856862' } # irq-wake-022.png
         'irq-shadow' { 'b12003240f8b92fc92ea2dc7ad572ff0b94f86e617f03c2e3080d1dcc2280883' } # irq-shadow-025.png
         'irq-priority' { '28003ccd910e792954d485335b8f82963552f8ac9bd6c0f9e25192afa216e97c' } # irq-priority-026.png
+        'exception-ud' { 'eb952d11473fe23fa5a4ceafbb3918e7a83321a963004c6ca57529876293f382' } # exception-ud-027.png
         'npt-remap' { 'b8a89c55ff3785983d41f30855c7af3e04fc0d5e87cb6122ab62a2c23affc061' } # npt-remap-008.png
         'npt-cross' { 'b4e0ee475d7add3a84c8294c3f69800fdf0244f315ba16375a645c1aa8f95d9e' } # npt-cross-015.png
         'npt-broadcast' { '7812af2f7444f89ad7c52b68fc8e72a202ce23c8a39e5a2eb98bf0a18863da7c' } # npt-broadcast-017.png
