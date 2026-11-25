@@ -4,6 +4,8 @@ Development host: Ryzen 9 9950X. Firmware runs use the `HV-SVM-L1` Hyper-V VM; h
 
 **Start here:** [Current status, feature trials and integration order](status.md). The entries below describe the integrated baseline through 041. Later feature evidence is published on `main` independently of its implementation; see [how trials are published](project-workflow.md).
 
+**[095 · Virtual cycles and shared PIT time](trials/095.md):** a sampled channel-2 interval matched the independent calculation, including rounding. No host frequency was measured.
+
 **[094 · Bench B remains held](trials/094.md):** the prior batch ended, but a read-only check found an incompatible handle on the session lock. No worker was changed and no VM ran.
 
 **[093 · One pulse source for two PIT channels](trials/093.md):** gating channel 2 did not suppress IRQ0, and shutting down channel 0 did not stop channel 2. Three host tests passed.
