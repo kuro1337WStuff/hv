@@ -4,6 +4,8 @@ Development host: Ryzen 9 9950X. Firmware runs use the `HV-SVM-L1` Hyper-V VM; h
 
 **Start here:** [Current status, feature trials and integration order](status.md). The entries below describe the integrated baseline through 041. Later feature evidence is published on `main` independently of its implementation; see [how trials are published](project-workflow.md).
 
+**[090 · Init output and virtual S5](trials/090.md):** the host verifier required an independent terminal stop bound to the same capture. The genuine fixed S5 fixture was not mistaken for Linux shutdown.
+
 **[089 · Periodic IRQ0 service](trials/089.md):** masked rising edges coalesced; a new request during service survived the specific EOI. No guest interrupt was injected.
 
 **[088 · Pinned init serial milestones](trials/088.md):** eight offline tests passed. A synthetic capture kept its `ATTENTION` disposition; genuine 047 UART bytes were rejected as Linux init evidence.
