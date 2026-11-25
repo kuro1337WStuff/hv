@@ -133,6 +133,13 @@ def run(args):
         if (path / 'STOP').exists():
             host_event(path, 'STOPPED', 'Stopped before VM management; no VM changes.')
             return 2
+        if args.stage_only:
+            host_event(path, 'READY', 'Images staged only. No worker started or VM changed.')
+            print('In your existing administrator PowerShell window, run:', flush=True)
+            worker = str(LAB / 'Invoke-HvQueue.ps1').replace("'", "''")
+            run_dir = str(path).replace("'", "''")
+            print(f"powershell.exe -NoProfile -File '{worker}' -RunDir '{run_dir}'", flush=True)
+            return 0
         host_event(path, 'READY', 'Images staged. Starting visible Hyper-V worker. Press Q there, or Ctrl+C here, to stop.')
         offset = (path / 'events.jsonl').stat().st_size
         # One visible worker for this batch. No service, scheduled task, stored credential,
@@ -162,6 +169,7 @@ def main():
     start = sub.add_parser('run', help='Stage and run profiles in order; stop on the first non-PASS.')
     start.add_argument('profiles', nargs='*', help='Ordered subset of ' + ', '.join(PROFILES) + ' (default: all).')
     start.add_argument('--rebuild', action='store_true', help='Rebuild the selected firmware profiles before elevation.')
+    start.add_argument('--stage-only', action='store_true', help='Freeze the batch without starting a worker; print the command for an existing administrator PowerShell window.')
     for action in ('watch', 'stop'):
         sub.add_parser(action).add_argument('run_id')
     args = parser.parse_args()
