@@ -17,6 +17,7 @@ The [journal](README.md) records these console observations on a Ryzen 9 9950X u
 | Host-side NPT layout | Host only, no VMRUN | The four-level walk maps the fixed guest page at GPA `0x1000` to its designated backing page, read-only; no other leaf is present. This checks table contents, not hardware enforcement. |
 | Nested regression | `l2` and `cpuid`, each rebuilt and booted in the AMD Hyper-V lab | Record each image separately. `l2` must reproduce the halt, RIP and marker from 002; `cpuid` must reproduce the two exits and guest-generated PASS from 003. Record the resume path actually observed. |
 | NPT write protection | `npt-write`, paired control and protected store | The writable store must reach HLT and change the target byte. After restoring the byte and revoking write permission, the same store must cause a final-data write protection NPF at the expected GPA and instruction, leaving the byte unchanged. |
+| Forensic write report | `forensic-write`, same fixed store with permissions changed | Writable control: no protection event, HLT at `0x1005`, byte `0xA5`. Protected arm: final-data write protection NPF at RIP `0x1000`, GPA `0x2000`; decoding the saved instruction must independently yield `MOV byte [0x2000],0xA5`; backing byte must be `0x5A` before and after. |
 | All-processor nested GPA invalidation | `npt-broadcast`, opt-in on AMD Hyper-V | Both measured processor IDs must first read A through the same NPT root. With both L2s stopped, change the leaf, require success from one BSP `HvCallFlushGuestPhysicalAddressSpace` on that root, then require both L2s to read B at the original GPA and HLT site with no entry flush. Missing capability is SKIP, not PASS. No claim about which instruction L0 used. |
 
 **Target qualification:** No bare-metal Ryzen 9 9950X3D run is recorded here. Host-side checks and nested runs on the 9950X do not qualify that target.
@@ -115,3 +116,14 @@ Before guest entry, the bootstrap processor and application processor independen
 The [captured console](images/npt-broadcast-017.png) meets the predeclared criterion. L1 APIC IDs 0 and 1 each read `AX=0xA11A` at GPA `0x2000` before the remap. The BSP reported `CPUID.4000000A:EAX=0x4A0000` (AMD enlightened NPT bit 22 set). After the leaf changed, the BSP issued one `HvCallFlushGuestPhysicalAddressSpace` (`0xAF`) for the shared `nCR3`; status `0` means success. Both vCPUs re-entered with `TLB_CONTROL=0` and returned `AX=0xB22B`. All four samples exited at HLT (`0x78`, RIP `0x1003`).
 
 [Hyper-V nested address spaces](https://learn.microsoft.com/en-us/virtualization/hyper-v-on-windows/tlfs/nested-virtualization#second-level-address-translation) define the AMD target; [the hypercall contract](https://learn.microsoft.com/en-us/virtualization/hyper-v-on-windows/tlfs/hypercalls/hvcallflushguestphysicaladdressspace) defines completion on all processors before return. The BSP reported `CPUID.80000008:EBX[3]=0`; native `INVLPGB`/`TLBSYNC` was not tested. This run establishes the guest-visible result, not TLB residency, L0's implementation, interruption of an active L2, or 9950X3D bare-metal behavior.
+
+### 018 · 2026-11-24 local · Forensic write protection
+
+**Firmware PASS; queue ATTENTION (first screen review).** Ryzen 9 9950X, `HV-SVM-L1`. Source `ea55a6e9c2`; `python lab/hv_queue.py run --rebuild forensic-write`; batch `26f2f1ade697485cb4951a1310c55371`. ISO SHA-256 `380FE7D6B3C972428A70748E7DB559A618B5330B09CCC72F7A2E26494D974F24`. The queue checkpointed the preceding `npt-broadcast` PASS, booted the forensic image, then saved the [live console](images/forensic-write-018.png) and stopped for review; it did not report COMPLETE.
+
+| Observation | Writable control | Read-only attempt |
+| --- | --- | --- |
+| Exit and saved RIP | HLT `0x78` at `0x1005` (after store) | NPF `0x400` at `0x1000` (on store) |
+| Backing byte | `0xA5` after store | `0x5A` before and after |
+
+`EXITINFO1=0x100000007`: present, write, final translation; not an instruction fetch or a guest page-table walk. `EXITINFO2=0x2000`. Independently decoding the bytes at the saved RIP in the immutable fixture yielded destination `0x2000` and immediate `0xA5`. The fault was neither resumed nor emulated. The attempted value came from the instruction, not the NPF metadata. Reference: AMD64 Architecture Programmer’s Manual, Vol. 2, §15.25.7, pp. 575–576. No bare-metal run.

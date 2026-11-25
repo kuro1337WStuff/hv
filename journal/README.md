@@ -2,6 +2,14 @@
 
 Development host: Ryzen 9 9950X. Firmware runs use the `HV-SVM-L1` Hyper-V VM; host-only checks are labeled separately. Neither qualifies the 9950X3D deployment target on bare metal.
 
+## 018 · 2026-11-24 · Distinguishing an attempted write from a committed write
+
+**PASS in `HV-SVM-L1`.** With writes allowed, L2 stored `0xA5` and reached HLT. With the same page read-only, L1 reported a write protection fault. The instruction at the saved RIP decoded as `MOV byte [0x2000], 0xA5`; its destination matched the fault address reported by the processor. A separate read of the backing byte showed `0x5A` both before and after the attempt.
+
+![VM console showing the writable control, decoded protected store, and unchanged backing byte](images/forensic-write-018.png)
+
+Run: `python lab/hv_queue.py run --rebuild forensic-write`. The queue stopped for first-time screen review. [Run 018](test-report.md#018--2026-11-24-local--forensic-write-protection) records the exact image and exit fields. This verifies one fixed 16-bit instruction under nested Hyper-V, not general-purpose instruction decoding.
+
 ## 017 · 2026-11-24 · One nested GPA flush for both processors
 
 **PASS in `HV-SVM-L1`.** Both L2s read `0xA11A` at GPA `0x2000` and halted. With both stopped, L1 remapped the page. Processor 0 issued a single Hyper-V all-processor flush for the shared NPT root and received status `0`. On re-entry, neither processor requested a local flush. Both read `0xB22B`.
