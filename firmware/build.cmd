@@ -82,6 +82,15 @@ if /i "%~1"=="l2" (
   set "ASM_SRC=firmware\l1_handoff.asm"
   set "EXTRA_ASM=vcpu_fpstate floor_guest"
   set "EXTRA_ASM_FLAGS=/DHV_CPU_CONTRACT"
+) else if /i "%~1"=="l1-efer-read" (
+  set "SRC=l1_handoff"
+  set "EFI=L1EFERREAD"
+  set "ISO=hv-l1-efer-read"
+  set "CASE_FLAGS=/DHV_STANDALONE_L2 /DHV_PACKAGE /DHV_CPU_CONTRACT /DHV_EFER_READ"
+  set "ASM_OBJ=build\l1_efer_handoff.obj"
+  set "ASM_SRC=firmware\l1_handoff.asm"
+  set "EXTRA_ASM=vcpu_fpstate efer_read"
+  set "EXTRA_ASM_FLAGS=/DHV_CPU_CONTRACT"
 ) else if /i "%~1"=="l1-page-pair" (
   set "SRC=l1_handoff"
   set "EFI=L1PAGEPAIR"

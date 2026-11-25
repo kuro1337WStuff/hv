@@ -162,6 +162,8 @@ static const char *run_standalone_l2(void *reservation, StandaloneSample *sample
     const char *error=cr4_guard_run(vmcb);
 #elif defined(HV_CR4_GP)
     const char *error=cr4_gp_run(vmcb);
+#elif defined(HV_EFER_READ)
+    const char *error=efer_read_run(vmcb,efer);
 #elif defined(HV_FLOOR_CONTRACT)
     const char *error=floor_contract_run(vmcb);
 #elif defined(HV_CPU_CONTRACT)

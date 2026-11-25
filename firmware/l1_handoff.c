@@ -205,7 +205,9 @@ static void log_hex(char *line, const char *label, UINT64 value)
 __declspec(noreturn) static void fail(const char *reason)
 {
     L1DisableInterrupts();
-#if defined(HV_FLOOR_CONTRACT)
+#if defined(HV_EFER_READ)
+    screen("L1 EFER READ FAIL", reason, 0xff00ff);
+#elif defined(HV_FLOOR_CONTRACT)
     screen("L1 CPU FLOOR FAIL", reason, 0xff00ff);
 #elif defined(HV_PAGE_PAIR)
     screen("L1 PAGE PAIR FAIL", reason, 0xff00ff);
@@ -311,6 +313,8 @@ __declspec(noreturn) void L1OwnedMain(void)
     screen("L1 CONSOLE TX PASS", "TWO PHASES: BOUNDED CAPTURE", 0x00ff00);
 #elif defined(HV_POWER_CONTRACT)
     screen("L1 POWER S5 PASS", "FIXED GUEST: VIRTUAL POWER", 0x00ff00);
+#elif defined(HV_EFER_READ)
+    screen("L1 EFER READ PASS", "VIRTUAL READ AND REFUSAL", 0x00ff00);
 #elif defined(HV_FLOOR_CONTRACT)
     screen("L1 CPU FLOOR PASS", "FIXED GUEST: FEATURE FLOOR", 0x00ff00);
 #elif defined(HV_PAGE_PAIR)
