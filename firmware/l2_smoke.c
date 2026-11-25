@@ -206,8 +206,11 @@ static void smoke(EFI_SYSTEM_TABLE *st)
     FIELD(UINT64,MsrpmPa)=base+Msrpm*EFI_PAGE_SIZE;
     FIELD(UINT32,Asid)=1;
     FIELD(UINT8,TlbControl)=1; /* flush before ASID reuse */
-#ifdef HV_IRQ_SHADOW
+#if defined(HV_IRQ_SHADOW) || defined(HV_IRQ_PRIORITY)
     FIELD(UINT64,IntControl)=(1ull<<24)|VIrq|(IrqPriority<<16)|((UINT64)IrqVector<<32);
+#ifdef HV_IRQ_PRIORITY
+    FIELD(UINT8,IntControl)=IrqPriority; /* V_TPR equals V_INTR_PRIO; V_IGN_TPR stays clear. */
+#endif
 #else
     FIELD(UINT32,IntControl)=1u<<24;
 #endif
@@ -230,6 +233,9 @@ static void smoke(EFI_SYSTEM_TABLE *st)
     FIELD(UINT64,Dr6)=0xffff0ff0u;
     FIELD(UINT64,Dr7)=0x400;
     FIELD(UINT64,Flags)=2;
+#ifdef HV_IRQ_PRIORITY
+    FIELD(UINT64,Flags)|=1u<<9; /* IF is not the gate under test. */
+#endif
     FIELD(UINT64,Rip)=FixedGuestGpa;
     FIELD(UINT64,Pat)=__readmsr(0x277);
     FIELD(UINT64,ExitCode)=~0ull; /* never confuse unmodified memory with success */
@@ -241,6 +247,8 @@ static void smoke(EFI_SYSTEM_TABLE *st)
 #elif defined(HV_IRQ_WAKE)
 #ifdef HV_IRQ_SHADOW
     out->OutputString(out,L"Masked IRQ: VMMCALL checkpoint, STI shadow, vector 41h\r\n");
+#elif defined(HV_IRQ_PRIORITY)
+    out->OutputString(out,L"Priority gate: vector 41h, equal then lower V_TPR\r\n");
 #else
     out->OutputString(out,L"Virtual HLT: wait, deliver vector 41h, IRETQ, resume\r\n");
 #endif

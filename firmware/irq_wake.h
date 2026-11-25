@@ -5,6 +5,9 @@ extern const UINT8 IrqStart[];
 #ifdef HV_IRQ_SHADOW
 extern const struct { UINT32 size, checkpoint, sti, afterShadow, handler, pass, fail; } IrqLayout;
 _Static_assert(sizeof(IrqLayout)==7*sizeof(UINT32), "IRQ shadow layout ABI mismatch");
+#elif defined(HV_IRQ_PRIORITY)
+extern const struct { UINT32 size, checkpoint, after, handler, pass, fail; } IrqLayout;
+_Static_assert(sizeof(IrqLayout)==6*sizeof(UINT32), "IRQ priority layout ABI mismatch");
 #else
 extern const struct { UINT32 size, wait, after, handler, pass, fail; } IrqLayout;
 _Static_assert(sizeof(IrqLayout)==6*sizeof(UINT32), "IRQ wake layout ABI mismatch");
@@ -17,7 +20,7 @@ typedef struct { UINT64 count, return_ip, progress, captured_phase; } IrqEvidenc
 typedef struct {
     UINT64 checkpoint_ip;
     UINT32 vmruns;
-#ifdef HV_IRQ_SHADOW
+#if defined(HV_IRQ_SHADOW) || defined(HV_IRQ_PRIORITY)
     UINT64 checkpoint_flags, checkpoint_control, checkpoint_shadow, checkpoint_rsp;
     UINT64 checkpoint_phase, checkpoint_count;
     BOOLEAN checkpoint_ok;
@@ -34,6 +37,8 @@ static BOOLEAN irq_layout_ok(UINTN length)
 #ifdef HV_IRQ_SHADOW
     const UINT32 sites[]={IrqLayout.checkpoint,IrqLayout.sti,IrqLayout.afterShadow,
                           IrqLayout.handler,IrqLayout.pass,IrqLayout.fail};
+#elif defined(HV_IRQ_PRIORITY)
+    const UINT32 sites[]={IrqLayout.checkpoint,IrqLayout.after,IrqLayout.handler,IrqLayout.pass,IrqLayout.fail};
 #else
     const UINT32 sites[]={IrqLayout.wait,IrqLayout.after,IrqLayout.handler,IrqLayout.pass,IrqLayout.fail};
 #endif
@@ -51,6 +56,11 @@ static BOOLEAN irq_layout_ok(UINTN length)
     for (UINTN i=0; i<sizeof(window); ++i)
         if (IrqStart[IrqLayout.checkpoint+i]!=window[i]) return FALSE;
     return IrqStart[IrqLayout.pass]==0xf4 && IrqStart[IrqLayout.fail]==0xf4;
+#elif defined(HV_IRQ_PRIORITY)
+    return IrqLayout.after==IrqLayout.checkpoint+3 &&
+           IrqStart[IrqLayout.checkpoint]==0x0f && IrqStart[IrqLayout.checkpoint+1]==0x01 &&
+           IrqStart[IrqLayout.checkpoint+2]==0xd9 &&
+           IrqStart[IrqLayout.pass]==0xf4 && IrqStart[IrqLayout.fail]==0xf4;
 #else
     return IrqLayout.after==IrqLayout.wait+1 && IrqStart[IrqLayout.wait]==0xf4 &&
            IrqStart[IrqLayout.pass]==0xf4 && IrqStart[IrqLayout.fail]==0xf4;
@@ -80,7 +90,7 @@ static void irq_guest_tables(UINT8 *vmcb, EFI_PHYSICAL_ADDRESS base)
 static void irq_run(UINT8 *vmcb, IrqTrace *trace)
 {
     volatile IrqEvidence *e=(volatile IrqEvidence *)(vmcb+GuestStack*EFI_PAGE_SIZE);
-#ifdef HV_IRQ_SHADOW
+#if defined(HV_IRQ_SHADOW) || defined(HV_IRQ_PRIORITY)
     __svm_vmrun((UINTN)vmcb);
     trace->vmruns=1;
     trace->checkpoint_ip=FIELD(UINT64,Rip);
@@ -92,13 +102,27 @@ static void irq_run(UINT8 *vmcb, IrqTrace *trace)
     trace->checkpoint_count=e->count;
     trace->checkpoint_ok=FIELD(UINT64,ExitCode)==0x81 &&
         trace->checkpoint_ip==irq_ip(IrqLayout.checkpoint) &&
+#ifdef HV_IRQ_PRIORITY
+        (trace->checkpoint_flags&(1u<<9)) && (trace->checkpoint_control&VIrq) &&
+        !(trace->checkpoint_control&(1u<<20)) && /* V_IGN_TPR */
+        ((trace->checkpoint_control>>32)&0xff)==IrqVector &&
+        ((trace->checkpoint_control>>16)&15)==IrqPriority &&
+        (trace->checkpoint_control&15)==IrqPriority &&
+#else
         !(trace->checkpoint_flags&(1u<<9)) && (trace->checkpoint_control&VIrq) &&
+#endif
         trace->checkpoint_shadow==0 && trace->checkpoint_rsp==LongInitialRsp &&
         trace->checkpoint_phase==1 && trace->checkpoint_count==0 &&
         e->return_ip==0 && e->captured_phase==0;
     /* The first VMRUN must stop at VMMCALL with the single queued V_IRQ still pending. */
     if (!trace->checkpoint_ok) return;
+#ifdef HV_IRQ_PRIORITY
+    /* Keep the original request: change only the threshold nibble. */
+    FIELD(UINT8,IntControl)=(UINT8)((trace->checkpoint_control&0xf0)|(IrqPriority-1));
+    FIELD(UINT64,Rip)=irq_ip(IrqLayout.after);
+#else
     FIELD(UINT64,Rip)=irq_ip(IrqLayout.sti);
+#endif
     FIELD(UINT8,TlbControl)=0;
     FIELD(UINT64,ExitCode)=~0ull;
     trace->vmruns=2;
@@ -122,10 +146,49 @@ static void irq_run(UINT8 *vmcb, IrqTrace *trace)
 #endif
 }
 
+#ifdef HV_IRQ_PRIORITY
+/* Keep both snapshots visible on one 80x25 firmware console. */
+static void irq_pair(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *out, CHAR16 *label, UINT64 a, UINT64 b)
+{
+    CHAR16 buf[18];
+    UINTN n=sizeof(buf)/sizeof(buf[0]);
+    buf[--n]=0;
+    do { buf[--n]=L"0123456789ABCDEF"[a&15]; a>>=4; } while (a);
+    out->OutputString(out,label);
+    out->OutputString(out,buf+n);
+    hex(out,L" / ",b);
+}
+#endif
+
 static void irq_report(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *out, UINT8 *vmcb, const IrqTrace *trace)
 {
     volatile IrqEvidence *e=(volatile IrqEvidence *)(vmcb+GuestStack*EFI_PAGE_SIZE);
-#ifdef HV_IRQ_SHADOW
+#ifdef HV_IRQ_PRIORITY
+    UINT64 control=FIELD(UINT64,IntControl);
+    irq_pair(out,L"Checkpoint RIP / V_TPR: ",trace->checkpoint_ip,trace->checkpoint_control&15);
+    irq_pair(out,L"Queued vector / priority: ",(trace->checkpoint_control>>32)&0xff,(trace->checkpoint_control>>16)&15);
+    irq_pair(out,L"Equal pending / V_IGN_TPR: ",!!(trace->checkpoint_control&VIrq),(trace->checkpoint_control>>20)&1);
+    irq_pair(out,L"Equal IF / shadow: ",(trace->checkpoint_flags>>9)&1,trace->checkpoint_shadow);
+    irq_pair(out,L"Equal phase / count: ",trace->checkpoint_phase,trace->checkpoint_count);
+    irq_pair(out,L"Final V_TPR / pending: ",control&15,!!(control&VIrq));
+    irq_pair(out,L"Final IF / shadow: ",(FIELD(UINT64,Flags)>>9)&1,FIELD(UINT64,IntShadow));
+    irq_pair(out,L"Handler phase / count: ",e->captured_phase,e->count);
+    irq_pair(out,L"Stacked RIP / final phase: ",e->return_ip,e->progress);
+    irq_pair(out,L"Final RIP / RSP: ",FIELD(UINT64,Rip),FIELD(UINT64,Rsp));
+    irq_pair(out,L"Final exit / RAX: ",FIELD(UINT64,ExitCode),FIELD(UINT64,Rax));
+    if (trace->checkpoint_ok && trace->vmruns==2 && FIELD(UINT64,ExitCode)==0x78 &&
+        FIELD(UINT64,Rip)==irq_ip(IrqLayout.pass) && FIELD(UINT64,Rax)==0x50415353 &&
+        !(control&VIrq) && (control&15)==IrqPriority-1 &&
+        FIELD(UINT64,Rsp)==LongInitialRsp && (FIELD(UINT64,Flags)&(1u<<9)) &&
+        FIELD(UINT64,IntShadow)==0 && e->count==1 && e->captured_phase==1 &&
+        e->return_ip==irq_ip(IrqLayout.after) && e->progress==2) {
+        out->OutputString(out,L"PASS: equal V_TPR blocked; lower V_TPR delivered once.\r\n");
+        return;
+    }
+    out->OutputString(out,L"FAIL: priority checkpoint or delivery mismatch.\r\n");
+    hex(out,L"VMRUN count: ",trace->vmruns);
+    hex(out,L"EXITCODE: ",FIELD(UINT64,ExitCode));
+#elif defined(HV_IRQ_SHADOW)
     hex(out,L"Checkpoint RIP: ",trace->checkpoint_ip);
     hex(out,L"Masked IF: ",(trace->checkpoint_flags>>9)&1);
     hex(out,L"Masked V_IRQ pending: ",!!(trace->checkpoint_control&VIrq));

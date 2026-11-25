@@ -26,6 +26,13 @@ if /i "%~1"=="l2" (
   set "CASE_FLAGS=/DHV_VCPU_GPR"
   set "ASM_OBJ=build\vcpu_gpr.obj"
   set "ASM_SRC=firmware\vcpu_gpr.asm"
+) else if /i "%~1"=="irq-priority" (
+  set "SRC=l2_smoke"
+  set "EFI=IRQPRIORITY"
+  set "ISO=hv-irq-priority"
+  set "CASE_FLAGS=/DHV_IRQ_WAKE /DHV_IRQ_PRIORITY"
+  set "ASM_OBJ=build\irq_priority.obj"
+  set "ASM_SRC=firmware\irq_priority.asm"
 ) else if /i "%~1"=="irq-shadow" (
   set "SRC=l2_smoke"
   set "EFI=IRQSHADOW"
