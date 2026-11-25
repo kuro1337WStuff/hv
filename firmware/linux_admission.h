@@ -3,6 +3,7 @@
 #include "fixed_vmcb.h"
 #include "linux_layout.h"
 #include "linux_media.h"
+#include "fetch_walk.h"
 
 /* Reservation indices are L1 pages, not GPAs. Only LinuxRamFirst..LinuxStageFirst-1
  * can supply leaf frames. The caller owns the adjacent stack separately. */
@@ -63,33 +64,23 @@ static BOOLEAN linux_tree_ok(UINT8 *vmcb)
     return 1;
 }
 
-static const char *linux_admit(UINT8 *base)
+#define LINUX_GUARD_WORD UINT64_C(0x50354e5847554152)
+static BOOLEAN linux_guard_ok(UINT8 *base)
 {
-    enum { Gdtr=0x460, RsiSlot=4 };
-    const UINT64 nxe=1ull<<11, canary=0x50354e5847554152ull;
-    UINT8 *vmcb=base, *ram=base+LinuxRamFirst*LinuxPage, *media=linux_stage(base);
     volatile UINT64 *guard=(volatile UINT64 *)(base+LinuxGuard*LinuxPage);
-    UINT64 frame[14];
-    LinuxLayout layout;
-    int cpu[4];
-    __cpuid(cpu,(int)0x80000001u);
-    if (!(cpu[3]&(1u<<20)) || !(__readmsr(MSR_EFER)&nxe)) return "NX REQUIRED";
-    const char *error=build_linux_layout(ram,LinuxRamBytes,media+LinuxImageOff,LinuxImageLen,
-        media+LinuxRdOff,LinuxRdLen,media+LinuxCmdOff,LinuxCmdLen,&layout);
-    if (error) return error;
-    /* Pin the secondary stop too: CLD is a single, non-repeating instruction
-     * that cannot clear TF or establish a debug shadow. If NX is ignored, its
-     * intercepted single-step is a terminal failure, never proof of admission. */
-    if (ram[layout.entry]!=0xfc) return "ADMIT FIRST OPCODE";
+    for (UINTN i=0; i<LinuxPage/sizeof(*guard); ++i)
+        if (guard[i]!=LINUX_GUARD_WORD) return FALSE;
+    return TRUE;
+}
 
+static void linux_fetch_vmcb(UINT8 *vmcb, UINT64 entry)
+{
+    enum { Gdtr=0x460 };
     __stosb(vmcb,0,LinuxPage); /* Never clear the active HSAVE page. */
-    __stosb(base+LinuxIoFirst*LinuxPage,0xff,5*LinuxPage);
-    for (UINTN i=0; i<LinuxPage/sizeof(*guard); ++i) guard[i]=canary;
-    linux_build_npt(base);
-    fixed_vmcb_defaults(vmcb,(UINTN)base);
-    FIELD(UINT64,IopmPa)=(UINTN)(base+LinuxIoFirst*LinuxPage);
-    FIELD(UINT64,MsrpmPa)=(UINTN)(base+LinuxMsrFirst*LinuxPage);
-    FIELD(UINT64,NestedCr3)=(UINTN)(base+LinuxNptFirst*LinuxPage);
+    fixed_vmcb_defaults(vmcb,(UINTN)vmcb);
+    FIELD(UINT64,IopmPa)=(UINTN)(vmcb+LinuxIoFirst*LinuxPage);
+    FIELD(UINT64,MsrpmPa)=(UINTN)(vmcb+LinuxMsrFirst*LinuxPage);
+    FIELD(UINT64,NestedCr3)=(UINTN)(vmcb+LinuxNptFirst*LinuxPage);
     for (UINTN seg=Es; seg<=Ds; seg+=16) {
         FIELD(UINT16,seg)=seg==Cs ? LinuxCs : LinuxDs;
         FIELD(UINT16,seg+2)=seg==Cs ? 0xa9b : 0xc93;
@@ -97,13 +88,39 @@ static const char *linux_admit(UINT8 *base)
     }
     FIELD(UINT32,Gdtr+4)=LinuxGdtLimit;
     FIELD(UINT64,Gdtr+8)=LinuxGdt;
-    FIELD(UINT64,GuestEfer)=SVME|nxe|(1u<<8)|(1u<<10); /* LME/LMA */
+    FIELD(UINT64,GuestEfer)=SVME|(1u<<11)|(1u<<8)|(1u<<10); /* NXE/LME/LMA */
     FIELD(UINT64,Cr4)=1u<<5; /* PAE, four-level guest paging */
     FIELD(UINT64,Cr3)=LinuxPml4;
     FIELD(UINT64,Cr0)=0x80010031u; /* PG/WP/NE/ET/PE */
     FIELD(UINT64,Rsp)=LinuxStackTop;
-    FIELD(UINT64,Rip)=layout.entry;
+    FIELD(UINT64,Rip)=entry;
     FIELD(UINT64,Flags)=0x102; /* IF clear, TF set. #DB is intercepted, never success. */
+}
+
+#include "fetch_fixture.h"
+
+static const char *linux_admit(UINT8 *base)
+{
+    enum { RsiSlot=4 };
+    UINT8 *vmcb=base, *ram=base+LinuxRamFirst*LinuxPage, *media=linux_stage(base);
+    volatile UINT64 *guard=(volatile UINT64 *)(base+LinuxGuard*LinuxPage);
+    UINT64 frame[14];
+    LinuxLayout layout;
+    int cpu[4], precision;
+    __cpuid(cpu,(int)0x80000001u);
+    if (!(cpu[3]&(1u<<20)) || !(__readmsr(MSR_EFER)&(1u<<11))) return "NX REQUIRED";
+    __stosb(base+LinuxIoFirst*LinuxPage,0xff,5*LinuxPage);
+    for (UINTN i=0; i<LinuxPage/sizeof(*guard); ++i) guard[i]=LINUX_GUARD_WORD;
+    const char *error=run_fetch_fixture(base,&precision);
+    if (error) return error;
+
+    error=build_linux_layout(ram,LinuxRamBytes,media+LinuxImageOff,LinuxImageLen,
+        media+LinuxRdOff,LinuxRdLen,media+LinuxCmdOff,LinuxCmdLen,&layout);
+    if (error) return error;
+    linux_fetch_vmcb(vmcb,layout.entry);
+    uint64_t walked;
+    if (!fetch_walk(ram,LinuxRamBytes,FIELD(UINT64,Cr3),layout.entry,&walked) ||
+        walked!=layout.entry || ram[walked]!=0xfc) return "ADMIT ENTRY MAPPING";
     __stosb((UINT8 *)frame,0,sizeof(frame));
     frame[RsiSlot]=LinuxParams;
     if (!linux_tree_ok(vmcb)) return "ADMIT NPT SETUP";
@@ -117,16 +134,16 @@ static const char *linux_admit(UINT8 *base)
     pkg_observe("P5 GPA ",gpa);
     pkg_observe("P5 RIP ",rip);
     pkg_observe("P5 RSI ",frame[RsiSlot]);
+    pkg_observe("P5 WALK ",walked);
     pkg_observe("P5 CR3 ",cr3);
     pkg_observe("P5 INITRD ",rd);
     pkg_observe("P5 GUARD ",guarded);
     if (!linux_tree_ok(vmcb)) return "ADMIT NPT CHANGED";
-    for (UINTN i=0; i<LinuxPage/sizeof(*guard); ++i)
-        if (guard[i]!=canary) return "ADMIT PRIVATE GUARD";
+    if (!linux_guard_ok(base)) return "ADMIT PRIVATE GUARD";
     /* APM vol. 2 15.25.7: final GPA (not a guest walk), protection fault,
      * instruction fetch. Nested U/S is not guest CPL; allow either value. */
     if (exit!=0x400 || (info & ~4ull)!=((1ull<<32)|0x11) ||
-        gpa!=layout.entry || rip!=layout.entry) return "ADMIT FETCH NPF";
+        rip!=layout.entry || fetch_precision(walked,gpa)!=precision) return "ADMIT FETCH NPF";
     if (cr3!=LinuxPml4 || rd!=layout.initrd || linux_le32(ram+LinuxParams+0x21c)!=LinuxRdLen ||
         FIELD(UINT64,Rsp)!=LinuxStackTop || FIELD(UINT64,Rax)!=0) return "ADMIT ENTRY STATE";
     for (UINTN i=0; i<14; ++i)

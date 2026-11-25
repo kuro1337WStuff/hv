@@ -27,7 +27,7 @@ static UINT32 width, height, pitch;
 #define LOG_ROWS 42u
 #define LOG_Y(i) (80u + 16u * (i))
 #elif defined(HV_LINUX_ADMISSION)
-#define LOG_ROWS 9u
+#define LOG_ROWS 25u /* handoff, three five-field controls, nine Linux observations */
 #elif defined(HV_STANDALONE_L2) && defined(HV_NPT_WRITE)
 #define LOG_ROWS 11u  /* HANDOFF and ten sampled values */
 #define NPT_INFO_LABEL "EXITINFO1 "

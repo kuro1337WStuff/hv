@@ -53,6 +53,8 @@ For a manual handoff instead, `run --stage-only` builds/stages without starting 
 
 Before `ExitBootServices`, L1 reads the fixed guest files from its own boot volume into private staging. After handoff it builds the Linux 2.15 `boot_params`, e820, GDT and identity map in owned RAM. L1's separate NPT must map that RAM and no private pages, leave the reserved hole absent, and deny execution. The only acceptable guest exit is a present final instruction-fetch NPF at kernel entry `0x1000200`, with `RSI=0x10000`. Do not lift NX to turn this admission check into an OS runner.
 
+The admission image first measures fault-address precision using three fresh VMCBs and nonidentity guest mappings. Two instruction offsets share a page, then the first offset is used on a different page. L1 independently walks the guest tables; raw `EXITINFO2` must consistently be either the exact walked byte GPA or exactly its 4 KiB page base in all three arms. A different offset on the right page is not accepted. The Linux arm must match the independently established mode, retain its exact entry RIP and satisfy the original fault-cause, register, full-NPT and guard checks. This is a nested configuration measurement, not a universal AMD reporting rule.
+
 For a host-only layout check, use an x64 Visual Studio Developer Command Prompt at the repository root:
 
 ```cmd
