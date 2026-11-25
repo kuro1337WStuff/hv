@@ -16,7 +16,7 @@ The [journal](README.md) records these console observations on a Ryzen 9 9950X u
 | --- | --- | --- |
 | Host-side NPT layout | Host only, no VMRUN | The four-level walk maps the fixed guest page at GPA `0x1000` to its designated backing page, read-only; no other leaf is present. This checks table contents, not hardware enforcement. |
 | Nested regression | `l2` and `cpuid`, each rebuilt and booted in the AMD Hyper-V lab | Record each image separately. `l2` must reproduce the halt, RIP and marker from 002; `cpuid` must reproduce the two exits and guest-generated PASS from 003. Record the resume path actually observed. |
-| Future NPT permission check | Separate fixed-guest negative test | An attempted write to the read-only guest page must produce an AMD nested-page fault for the expected guest physical address and write access; the backing bytes must remain unchanged. Neither the host walk nor a successful HLT establishes this. |
+| NPT write protection | `npt-write`, paired control and protected store | The writable store must reach HLT and change the target byte. After restoring the byte and revoking write permission, the same store must cause a final-data write protection NPF at the expected GPA and instruction, leaving the byte unchanged. |
 
 **Target qualification:** No bare-metal Ryzen 9 9950X3D run is recorded here. Host-side checks and nested runs on the 9950X do not qualify that target.
 
@@ -41,3 +41,14 @@ Source: [`ff5f1867c8`](https://github.com/kuro1337WStuff/hv/commit/ff5f1867c85f8
 | 004 | `fixed_npt_test.exe` | `c5dbdc0c52b0d71828629e6988217d2c3abfa3a48456d27fb33f9bd8deec4e81` |
 | 005 | `hv-l2-smoke.iso` | `c51d227156cdef4489782cbe7307ebc8b06d1c414cba2108fce842dc627c4296` |
 | 006 | `hv-cpuid-resume.iso` | `6976361fe10966f151b1da4b6d8b3c28b4614455853340bb48733f85b3e1e31c` |
+
+### 007 · 2026-11-24 · Writable control and read-only NPT store
+
+**PASS · nested SVM, Hyper-V on Ryzen 9 9950X.** Source [`da53379ed1`](https://github.com/kuro1337WStuff/hv/commit/da53379ed1d1e923e43202a6bdb0d2d4325b869a); tested `hv-npt-write.iso` SHA-256 `8385a3903385b1559beb65c447ba1c6095af0eddd9e9107dcd21b370f05478b0`. Build `firmware\build.cmd npt-write`; with the isolated VM off, run `.\lab\Boot-HvProbe.ps1 -NptWrite` in elevated PowerShell.
+
+| Arm | Expected | Observed |
+| --- | --- | --- |
+| Writable data leaf | Store `0xA5` at GPA `0x2000`, then exit on HLT | Byte `0xA5`, exit `0x78`, RIP `0x1005` |
+| Same frame, read-only | Final-data write protection fault at the store; target remains `0x5A` | Exit `0x400`, RIP `0x1000`, `EXITINFO1=0x100000007`, `EXITINFO2=0x2000`, byte `0x5A` |
+
+L1 restored the initial byte, cleared the data leaf's write bit and requested a full TLB flush before the second entry. The code page remained read-only in both arms. [Console capture](images/npt-write-007.png). This tests a permission change on one vCPU, not frame replacement, remote invalidation or bare metal.
