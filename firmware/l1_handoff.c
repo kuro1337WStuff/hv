@@ -3,7 +3,12 @@
 #include <Protocol/GraphicsOutput.h>
 #include <intrin.h>
 
+#ifdef HV_STANDALONE_L2
+#include "standalone_l2.h"
+#define ARENA_PAGES ((UINTN)StandaloneGuestPages)
+#else
 #define ARENA_PAGES 8u
+#endif
 #define STACK_PAGES 4u
 #define TOTAL_PAGES (ARENA_PAGES + STACK_PAGES)
 #define COM1 0x3f8
@@ -35,11 +40,17 @@ static const UINT8 letters[][5] = {
 
 static void draw_line(UINTN y, const char *s, UINT32 color)
 {
-    static const UINT8 one[] = {0,66,127,64,0}, colon[] = {0,0,36,0,0};
+    static const UINT8 digits[][5] = {
+        {62,81,73,69,62},{0,66,127,64,0},{66,97,81,73,70},{33,65,69,75,49},
+        {24,20,18,127,16},{39,69,69,69,57},{60,74,73,73,48},{1,113,9,5,3},
+        {54,73,73,73,54},{6,73,73,41,30}
+    };
+    static const UINT8 colon[] = {0,0,36,0,0};
     static const UINT8 underscore[] = {64,64,64,64,64};
     for (UINTN x = 20; *s && x + 10 <= width; ++s, x += 12) {
         const UINT8 *glyph = *s >= 'A' && *s <= 'Z' ? letters[*s - 'A'] :
-            *s == '1' ? one : *s == ':' ? colon : *s == '_' ? underscore : NULL;
+            *s >= '0' && *s <= '9' ? digits[*s - '0'] :
+            *s == ':' ? colon : *s == '_' ? underscore : NULL;
         if (!glyph) continue;
         for (unsigned col = 0; col < 5; ++col) {
             for (unsigned row = 0; row < 7; ++row) {
@@ -100,6 +111,7 @@ static int find_screen(EFI_BOOT_SERVICES *bs, EFI_HANDLE console)
     return pixels != NULL;
 }
 
+#ifndef HV_STANDALONE_L2
 static void uart_init(void)
 {
     __outbyte(COM1 + 3, 3);    /* DLAB clear, 8N1 */
@@ -143,13 +155,28 @@ static int send_text(const char *s)
     }
     return 1;
 }
+#else
+/* The longest label plus 16 hex digits fits even the minimum 320px mode. */
+static void log_hex(char *line, const char *label, UINT64 value)
+{
+    static const char hex[] = "0123456789ABCDEF";
+    log_lines[logged++] = line;
+    while (*label) *line++ = *label++;
+    for (unsigned i = 16; i; value >>= 4) line[--i] = hex[value & 15];
+    line[16] = '\0';
+}
+#endif
 
 __declspec(noreturn) static void fail(const char *reason)
 {
     L1DisableInterrupts();
+#ifdef HV_STANDALONE_L2
+    screen("L1 L2 FAIL", reason, 0xff00ff);
+#else
     screen("L1 HANDOFF FAIL", reason, 0xff00ff);
     wait_request();
     if (send_text("HV:FAIL:") && send_text(reason) && send_text("\r\n")) (void)uart_ready(0x40);
+#endif
     L1Halt();
 }
 
@@ -170,6 +197,19 @@ __declspec(noreturn) void L1OwnedMain(void)
     log_lines[logged++] = "HV:HANDOFF";
     if ((UINTN)&stack_probe < bottom || (UINTN)&stack_probe >= bottom + STACK_PAGES * EFI_PAGE_SIZE)
         fail("STACK");
+#ifdef HV_STANDALONE_L2
+    void *reservation = take_pages(StandaloneGuestPages);
+    if (!reservation || (UINTN)reservation != owned_base || arena_used != ARENA_PAGES) fail("ARENA");
+    StandaloneSample sample;
+    const char *reason = run_standalone_l2(reservation, &sample);
+    char lines[3][sizeof("EXITCODE ") + 16];
+    log_hex(lines[0], "EXITCODE ", sample.exitcode);
+    log_hex(lines[1], "RIP ", sample.rip);
+    log_hex(lines[2], "RAX ", sample.rax);
+    if (reason) fail(reason);
+    screen("L1 L2 PASS", NULL, 0x00ff00);
+    L1Halt();
+#else
     volatile UINT32 *page = take_pages(1);
     if ((UINTN)page != owned_base || arena_used != 1) fail("ARENA");
     page[0] = 0x13579bdf;
@@ -192,6 +232,7 @@ __declspec(noreturn) void L1OwnedMain(void)
 tx_failed:
     screen("L1 HANDOFF FAIL", "SERIAL TX", 0xff00ff);
     L1Halt();
+#endif
 }
 
 /* AllocatePages returned one contiguous reservation. Its backing descriptor
@@ -217,9 +258,15 @@ EFI_STATUS EFIAPI EfiMain(EFI_HANDLE image, EFI_SYSTEM_TABLE *st)
     /* No hardware bring-up on physical machines or other hypervisors. */
     if (regs[1] != 0x7263694d || regs[2] != 0x666f736f || regs[3] != 0x76482074) return EFI_UNSUPPORTED;
     EFI_STATUS watchdog = bs->SetWatchdogTimer(0, 0, 0, NULL);
+#ifndef HV_STANDALONE_L2
     uart_init();
+#endif
     if (!find_screen(bs, st->ConsoleOutHandle)) {
+#ifdef HV_STANDALONE_L2
+        if (st->ConOut) st->ConOut->OutputString(st->ConOut, L"L1 L2 FAIL: NO DIRECT FRAMEBUFFER\r\n");
+#else
         if (st->ConOut) st->ConOut->OutputString(st->ConOut, L"L1 HANDOFF FAIL: NO DIRECT FRAMEBUFFER\r\n");
+#endif
         fail("FRAMEBUFFER");
     }
     if (watchdog != EFI_SUCCESS) fail("WATCHDOG");
