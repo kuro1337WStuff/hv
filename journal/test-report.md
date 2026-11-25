@@ -424,3 +424,14 @@ After review, `Get-HvConsoleVerdict` classified the archived 045 framebuffer as 
 ### 047 · Polled 8250-compatible serial output
 
 **Pre-boot criteria:** the fixed L2 must use COM1's divisor-latch aliases without transmitting divisor bytes, select 8N1 and divisor 1, leave interrupts disabled, see non-FIFO status, and observe one busy-to-ready transition per byte. After the last byte require line status `0x60` (THRE and TEMT), guest cookie `0x82504701`, and a success HLT. Independently require L1 to capture exactly `4C 32 3A 38 32 35 30 0A` in order, not text printed by L1. A separate fixed arm must stop on its first byte OUT to `0x2F8` (COM2), without changing the capture, forwarding it, or resuming. No Linux boot or physical serial I/O.
+
+**2026-11-25 · Firmware PASS by framebuffer review.** Built `firmware\build.cmd l1-serial-8250` at `f7e0431157`; ran `python lab/hv_queue.py run --session l1-serial-8250` in the nested 9950X lab. Batch `1aa334e6324c43039c23009df0f84f56` checkpointed the reviewed 046 state and cold-booted ISO `1FD786103955F1108FC7370DEEF12DC941B6E310DBF8D14F5B0F9E392465C133` at 17:34:13 UTC. The first unregistered [terminal capture](images/l1-serial-8250-047.png) stopped the queue at `ATTENTION` (exit 3), not `COMPLETE`. No retry.
+
+| Witness | Observed |
+|---|---|
+| Guest readbacks / poll | Cookie `0x82504701`, LSR `0x60`, eight busy samples. Guest checked DLAB aliases, scratch, modem control, non-FIFO status and AL-only read semantics before writing the cookie. |
+| L1 virtual COM1 | Captured `4C 32 3A 38 32 35 30 0A` from the transmit register; count 8, busy reads 8, divisor 1; LCR/IER/MCR/SCR = `03/00/03/5A`. No extra byte from divisor programming. |
+| Independent positive stop | 44 entries (`0x2C`); exit `0x78` (HLT), RIP `0x1172`, RAX `0x50415353`. |
+| Refused COM2 arm | Exit `0x7B`, `EXITINFO1=0x02F80210`, RIP `0x11A5`, next IP `0x11A6`, DX `0x2F8`, AL `0xA5`. Refusal 1; no RIP advance or re-entry; final count and captured bytes unchanged. |
+
+Scope: fixed guest and one-way, polled COM1 subset. Read-driven busy intervals are deterministic test behavior, not baud timing. No UART IRQ, receive stream, physical wire, Linux earlycon/tty driver, or PID 1 was run.

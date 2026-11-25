@@ -2,6 +2,14 @@
 
 Development host: Ryzen 9 9950X. Firmware runs use the `HV-SVM-L1` Hyper-V VM; host-only checks are labeled separately. Neither qualifies the 9950X3D deployment target on bare metal.
 
+## 047 · 2026-11-25 · Serial bytes from the guest, not the monitor
+
+**Passed in `HV-SVM-L1`.** The fixed L2 initialized virtual COM1 for 8N1, selected divisor 1, and polled until its last byte drained. L1 captured exactly `L2:8250` followed by LF. Both sides counted eight busy polls, and L2 reached its success halt. Programming the divisor did not accidentally transmit a byte.
+
+A separate L2 write of `0xA5` to COM2 stopped at the `OUT` instruction. It was neither forwarded nor appended to the capture. This proves the polled transmit path, not a Linux console boot or interrupt-driven serial. [Commands and measured fields](test-report.md#047--polled-8250-compatible-serial-output).
+
+![L2 status, captured COM1 bytes, guest halt and unchanged output after a refused COM2 write](images/l1-serial-8250-047.png)
+
 ## 046 · 2026-11-25 · What the fixed guest sees across a CPU exit
 
 **Passed in `HV-SVM-L1`.** L2 saw one explicitly virtual CPU with SSE2 advertised and AVX/XSAVE absent from its feature bits. It put 21 in XMM0, took a CPUID exit, then doubled the preserved value to 42 after resume. L1 independently checked its own register state after all five exits.
