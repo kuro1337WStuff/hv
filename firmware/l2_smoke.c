@@ -14,10 +14,13 @@ enum { Vmcb, HostSave, Pml4, Code=Pml4+NptTableCount, Iopm, Msrpm=Iopm+3, Pages=
 #if defined(HV_IRQ_WAKE) || defined(HV_EXCEPTION_UD)
 #define HV_GUEST_IDT
 #endif
-#if defined(HV_VCPU_GPR) || defined(HV_GUEST_IDT)
+#if defined(HV_VCPU_GPR) || defined(HV_VCPU_XMM) || defined(HV_GUEST_IDT)
+#define HV_LONG_GUEST
 enum { GuestTables=Pages, GuestStack=GuestTables+NptTableCount,
 #ifdef HV_GUEST_IDT
        GuestDescriptors=GuestStack+1, AllocPages=GuestDescriptors+1
+#elif defined(HV_VCPU_XMM)
+       XmmScratch=GuestStack+1, AllocPages=XmmScratch+1 /* L1 only, never NPT-mapped */
 #else
        AllocPages=GuestStack+1
 #endif
@@ -57,11 +60,13 @@ static void hex(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *out, CHAR16 *label, UINT64 v)
     out->OutputString(out,buf);
 }
 
-#if defined(HV_VCPU_GPR) || defined(HV_GUEST_IDT)
+#ifdef HV_LONG_GUEST
 #include "long_guest.h"
 #endif
 #ifdef HV_VCPU_GPR
 #include "vcpu_gpr.h"
+#elif defined(HV_VCPU_XMM)
+#include "vcpu_xmm.h"
 #elif defined(HV_IRQ_WAKE)
 #include "irq_wake.h"
 #elif defined(HV_EXCEPTION_UD)
@@ -114,6 +119,13 @@ static void smoke(EFI_SYSTEM_TABLE *st)
     }
     __cpuid(r,1);
     if (!((UINT32)r[2] & (1u<<31))) { out->OutputString(out,L"SKIP: VM-only test.\r\n"); return; }
+#ifdef HV_VCPU_XMM
+    const UINT32 sse2_features=(1u<<24)|(1u<<25)|(1u<<26); /* FXSR, SSE, SSE2 */
+    if (((UINT32)r[3]&sse2_features)!=sse2_features ||
+        (__readcr0()&((1u<<2)|(1u<<3))) || !(__readcr4()&(1u<<9))) {
+        out->OutputString(out,L"SKIP: L1 SSE2 unavailable or disabled.\r\n"); return;
+    }
+#endif
     __cpuid(r,0x40000000);
     if (r[1]!=0x7263694d || r[2]!=0x666f736f || r[3]!=0x76482074) {
         out->OutputString(out,L"SKIP: Hyper-V lab required.\r\n"); return;
@@ -142,6 +154,12 @@ static void smoke(EFI_SYSTEM_TABLE *st)
     UINT64 frame[14];
     GprTrace trace;
     bs->SetMem(frame,sizeof(frame),0);
+#elif defined(HV_VCPU_XMM)
+    UINTN length=XmmLayout.size;
+    if (!xmm_layout_ok(length)) {
+        out->OutputString(out,L"FAIL: invalid fixed XMM guest layout.\r\n"); return;
+    }
+    XmmTrace trace;
 #elif defined(HV_IRQ_WAKE)
     UINTN length=IrqLayout.size;
     if (!irq_layout_ok(length)) {
@@ -176,6 +194,8 @@ static void smoke(EFI_SYSTEM_TABLE *st)
     bs->CopyMem(vmcb+Code*EFI_PAGE_SIZE,(VOID *)L2Start,length);
 #elif defined(HV_VCPU_GPR)
     bs->CopyMem(vmcb+Code*EFI_PAGE_SIZE,(VOID *)GprStart,length);
+#elif defined(HV_VCPU_XMM)
+    bs->CopyMem(vmcb+Code*EFI_PAGE_SIZE,(VOID *)XmmStart,length);
 #elif defined(HV_IRQ_WAKE)
     bs->CopyMem(vmcb+Code*EFI_PAGE_SIZE,(VOID *)IrqStart,length);
 #elif defined(HV_EXCEPTION_UD)
@@ -229,8 +249,11 @@ static void smoke(EFI_SYSTEM_TABLE *st)
 #endif
     FIELD(UINT64,NpEnable)=1;
     FIELD(UINT64,NestedCr3)=base+Pml4*EFI_PAGE_SIZE;
-#if defined(HV_VCPU_GPR) || defined(HV_GUEST_IDT)
+#ifdef HV_LONG_GUEST
     long_guest_state(vmcb,base);
+#ifdef HV_VCPU_XMM
+    FIELD(UINT64,Cr4)|=1u<<9; /* OSFXSR; guest CR0 already has EM=TS=0. */
+#endif
 #ifdef HV_IRQ_WAKE
     long_guest_gate(vmcb,base,IrqVector,irq_ip(IrqLayout.handler));
 #elif defined(HV_EXCEPTION_UD)
@@ -259,6 +282,8 @@ static void smoke(EFI_SYSTEM_TABLE *st)
     out->OutputString(out,L"Entering L2: CPUID -> validate 4 replies -> HLT\r\n");
 #elif defined(HV_VCPU_GPR)
     out->OutputString(out,L"Entering 64-bit L2: two CPUID GPR save/restore rounds\r\n");
+#elif defined(HV_VCPU_XMM)
+    out->OutputString(out,L"XMM0-15: check L1 and L2 register banks across two entries\r\n");
 #elif defined(HV_EXCEPTION_UD)
     out->OutputString(out,L"Exception return: intercept UD2, inject #UD at fault RIP\r\n");
 #elif defined(HV_IRQ_WAKE)
@@ -305,6 +330,8 @@ static void smoke(EFI_SYSTEM_TABLE *st)
     }
 #elif defined(HV_VCPU_GPR)
     gpr_run(vmcb,frame,nrips,&trace);
+#elif defined(HV_VCPU_XMM)
+    xmm_run(vmcb,&trace);
 #elif defined(HV_IRQ_WAKE)
     irq_run(vmcb,&trace);
 #elif defined(HV_EXCEPTION_UD)
@@ -360,6 +387,8 @@ static void smoke(EFI_SYSTEM_TABLE *st)
 
 #ifdef HV_VCPU_GPR
     gpr_report(out,vmcb,&trace);
+#elif defined(HV_VCPU_XMM)
+    xmm_report(out,vmcb,&trace);
 #elif defined(HV_IRQ_WAKE)
     irq_report(out,vmcb,&trace);
 #elif defined(HV_EXCEPTION_UD)

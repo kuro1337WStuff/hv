@@ -17,6 +17,7 @@ RUNS = ROOT / 'build' / 'runs'
 PROFILES = {'l2': 'hv-l2-smoke', 'cpuid': 'hv-cpuid-resume', 'npt-write': 'hv-npt-write',
             'npt-remap': 'hv-npt-remap', 'npt-cross': 'hv-npt-cross',
             'npt-broadcast': 'hv-npt-broadcast', 'forensic-write': 'hv-forensic-write',
+            'vcpu-xmm': 'hv-vcpu-xmm',
             'vcpu-gpr': 'hv-vcpu-gpr', 'irq-wake': 'hv-irq-wake', 'irq-shadow': 'hv-irq-shadow',
             'irq-priority': 'hv-irq-priority', 'exception-ud': 'hv-exception-ud'}
 DEFAULT_PROFILES = ('l2', 'cpuid', 'npt-write', 'npt-remap', 'npt-cross')

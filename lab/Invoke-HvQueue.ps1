@@ -10,7 +10,7 @@ $root = Split-Path -Parent $PSScriptRoot
 $runs = Join-Path $root 'build\runs'
 $media = Join-Path $PSScriptRoot 'media'
 $store = Join-Path $PSScriptRoot "machines\$vmName"
-$stems = @{ l2='hv-l2-smoke'; cpuid='hv-cpuid-resume'; 'npt-write'='hv-npt-write'; 'npt-remap'='hv-npt-remap'; 'npt-cross'='hv-npt-cross'; 'npt-broadcast'='hv-npt-broadcast'; 'forensic-write'='hv-forensic-write'; 'vcpu-gpr'='hv-vcpu-gpr'; 'irq-wake'='hv-irq-wake'; 'irq-shadow'='hv-irq-shadow'; 'irq-priority'='hv-irq-priority'; 'exception-ud'='hv-exception-ud' }
+$stems = @{ l2='hv-l2-smoke'; cpuid='hv-cpuid-resume'; 'npt-write'='hv-npt-write'; 'npt-remap'='hv-npt-remap'; 'npt-cross'='hv-npt-cross'; 'npt-broadcast'='hv-npt-broadcast'; 'forensic-write'='hv-forensic-write'; 'vcpu-gpr'='hv-vcpu-gpr'; 'vcpu-xmm'='hv-vcpu-xmm'; 'irq-wake'='hv-irq-wake'; 'irq-shadow'='hv-irq-shadow'; 'irq-priority'='hv-irq-priority'; 'exception-ud'='hv-exception-ud' }
 $images = @{}
 $events = $null
 $mutex = $null

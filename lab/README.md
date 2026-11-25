@@ -16,6 +16,8 @@ The default order is `l2`, `cpuid`, `npt-write`, `npt-remap`, `npt-cross`. To re
 
 `vcpu-gpr` is opt-in: `python lab/hv_queue.py run --rebuild vcpu-gpr`. A fixed 64-bit L2 guest checks its integer registers after each of two CPUID intercepts. Expected path: CPUID, CPUID, success HLT. This test does not cover interrupt delivery, extended state, or vCPU migration.
 
+`vcpu-xmm` is opt-in: from the repository root, run `python lab/hv_queue.py run --rebuild vcpu-xmm` to build and run `build/hv-vcpu-xmm.iso`. To build without starting a VM, run `firmware\build.cmd vcpu-xmm`. The profile checks 128-bit XMM register contents across nested guest exits and resumes. It does not test MXCSR, x87/MMX, AVX upper lanes, or general XSAVE state.
+
 `irq-wake` is opt-in: `python lab/hv_queue.py run --rebuild irq-wake`. L1 intercepts the fixed guest's HLT and queues one maskable virtual interrupt. The handler records its return RIP and count; the resumed guest separately records forward progress. This exercises virtual HLT emulation without a host timer, device IRQ, or physical sleep.
 
 `irq-shadow` is opt-in: `python lab/hv_queue.py run --rebuild irq-shadow`. The guest makes a checkpoint while interrupts are disabled. L1 verifies the original virtual IRQ is still pending there and resumes without queuing it again. The handler records which instruction had just completed and its return address; both must match the end of the `STI` shadow.
