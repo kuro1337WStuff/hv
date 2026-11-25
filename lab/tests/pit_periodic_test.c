@@ -11,11 +11,16 @@
 #define REFUSE(p, e) do { unsigned char before[sizeof(p)]; memcpy(before, &(p), sizeof(p)); \
     CHECK(!(e)); CHECK(!memcmp(before, &(p), sizeof(p))); } while (0)
 
+static void write_count(PitPeriodic *p, uint16_t n)
+{
+    CHECK(pit_periodic_write(p, 0x40, 1, (uint8_t)n));
+    CHECK(pit_periodic_write(p, 0x40, 1, (uint8_t)(n >> 8)));
+}
+
 static void program(PitPeriodic *p, uint16_t n)
 {
     CHECK(pit_periodic_write(p, 0x43, 1, 0x34));
-    CHECK(pit_periodic_write(p, 0x40, 1, (uint8_t)n));
-    CHECK(pit_periodic_write(p, 0x40, 1, (uint8_t)(n >> 8)));
+    write_count(p, n);
 }
 
 /* Observe the pin AND consume the edge latch. A jump can end with OUT low
@@ -112,7 +117,7 @@ static void refused_writes_and_restart(void)
     REFUSE(p, pit_periodic_write(&p, 0x40, 1, 0)); /* illegal count 1 */
     REFUSE(p, pit_periodic_write(&p, 0x40, 2, 0));
     REFUSE(p, pit_periodic_write(&p, 0x42, 1, 0));
-    REFUSE(p, pit_periodic_write(&p, 0x43, 1, 0x38)); /* mode 4 stays separate */
+    REFUSE(p, pit_periodic_write(&p, 0x43, 1, 0x36)); /* unsupported mode 3 */
     sample(&p, 4, 0, 0);
     CHECK(pit_periodic_write(&p, 0x40, 1, 1)); /* retry MSB: 0x0101 */
     sample(&p, 5, 1, 1);
@@ -150,7 +155,7 @@ static void irq0_service(void)
     CHECK(!pit_periodic_out(&s.pit) && !s.pit.pending && s.pic.pending == 1);
     REFUSE(s, pit_pic_take(&s.pic)); /* unmasked but in service */
     REFUSE(s, pit_periodic_irq0_advance(&s, 20));
-    REFUSE(s, pit_periodic_irq0_write(&s, 0x43, 1, 0x38)); /* no mode-4 clock */
+    REFUSE(s, pit_periodic_irq0_write(&s, 0x43, 1, 0x39)); /* unsupported BCD */
     REFUSE(s, pit_periodic_irq0_write(&s, 0x20, 1, 0x60)); /* mask first */
     CHECK(pit_periodic_irq0_write(&s, 0x21, 1, 0xff));
     REFUSE(s, pit_periodic_irq0_write(&s, 0x20, 1, 0x61)); /* wrong IRQ */
@@ -170,6 +175,151 @@ static void irq0_service(void)
     CHECK(pit_periodic_irq0_write(&s, 0x43, 1, 0x34) && !s.pic.pending);
 }
 
+/* Software-triggered strobe: CR writes aren't control writes. Even a
+ * complete rewrite during the low pulse cannot raise OUT at the cursor. */
+static void strobe_rewrites(void)
+{
+    PitPeriodic p;
+    pit_periodic_init(&p);
+    CHECK(pit_periodic_write(&p, 0x43, 1, 0x38));
+    write_count(&p, 32);
+    sample(&p, 30, 1, 0);
+    CHECK(pit_periodic_write(&p, 0x40, 1, 64)); /* LSB across terminal count */
+    sample(&p, 32, 1, 0);
+    sample(&p, 33, 0, 0);
+    sample(&p, 34, 1, 1);
+    sample(&p, 35, 1, 0);
+    CHECK(pit_periodic_write(&p, 0x40, 1, 0));
+    sample(&p, 40, 1, 0);
+    write_count(&p, 15); /* replace 64 while counting */
+    sample(&p, 55, 1, 0);
+    sample(&p, 56, 0, 0);
+    write_count(&p, 1); /* chip minimum, below Linux's minimum delta */
+    sample(&p, 56, 0, 0);
+    sample(&p, 57, 1, 1); /* old strobe ends on the new load pulse */
+    sample(&p, 58, 0, 0);
+    write_count(&p, 1);
+    sample(&p, 60, 0, 1); /* skipped recovery; new strobe is already low */
+    sample(&p, 60, 0, 0);
+    CHECK(pit_periodic_write(&p, 0x43, 1, 0x38)); /* unlike count: immediate rise */
+    sample(&p, 60, 1, 1);
+    sample(&p, 102, 1, 0); /* neither old recovery nor superseded 64 survives */
+    write_count(&p, 15);
+    sample(&p, 117, 1, 0);
+    write_count(&p, 0x7fff); /* now replace with a longer Linux delta */
+    sample(&p, 118, 1, 0);
+    sample(&p, 119, 1, 0);
+    sample(&p, 117 + 0x7fff, 1, 0);
+    sample(&p, 118 + 0x7fff, 0, 0);
+    sample(&p, 119 + 0x7fff, 1, 1);
+    sample(&p, UINT64_MAX, 1, 0);
+}
+
+static void strobe_cursor_limits(void)
+{
+    PitPeriodic p;
+    pit_periodic_init(&p);
+    CHECK(pit_periodic_write(&p, 0x43, 1, 0x38));
+    write_count(&p, 0);
+    /* A jump can skip the entire strobe; do not narrow elapsed to a count. */
+    CHECK(pit_periodic_advance(&p, UINT64_MAX - 65538));
+    REFUSE(p, pit_periodic_advance(&p, 0));
+    sample(&p, UINT64_MAX - 65538, 1, 1);
+    write_count(&p, 0); /* zero encodes 65536 */
+    sample(&p, UINT64_MAX - 2, 1, 0);
+    sample(&p, UINT64_MAX - 1, 0, 0);
+    sample(&p, UINT64_MAX, 1, 1);
+    write_count(&p, 15); /* accepted, but beyond the representable horizon */
+    sample(&p, UINT64_MAX, 1, 0);
+}
+
+/* With no final 30h, 00h/00h is a real mode-0 count. Distinguish its
+ * terminal rise from mode 4, and from a shutdown-only byte recognizer. */
+static void terminal_count(void)
+{
+    PitPeriodic p;
+    pit_periodic_init(&p);
+    CHECK(pit_periodic_write(&p, 0x43, 1, 0x30));
+    sample(&p, 10, 0, 0);
+    write_count(&p, 0);
+    sample(&p, 10 + 65536, 0, 0);
+    sample(&p, 11 + 65536, 1, 1);
+    sample(&p, 70000, 1, 0);
+    CHECK(pit_periodic_write(&p, 0x40, 1, 3));
+    sample(&p, 70000, 0, 0); /* first byte immediately lowers OUT */
+    CHECK(pit_periodic_write(&p, 0x40, 1, 0));
+    sample(&p, 70003, 0, 0);
+    CHECK(pit_periodic_write(&p, 0x40, 1, 1)); /* and stops a running count */
+    sample(&p, 70010, 0, 0);
+    CHECK(pit_periodic_write(&p, 0x40, 1, 0));
+    sample(&p, 70011, 0, 0);
+    sample(&p, 70012, 1, 1);
+
+    /* Empty latch distinguishes an erroneous low-to-low programming IRQ
+     * from the retention of an already pending PIC bit in linux_switch. */
+    CHECK(pit_periodic_write(&p, 0x43, 1, 0x38));
+    write_count(&p, 1);
+    sample(&p, 70014, 0, 0);
+    CHECK(pit_periodic_write(&p, 0x43, 1, 0x30));
+    sample(&p, 70014, 0, 0);
+    sample(&p, 70015, 0, 0);
+}
+
+static void irq_sample(PitPeriodicIrq0 *s, uint64_t t, int level, int request)
+{
+    CHECK(pit_periodic_irq0_advance(s, t));
+    CHECK(s->pit.tick == t && pit_periodic_out(&s->pit) == level);
+    CHECK(!s->pit.pending && s->pic.pending == request);
+    CHECK(!s->pic.armed && s->pic.now == 0); /* not the legacy logical clock */
+}
+
+/* Pinned v6.18.60 port sequence. Exercise both initial OUT levels of each
+ * mode switch, on a single absolute cursor, with a separately held PIC IRR. */
+static void linux_switch(int switch_low, int stop_low)
+{
+    PitPeriodicIrq0 s;
+    uint64_t t = switch_low ? 1193U : 1192U;
+    pit_periodic_irq0_init(&s);
+    CHECK(pit_periodic_irq0_write(&s, 0x43, 1, 0x34));
+    CHECK(pit_periodic_irq0_write(&s, 0x40, 1, 0xa9));
+    CHECK(pit_periodic_irq0_write(&s, 0x40, 1, 0x04));
+    irq_sample(&s, t, !switch_low, 0);
+    CHECK(pit_periodic_irq0_write(&s, 0x40, 1, 0xaa)); /* abandon periodic LSB */
+    CHECK(pit_periodic_irq0_write(&s, 0x43, 1, 0x38));
+    irq_sample(&s, t, 1, switch_low);
+    CHECK(pit_periodic_irq0_write(&s, 0x21, 1, 0xfe));
+    CHECK(pit_pic_take(&s.pic) == switch_low);
+    CHECK(pit_periodic_irq0_write(&s, 0x21, 1, 0xff));
+    if (switch_low) CHECK(pit_periodic_irq0_write(&s, 0x20, 1, 0x60));
+
+    CHECK(pit_periodic_irq0_write(&s, 0x40, 1, 15));
+    t += 2400; /* no more periodic rises, no shot from a lone LSB */
+    irq_sample(&s, t, 1, 0);
+    CHECK(pit_periodic_irq0_write(&s, 0x40, 1, 0));
+    irq_sample(&s, t + 15, 1, 0);
+    irq_sample(&s, t + 16, 0, 0);
+    irq_sample(&s, t + 17, 1, 1);
+    t += 17;
+    CHECK(pit_periodic_irq0_write(&s, 0x40, 1, 32));
+    CHECK(pit_periodic_irq0_write(&s, 0x40, 1, 0));
+    t += stop_low ? 33U : 32U;
+    irq_sample(&s, t, !stop_low, 1);
+    CHECK(pit_periodic_irq0_write(&s, 0x43, 1, 0x30)); /* neither level rises */
+    irq_sample(&s, t, 0, 1);
+    CHECK(pit_periodic_irq0_write(&s, 0x40, 1, 0));
+    CHECK(pit_periodic_irq0_write(&s, 0x40, 1, 0));
+    CHECK(pit_periodic_irq0_write(&s, 0x43, 1, 0x30));
+    CHECK(pit_periodic_irq0_write(&s, 0x21, 1, 0xfe));
+    CHECK(pit_pic_take(&s.pic) && !s.pic.pending && s.pic.in_service);
+    irq_sample(&s, t + 2, 0, 0); /* canceled mode-4 edge, even if already low */
+    irq_sample(&s, UINT64_MAX, 0, 0); /* final 30h canceled mode-0 terminal count */
+    irq_sample(&s, UINT64_MAX, 0, 0);
+    CHECK(pit_periodic_irq0_write(&s, 0x21, 1, 0xff));
+    CHECK(pit_periodic_irq0_write(&s, 0x20, 1, 0x60));
+    CHECK(pit_periodic_irq0_write(&s, 0x21, 1, 0xfe));
+    REFUSE(s, pit_pic_take(&s.pic)); /* no third event to service */
+}
+
 int main(void)
 {
     irq0_service();
@@ -179,5 +329,11 @@ int main(void)
     divisor_limits();
     refused_writes_and_restart();
     puts("PIT channel 0 periodic mode 2: PASS");
+    strobe_rewrites();
+    strobe_cursor_limits();
+    terminal_count();
+    linux_switch(0, 1);
+    linux_switch(1, 0);
+    puts("PIT channel 0 periodic / strobe / disable on one cursor: PASS");
     return 0;
 }

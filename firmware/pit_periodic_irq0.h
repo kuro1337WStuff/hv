@@ -4,10 +4,10 @@
 #include "pit_periodic.h"
 #include "pit_pic.h"
 
-/* Host fixture: advance only pit's pulse cursor. pic supplies IRQ0 service;
- * its mode-4 clock and deadline stay idle. pit_pic_take(&s.pic) accepts the
- * PIC request at PIT_PIC_VECTOR; it does not check CPU eligibility, inject
- * a vector, or establish that a CPU delivered it to an interrupt handler. */
+/* All CH0 modes use pit's single absolute pulse cursor. pic supplies only
+ * IRQ0 service; its legacy logical one-shot clock/deadline stay idle.
+ * pit_pic_take(&s.pic) accepts the request at PIT_PIC_VECTOR; it does not
+ * check CPU eligibility, inject a vector, or prove guest handler delivery. */
 typedef struct { PitPeriodic pit; PitPic pic; } PitPeriodicIrq0;
 
 static inline void pit_periodic_irq0_init(PitPeriodicIrq0 *s)
