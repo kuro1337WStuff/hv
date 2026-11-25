@@ -1,4 +1,4 @@
-# Project status · through 086
+# Project status · through 087
 
 **On `main`:** firmware baseline [041](README.md), plus CI-only [#2](https://github.com/kuro1337WStuff/hv/pull/2) at `735c8b56` after both hosted checks passed on `54bace3b`. **On `feature/l1-handoff` only:** [#4](https://github.com/kuro1337WStuff/hv/pull/4) merged at `95abe46c`; [#10](https://github.com/kuro1337WStuff/hv/pull/10) retargeted, then squashed at `44fb6247`. The resulting firmware trees matched the source trees used in 060 and 063 respectively. Revert #10 first if both must be undone; #4 is a merge commit. No ordinary Linux boot or bare-metal qualification.
 
@@ -15,7 +15,7 @@
 
 **Merge routing:** [Dated PR-by-PR audit](merge-audit-072.md) · [live open PRs](https://github.com/kuro1337WStuff/hv/pulls) · [workflow and rollback](project-workflow.md). #21's test merge did not promote #12. Check the actual base, scope and source revision before each integration.
 
-**Next independent host work:** [#50 · PIT channel 0 periodic reload](https://github.com/kuro1337WStuff/hv/issues/50) and [#51 · pinned init serial milestones](https://github.com/kuro1337WStuff/hv/issues/51). Neither requires a running VM or qualifies an ordinary guest.
+**Host-only coverage:** [087](trials/087.md) implements [#50](https://github.com/kuro1337WStuff/hv/issues/50) on feature integration. CH0 mode 2 is not connected to a guest. [#51](https://github.com/kuro1337WStuff/hv/issues/51) tracks offline validation of pinned init milestones, not an ordinary boot.
 
 ## Feature evidence before the separate trial ledger
 
