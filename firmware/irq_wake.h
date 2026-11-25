@@ -2,13 +2,27 @@
 #define HV_IRQ_WAKE_H
 
 extern const UINT8 IrqStart[];
+#ifdef HV_IRQ_SHADOW
+extern const struct { UINT32 size, checkpoint, sti, afterShadow, handler, pass, fail; } IrqLayout;
+_Static_assert(sizeof(IrqLayout)==7*sizeof(UINT32), "IRQ shadow layout ABI mismatch");
+#else
 extern const struct { UINT32 size, wait, after, handler, pass, fail; } IrqLayout;
+_Static_assert(sizeof(IrqLayout)==6*sizeof(UINT32), "IRQ wake layout ABI mismatch");
+#endif
 
 enum { IrqVector=0x41, IrqPriority=IrqVector>>4, VIrq=1u<<8, IntShadow=0x068,
        Gdtr=0x460, Idtr=0x480, DescGpa=0x6000, IdtOffset=0x100 };
 
-typedef struct { UINT64 count, return_ip, progress; } IrqEvidence;
-typedef struct { UINT64 wait_ip; BOOLEAN resumed; } IrqTrace;
+typedef struct { UINT64 count, return_ip, progress, captured_phase; } IrqEvidence;
+typedef struct {
+    UINT64 checkpoint_ip;
+    UINT32 vmruns;
+#ifdef HV_IRQ_SHADOW
+    UINT64 checkpoint_flags, checkpoint_control, checkpoint_shadow, checkpoint_rsp;
+    UINT64 checkpoint_phase, checkpoint_count;
+    BOOLEAN checkpoint_ok;
+#endif
+} IrqTrace;
 
 static UINT64 irq_ip(UINT32 offset)
 {
@@ -17,14 +31,30 @@ static UINT64 irq_ip(UINT32 offset)
 
 static BOOLEAN irq_layout_ok(UINTN length)
 {
+#ifdef HV_IRQ_SHADOW
+    const UINT32 sites[]={IrqLayout.checkpoint,IrqLayout.sti,IrqLayout.afterShadow,
+                          IrqLayout.handler,IrqLayout.pass,IrqLayout.fail};
+#else
     const UINT32 sites[]={IrqLayout.wait,IrqLayout.after,IrqLayout.handler,IrqLayout.pass,IrqLayout.fail};
+#endif
     if (!length || length>EFI_PAGE_SIZE) return FALSE;
     for (UINTN i=0; i<sizeof(sites)/sizeof(sites[0]); ++i) {
         if (sites[i]>=length) return FALSE;
         for (UINTN j=0; j<i; ++j) if (sites[j]==sites[i]) return FALSE;
     }
+#ifdef HV_IRQ_SHADOW
+    /* At the checkpoint the only legal path is VMMCALL; STI; INC qword [7010h].
+     * Check that exact window before trusting its return boundary. */
+    static const UINT8 window[]={0x0f,0x01,0xd9,0xfb,0x48,0xff,0x04,0x25,0x10,0x70,0,0};
+    if (IrqLayout.sti!=IrqLayout.checkpoint+3 ||
+        IrqLayout.afterShadow!=IrqLayout.checkpoint+sizeof(window)) return FALSE;
+    for (UINTN i=0; i<sizeof(window); ++i)
+        if (IrqStart[IrqLayout.checkpoint+i]!=window[i]) return FALSE;
+    return IrqStart[IrqLayout.pass]==0xf4 && IrqStart[IrqLayout.fail]==0xf4;
+#else
     return IrqLayout.after==IrqLayout.wait+1 && IrqStart[IrqLayout.wait]==0xf4 &&
            IrqStart[IrqLayout.pass]==0xf4 && IrqStart[IrqLayout.fail]==0xf4;
+#endif
 }
 
 static void irq_guest_tables(UINT8 *vmcb, EFI_PHYSICAL_ADDRESS base)
@@ -50,29 +80,84 @@ static void irq_guest_tables(UINT8 *vmcb, EFI_PHYSICAL_ADDRESS base)
 static void irq_run(UINT8 *vmcb, IrqTrace *trace)
 {
     volatile IrqEvidence *e=(volatile IrqEvidence *)(vmcb+GuestStack*EFI_PAGE_SIZE);
+#ifdef HV_IRQ_SHADOW
     __svm_vmrun((UINTN)vmcb);
-    trace->wait_ip=FIELD(UINT64,Rip);
-    if (FIELD(UINT64,ExitCode)!=0x78 || trace->wait_ip!=irq_ip(IrqLayout.wait) ||
+    trace->vmruns=1;
+    trace->checkpoint_ip=FIELD(UINT64,Rip);
+    trace->checkpoint_flags=FIELD(UINT64,Flags);
+    trace->checkpoint_control=FIELD(UINT64,IntControl);
+    trace->checkpoint_shadow=FIELD(UINT64,IntShadow);
+    trace->checkpoint_rsp=FIELD(UINT64,Rsp);
+    trace->checkpoint_phase=e->progress;
+    trace->checkpoint_count=e->count;
+    trace->checkpoint_ok=FIELD(UINT64,ExitCode)==0x81 &&
+        trace->checkpoint_ip==irq_ip(IrqLayout.checkpoint) &&
+        !(trace->checkpoint_flags&(1u<<9)) && (trace->checkpoint_control&VIrq) &&
+        trace->checkpoint_shadow==0 && trace->checkpoint_rsp==LongInitialRsp &&
+        trace->checkpoint_phase==1 && trace->checkpoint_count==0 &&
+        e->return_ip==0 && e->captured_phase==0;
+    /* The first VMRUN must stop at VMMCALL with the single queued V_IRQ still pending. */
+    if (!trace->checkpoint_ok) return;
+    FIELD(UINT64,Rip)=irq_ip(IrqLayout.sti);
+    FIELD(UINT8,TlbControl)=0;
+    FIELD(UINT64,ExitCode)=~0ull;
+    trace->vmruns=2;
+    __svm_vmrun((UINTN)vmcb);
+#else
+    __svm_vmrun((UINTN)vmcb);
+    trace->vmruns=1;
+    trace->checkpoint_ip=FIELD(UINT64,Rip);
+    if (FIELD(UINT64,ExitCode)!=0x78 || trace->checkpoint_ip!=irq_ip(IrqLayout.wait) ||
         !(FIELD(UINT64,Flags)&(1u<<9)) || (FIELD(UINT64,IntShadow)&1) ||
         (FIELD(UINT32,IntControl)&VIrq) || FIELD(UINT64,Rsp)!=LongInitialRsp ||
         e->count || e->return_ip || e->progress) return;
 
-    /* Model only our intercepted one-byte HLT. The CPU, not L1, chooses
-     * the handler from the guest IDT and pushes this continuation address.
-     * AMD APM vol. 2 §§15.21.4–5 and Table B-1. V_TPR=0; VINTR not intercepted. */
+    /* Model only our intercepted one-byte HLT; the CPU chooses the IDT handler. */
     FIELD(UINT64,Rip)=irq_ip(IrqLayout.after);
     FIELD(UINT64,IntControl)=(1ull<<24)|VIrq|(IrqPriority<<16)|((UINT64)IrqVector<<32);
     FIELD(UINT8,TlbControl)=0;
     FIELD(UINT64,ExitCode)=~0ull;
-    trace->resumed=TRUE;
+    trace->vmruns=2;
     __svm_vmrun((UINTN)vmcb);
+#endif
 }
 
 static void irq_report(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *out, UINT8 *vmcb, const IrqTrace *trace)
 {
     volatile IrqEvidence *e=(volatile IrqEvidence *)(vmcb+GuestStack*EFI_PAGE_SIZE);
-    hex(out,L"Wait RIP: ",trace->wait_ip);
-    if (trace->resumed) {
+#ifdef HV_IRQ_SHADOW
+    hex(out,L"Checkpoint RIP: ",trace->checkpoint_ip);
+    hex(out,L"Masked IF: ",(trace->checkpoint_flags>>9)&1);
+    hex(out,L"Masked V_IRQ pending: ",!!(trace->checkpoint_control&VIrq));
+    hex(out,L"Masked phase: ",trace->checkpoint_phase);
+    hex(out,L"Masked handler count: ",trace->checkpoint_count);
+    hex(out,L"Handler phase: ",e->captured_phase);
+    hex(out,L"Final IF: ",(FIELD(UINT64,Flags)>>9)&1);
+    hex(out,L"Final V_IRQ pending: ",!!(FIELD(UINT32,IntControl)&VIrq));
+    hex(out,L"Final RSP: ",FIELD(UINT64,Rsp));
+    hex(out,L"Final RIP: ",FIELD(UINT64,Rip));
+    hex(out,L"Final RAX: ",FIELD(UINT64,Rax));
+    hex(out,L"Handler count: ",e->count);
+    hex(out,L"Stacked return RIP: ",e->return_ip);
+    hex(out,L"Final phase: ",e->progress);
+    if (trace->vmruns==2 && trace->checkpoint_ok && FIELD(UINT64,ExitCode)==0x78 &&
+        FIELD(UINT64,Rip)==irq_ip(IrqLayout.pass) && FIELD(UINT64,Rax)==0x50415353 &&
+        !(FIELD(UINT32,IntControl)&VIrq) && FIELD(UINT64,Rsp)==LongInitialRsp &&
+        (FIELD(UINT64,Flags)&(1u<<9)) && e->count==1 &&
+        e->return_ip==irq_ip(IrqLayout.afterShadow) && e->progress==3 && e->captured_phase==2) {
+        out->OutputString(out,L"PASS: masked IRQ deferred through STI shadow and consumed once.\r\n");
+        return;
+    }
+    out->OutputString(out,L"FAIL: masked IRQ checkpoint or shadow delivery mismatch.\r\n");
+    hex(out,L"VMRUN count: ",trace->vmruns);
+    hex(out,L"EXITCODE: ",FIELD(UINT64,ExitCode));
+    hex(out,L"EXITINFO1: ",FIELD(UINT64,Info1));
+    hex(out,L"EXITINFO2: ",FIELD(UINT64,Info2));
+    hex(out,L"EXITINTINFO: ",FIELD(UINT64,0x088));
+    hex(out,L"Interrupt shadow: ",FIELD(UINT64,IntShadow));
+#else
+    hex(out,L"Wait RIP: ",trace->checkpoint_ip);
+    if (trace->vmruns==2) {
         out->OutputString(out,L"Wait HLT: IF=1, shadow=0, count=0, progress=0\r\n");
         out->OutputString(out,L"VMRUN 2: V_IRQ vector=41h, priority=4\r\n");
     }
@@ -81,7 +166,7 @@ static void irq_report(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *out, UINT8 *vmcb, const 
     hex(out,L"Continuation progress: ",e->progress);
     hex(out,L"Final RIP: ",FIELD(UINT64,Rip));
     hex(out,L"Final RAX: ",FIELD(UINT64,Rax));
-    if (trace->resumed && FIELD(UINT64,ExitCode)==0x78 && FIELD(UINT64,Rip)==irq_ip(IrqLayout.pass) &&
+    if (trace->vmruns==2 && FIELD(UINT64,ExitCode)==0x78 && FIELD(UINT64,Rip)==irq_ip(IrqLayout.pass) &&
         FIELD(UINT64,Rax)==0x50415353 && !(FIELD(UINT32,IntControl)&VIrq) &&
         FIELD(UINT64,Rsp)==LongInitialRsp && (FIELD(UINT64,Flags)&(1u<<9)) &&
         e->count==1 && e->return_ip==irq_ip(IrqLayout.after) && e->progress==1) {
@@ -89,7 +174,7 @@ static void irq_report(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *out, UINT8 *vmcb, const 
         return;
     }
     out->OutputString(out,L"FAIL: unexpected exit, interrupt delivery or continuation.\r\n");
-    hex(out,L"VMRUN count: ",trace->resumed ? 2 : 1);
+    hex(out,L"VMRUN count: ",trace->vmruns);
     hex(out,L"EXITCODE: ",FIELD(UINT64,ExitCode));
     hex(out,L"EXITINFO1: ",FIELD(UINT64,Info1));
     hex(out,L"EXITINFO2: ",FIELD(UINT64,Info2));
@@ -98,5 +183,7 @@ static void irq_report(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *out, UINT8 *vmcb, const 
     hex(out,L"Interrupt shadow: ",FIELD(UINT64,IntShadow));
     hex(out,L"RFLAGS: ",FIELD(UINT64,Flags));
     hex(out,L"RSP: ",FIELD(UINT64,Rsp));
+#endif
 }
+
 #endif

@@ -142,7 +142,7 @@ static void smoke(EFI_SYSTEM_TABLE *st)
     if (!irq_layout_ok(length)) {
         out->OutputString(out,L"FAIL: invalid fixed IRQ guest layout.\r\n"); return;
     }
-    IrqTrace trace={0};
+    IrqTrace trace; /* irq_run fills the checkpoint snapshot before any return. */
 #endif
     if (!(r[3]&1) || (UINT32)r[1]<2 || (__readcr4() & (1u<<12))) {
         out->OutputString(out,L"SKIP: need nested paging, guest ASID 1 and four-level host paging.\r\n"); return;
@@ -206,7 +206,11 @@ static void smoke(EFI_SYSTEM_TABLE *st)
     FIELD(UINT64,MsrpmPa)=base+Msrpm*EFI_PAGE_SIZE;
     FIELD(UINT32,Asid)=1;
     FIELD(UINT8,TlbControl)=1; /* flush before ASID reuse */
+#ifdef HV_IRQ_SHADOW
+    FIELD(UINT64,IntControl)=(1ull<<24)|VIrq|(IrqPriority<<16)|((UINT64)IrqVector<<32);
+#else
     FIELD(UINT32,IntControl)=1u<<24;
+#endif
     FIELD(UINT64,NpEnable)=1;
     FIELD(UINT64,NestedCr3)=base+Pml4*EFI_PAGE_SIZE;
 #if defined(HV_VCPU_GPR) || defined(HV_IRQ_WAKE)
@@ -235,7 +239,11 @@ static void smoke(EFI_SYSTEM_TABLE *st)
 #elif defined(HV_VCPU_GPR)
     out->OutputString(out,L"Entering 64-bit L2: two CPUID GPR save/restore rounds\r\n");
 #elif defined(HV_IRQ_WAKE)
+#ifdef HV_IRQ_SHADOW
+    out->OutputString(out,L"Masked IRQ: VMMCALL checkpoint, STI shadow, vector 41h\r\n");
+#else
     out->OutputString(out,L"Virtual HLT: wait, deliver vector 41h, IRETQ, resume\r\n");
+#endif
 #elif defined(HV_FORENSIC_WRITE)
     out->OutputString(out,L"Forensic NPT test | fixed MOV byte [2000h], A5h\r\n");
 #elif defined(HV_NPT_WRITE)

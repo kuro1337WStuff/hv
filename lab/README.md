@@ -18,6 +18,8 @@ The default order is `l2`, `cpuid`, `npt-write`, `npt-remap`, `npt-cross`. To re
 
 `irq-wake` is opt-in: `python lab/hv_queue.py run --rebuild irq-wake`. L1 intercepts the fixed guest's HLT and queues one maskable virtual interrupt. The handler records its return RIP and count; the resumed guest separately records forward progress. This exercises virtual HLT emulation without a host timer, device IRQ, or physical sleep.
 
+`irq-shadow` is opt-in: `python lab/hv_queue.py run --rebuild irq-shadow`. The guest makes a checkpoint while interrupts are disabled. L1 verifies the original virtual IRQ is still pending there and resumes without queuing it again. The handler records which instruction had just completed and its return address; both must match the end of the `STI` shadow.
+
 **Watch:** leave the launcher open for live transitions, or use `python lab/hv_queue.py watch RUN_ID` in another terminal. The launcher prints the actual ID and commands at startup. Before every boot, `NEXT` names the profile and gives you five seconds to veto it; no response means continue. VMConnect can also display `HV-SVM-L1`; view only while the queue owns it.
 
 **Stop:** press **Q** in the worker window, **Ctrl+C** in the launcher, or run `python lab/hv_queue.py stop RUN_ID` from another terminal. Stop is cooperative: an already-issued build or Hyper-V operation may finish. The runner does not undo that operation, restore snapshots automatically or power off the VM merely because you stopped watching. Interrupting a separate `watch` window detaches the observer; use `stop` to stop the queue. Start a fresh batch after inspection; a stopped run is not resumed implicitly.
