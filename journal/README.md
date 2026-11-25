@@ -2,6 +2,12 @@
 
 Development host: Ryzen 9 9950X. Firmware runs use the `HV-SVM-L1` Hyper-V VM; host-only checks are labeled separately. Neither qualifies the 9950X3D deployment target on bare metal.
 
+## 054 · 2026-11-25 · Staged-input regression after the handoff change
+
+The rebuilt input-refusal guest matched run 045's unchanged oracle. Wrong kernel, initramfs and command line each stopped before any guest entry. Restored bytes took four expected NX faults. The queue reached `COMPLETE`; independent readback verified all three files inside the mounted ISO. [Batch, image and terminal](test-report.md#054--regression-of-staged-identity-through-the-new-handoff-guard).
+
+![Three zero-entry refusals and four restored NX attempts from the fresh 054 boot](images/l1-linux-inputs-054.png)
+
 ## 053 · 2026-11-25 · Which page table denied access?
 
 An L2 page-table execute denial reported guest linear address `18123h`; an NPT denial reported guest physical page `9000h`. Separate allowed fetch/write arms completed. The refused write left `5Ah` unchanged rather than applying the guest's `B6h`. [Five one-entry arms and fault bits](test-report.md#053--paired-guest-and-nested-page-faults).
