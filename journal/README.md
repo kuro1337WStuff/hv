@@ -2,6 +2,14 @@
 
 Development host: Ryzen 9 9950X. Firmware runs use the `HV-SVM-L1` Hyper-V VM; host-only checks are labeled separately. Neither qualifies the 9950X3D deployment target on bare metal.
 
+## 039 · 2026-11-25 · Standalone L1 revokes write access to a live guest mapping
+
+**Passed in `HV-SVM-L1`.** With the mapping writable, the guest stored `0xA5` at GPA `0x2000` and reached `HLT`. L1 reset the byte to `0x5A`, made the same backing page read-only, and requested a local translation flush on re-entry. The identical store then faulted at its first byte (`RIP=0x1000`). L1 read the backing byte directly: `0x5A` before and after.
+
+![Standalone L1 framebuffer showing the writable control, read-only nested page fault, and unchanged backing byte](images/l1-npt-write-039.png)
+
+The [test record](test-report.md#039--2026-11-25-local--standalone-l1-npt-write-protection) gives the raw fault fields and image hash. This checks write revocation on one vCPU, not remote invalidation.
+
 ## 038 · 2026-11-25 · L2 consumes a CPUID reply after standalone L1 resumes it
 
 **Passed in `HV-SVM-L1`.** After `ExitBootServices`, L1 intercepted the guest's fixed CPUID request at `0x100C` and used the reported next RIP, `0x100E`, to resume the same vCPU. L2 compared EAX, EBX, ECX and EDX against four distinct constants. Only the matching path could set the `PASS` marker and reach the halt at `0x1037`; seeing a second exit alone was not enough.

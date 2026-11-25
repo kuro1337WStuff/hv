@@ -294,3 +294,16 @@ Scope: one fixed real-mode guest, one `VMRUN`, no guest stack access, device I/O
 L1 supplied EAX=`0x11223344`, EBX=`0x55667788`, ECX=`0x99AABBCC`, EDX=`0xDDEEFF00` without changing the guest mapping or ASID. The guest compared all four 32-bit registers after resume. A mismatch would set `0x4641494C` and halt at a different address; L1 requires the success address **and** marker. The framebuffer reported two entries. AMD64 APM Vol. 2 §15.7.1 describes the exit state used here.
 
 Scope: one fixed request on one post-handoff vCPU using the reported next RIP. No general CPUID policy, no test of the no-nRIP fallback, and no physical 9950X3D boot. The original UEFI `cpuid` profile rebuilt against the shared handler but was not booted in this run.
+
+### 039 · 2026-11-25 local · Standalone L1 NPT write protection
+
+**Firmware PASS; queue ATTENTION for first-time screen review.** `python lab/hv_queue.py run --session --rebuild l1-npt-write` on `HV-SVM-L1`, nested on the Ryzen 9 9950X. Source `749c9a9d02`; batch `10c216862b294eeb9e774350b32513ff`; ISO SHA-256 `66D6FF026DF81A91043DECA71EDC7998754E8B300B37FEE16993B5BA0230E3C1`. The worker checkpointed the prior `l1-cpuid` PASS and captured the [new framebuffer](images/l1-npt-write-039.png). It did not report queue COMPLETE.
+
+| Mapping at GPA `0x2000` | Observed exit | Saved RIP | Backing byte before → after |
+| --- | --- | --- | --- |
+| Writable | HLT `0x78` | `0x1005` (after the store) | `0x5A` → `0xA5` |
+| Read-only | NPF `0x400` | `0x1000` (at the store) | `0x5A` → `0x5A` |
+
+Both entries ran the same `MOV byte ptr [0x2000],0xA5` on the same vCPU after `ExitBootServices`. Between entries L1 reset the owned data byte, cleared only the NPT leaf's write bit, reset the guest RIP, and requested the full local flush (`TLB_CONTROL=1`). The ASID, nested root, code and data frames did not change.
+
+The protected exit reported `EXITINFO1=0x0000000100000007` and `EXITINFO2=0x2000`. Bits 0, 1 and 32 identify a protection violation on a write during final guest-physical translation; bit 33 was clear (not a guest page-table walk). The backing byte was read from L1's owned frame, not through the fault address. L1 stopped without resuming or emulating the store. See AMD64 APM Vol. 2 §§15.16 and 15.25.7. No cross-vCPU or bare-metal result is claimed.
