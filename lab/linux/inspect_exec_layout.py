@@ -1,6 +1,9 @@
 """Offline E06 discriminator: can ELF load flags alone authorize first execution?
 
-Only inspects the pinned diskless kernel. It never generates NPT permissions.
+Usage: python lab/linux/inspect_exec_layout.py PATH_TO_PINNED_VMLINUZ
+Ranges are half-open; file offsets refer to the inflated ELF. The report concerns
+the linked, uncompressed entry, not the relocated decompressor or runtime memory.
+It never generates NPT permissions.
 """
 import argparse
 import gzip
@@ -12,6 +15,75 @@ import struct
 KERNEL = '1e8ac7aebfab3f0fcb443eae94ad320efbbda51be91b928c32ca1740b44ebe9d'
 PHDR = struct.Struct('<IIQQQQQQ')
 SHDR = struct.Struct('<IIQQQQIIQQ')
+PAGE = 4096
+
+
+def _report_sections(elf, sections, strs, start, end):
+    cursor = start
+    for s in sorted(sections, key=lambda s: s[3]):
+        index, kind, flags, addr, offset, size, *_ = s
+        lo, hi = max(start, addr), min(end, addr + size)
+        if not flags & 2 or lo >= hi:
+            continue
+        if cursor < lo:
+            print(f'  section gap VA=[{cursor:#x},{lo:#x})')
+        name = strs[index:strs.index(b'\0', index)].decode('ascii')
+        # gABI "Sections": sh_offset is independent of PT_LOAD.p_offset;
+        # SHT_NOBITS has no bytes in the file. Never use sections for the hash.
+        source = 'SHT_NOBITS (no file bytes)'
+        if kind != 8:
+            if offset + size > len(elf):
+                raise ValueError('truncated allocated section file span')
+            off = offset + lo - addr
+            source = f'section file=[{off:#x},{off + hi - lo:#x})'
+        print(f'  section={name} flags={flags:#x} VA=[{lo:#x},{hi:#x}) {source}')
+        cursor = max(cursor, hi)
+    if cursor < end:
+        print(f'  section gap VA=[{cursor:#x},{end:#x})')
+
+
+def _report_page(elf, entry, loads, sections, strs):
+    start = entry & -PAGE
+    end = start + PAGE
+    print(f'Linked uncompressed entry page GPA=[{start:#x},{end:#x})')
+    # System V gABI, "Program Loading" / PT_LOAD:
+    # https://gabi.xinuos.com/elf/07-pheader.html
+    # Only [p_paddr+p_filesz, p_paddr+p_memsz) is segment zero-fill here.
+    page = bytearray()
+    cursor = start
+    for p in sorted(loads, key=lambda p: p[4]):
+        _, flags, off, va, pa, filesz, memsz, _ = p
+        lo, hi = max(start, pa), min(end, pa + memsz)
+        if lo >= hi:
+            continue
+        if lo < cursor:
+            raise ValueError(f'ambiguous overlapping PT_LOAD at GPA={lo:#x}')
+        if cursor < lo:
+            print(f'  unmapped GPA=[{cursor:#x},{lo:#x})')
+        if filesz > memsz or (filesz and off + filesz > len(elf)):
+            raise ValueError('invalid or truncated PT_LOAD file span')
+        print(f'PT_LOAD flags={flags:#x} GPA=[{pa:#x},{pa + memsz:#x}) '
+              f'VA=[{va:#x},{va + memsz:#x}) file_offset={off:#x} '
+              f'filesz={filesz:#x} memsz={memsz:#x}')
+        print(f'  page intersection GPA=[{lo:#x},{hi:#x}) '
+              f'VA=[{va + lo - pa:#x},{va + hi - pa:#x})')
+        split = max(lo, min(hi, pa + filesz))
+        if lo < split:
+            offset = off + lo - pa
+            length = split - lo
+            print(f'  file-backed GPA=[{lo:#x},{split:#x}) '
+                  f'file=[{offset:#x},{offset + length:#x}) length={length:#x}')
+            page.extend(elf[offset:offset + length])
+        if split < hi:
+            print(f'  ELF zero-fill GPA=[{split:#x},{hi:#x}) length={hi - split:#x}')
+            page.extend(bytes(hi - split))
+        _report_sections(elf, sections, strs, va + lo - pa, va + hi - pa)
+        cursor = hi
+    if cursor < end:
+        print(f'  unmapped GPA=[{cursor:#x},{end:#x})')
+    if len(page) != PAGE:
+        raise ValueError('entry page not completely covered by PT_LOAD')
+    print(f'Linked page SHA256={hashlib.sha256(page).hexdigest()} length={len(page)}')
 
 
 def inspect(image):
@@ -47,6 +119,7 @@ def inspect(image):
     if (gpa, p[1], name, bool(s[2] & 4), first) != (0x30047c0, 6, '.init.text', True, bytes.fromhex('4989f7')):
         raise ValueError('pinned E06 counterexample not established')
     print('No-go: PT_LOAD lacks execute at the real entry. Making the RW segment executable would grant W+X. Keep Linux NX.')
+    _report_page(elf, gpa, loads, sections, strs)
 
 
 if __name__ == '__main__':
