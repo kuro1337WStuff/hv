@@ -1,0 +1,5 @@
+# 066 · IRQ4 on the combined IRQ4/range tree
+
+Before boot: compute `git merge-tree --write-tree 416af75004 951a31dcb7` and build `firmware\build.cmd l1-uart-irq4` from a clean archive of the resulting tree (`beb7e6bdfe5303c10a690bf537a35d0d353f6d90`). 067 builds from the same tree with the range profile instead. No merge or branch update is needed to reproduce it. Require the **unchanged** 062 classifier: handler/EOI counts `1/1` versus `0/0`, eight versus six entries, both completion cookies. Do not register a replacement screen.
+
+**PASS → COMPLETE** on `HV-SVM-L1-A`, [066 capture](../images/l1-uart-irq4-066.png). The broker revalidated prior 064, checkpointed as `HvQueue before 77dcebf8ab394f97bb8027661f0808a8` and booted the combined-source ISO `ab79dbedf2c00fbabec7d639f6c819e3d04c93afe52f00a284a7e007a88def94` at 19:07:32.531 UTC on 2026-11-25. `python lab/hv_queue.py run --session l1-uart-irq4`, runner `56db7a855d`, batch `77dcebf8ab394f97bb8027661f0808a8`. The fresh RGB565 pixels matched 062 exactly (`74c5f1f1606d548ff7fd91a5809e81e4b25a6533775d5d160feef48173a28e81`).
