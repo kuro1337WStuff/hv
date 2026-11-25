@@ -10,6 +10,20 @@ python lab/hv_queue.py run
 
 The default order is `l2`, `cpuid`, `npt-write`, `npt-remap`, `npt-cross`. To rebuild and run just two profiles: `python lab/hv_queue.py run --rebuild npt-write npt-remap`. Without `--rebuild`, the runner uses the already-built ISOs in `build/`. It freezes the ordered profiles and SHA-256 digests for this batch before asking Windows to launch the visible Hyper-V worker. Building and staging use the caller's existing privileges. No change to UAC, no service and no per-test approval. An operator must still authorize elevation when Windows requires it.
 
+### Host-only legacy PIC discovery and IRQ0 regression
+
+Use the root of the **combined source tree** in an ordinary x64 MSVC Developer Command Prompt. Build and run both controls there; each compile and each program must exit zero. These commands need no firmware build, queue session, VM or port I/O.
+
+```bat
+cl /nologo /std:c11 /W4 /WX /TC lab\tests\pic8259_test.c /Fo"%TEMP%\pic8259_test.obj" /Fe"%TEMP%\pic8259_test.exe" && "%TEMP%\pic8259_test.exe"
+cl /nologo /std:c11 /W4 /WX /TC lab\tests\pit_pic_test.c /Fo"%TEMP%\pit_pic_test.obj" /Fe"%TEMP%\pit_pic_test.exe" && "%TEMP%\pit_pic_test.exe"
+```
+
+- **Discovery/init (`pic8259_test`).** The pinned [`probe_8259A()` and `init_8259A(0)` in Linux v6.18.60](https://github.com/gregkh/linux/blob/v6.18.60/arch/x86/kernel/i8259.c) use scalar bytes (hex here): `a1←ff`, `21←fb`, then read `fb` at `21`. Initialize master `20←11`, `21←30,04,01` and slave `a0←11`, `a1←38,02,01`. Each chip consumes only its own words. ICW1 clears its mask; only after ICW4 does its data port become an IMR again. Both chips must finish for pair readiness; cached masks can then be restored and read back. In the interleaved control the slave finishes first and accepts `38` as a mask while the master still expects ICW4. Wrong words, mid-sequence restarts and unsupported writes must leave the **whole pair** byte-for-byte unchanged; refused reads leave the output sentinel untouched. This tests fixed vector bases, cascade wiring and 8086 normal-EOI *setup*, not command-port status, polling, EOI service, arbitration or cascade/SCI delivery.
+- **IRQ0 service (`pit_pic_test`).** `pit_pic.h` shares the master's ports and vector, not the pair's programming state. Check the consumer's vector against wire value `30`, not another model constant. A one-shot expiring while masked must remain pending; unmask with `21←fe`, take it once, then mask with `21←ff` before acknowledging with `20←60`. An edge latched during service survives the EOI. The consumer must refuse early takes, premature/duplicate EOIs, `61` and non-specific `20` EOIs, other IRQ masks and slave accesses without changing state. These controls distinguish an IRQ0 service regression from a PIC setup regression; neither host process delivers an interrupt to a vCPU.
+
+[065](../journal/runs/065-l1-pit-irq0.md) observed two IRQ0 entries and EOIs and one wake on the earlier guest fixture, **not** a guest ICW sequence on this tree. [068](https://github.com/kuro1337WStuff/hv/blob/3dc7e8b23103bfddcf568c708104f88660d5920a/journal/trials/068.md) remains FAIL/ATTENTION: the final refusal receipts for both chip states, cookie and entry count were not visible. [072](https://github.com/kuro1337WStuff/hv/blob/3dc7e8b23103bfddcf568c708104f88660d5920a/journal/trials/072.md) isolated label width, not row exhaustion, using host-supplied values. None of these host controls supplies the missing guest receipts or shows Linux selected a PIC.
+
 ### One launch for a supervised session
 
 From the checkout, run **once** and approve the Windows elevation prompt:

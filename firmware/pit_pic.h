@@ -3,7 +3,9 @@
 
 #include <stdint.h>
 
-enum { PIT_PIC_HZ = 1193182, PIT_PIC_VECTOR = 0x30 };
+#include "pic8259.h"
+
+enum { PIT_PIC_HZ = 1193182, PIT_PIC_VECTOR = PIC8259_MASTER_BASE };
 enum { PIT_PIC_OFF, PIT_PIC_LOW, PIT_PIC_HIGH };
 
 typedef struct {
@@ -47,11 +49,11 @@ static inline int pit_pic_write(PitPic *p, uint16_t port, uint8_t width, uint8_t
 {
     if (width != 1) return 0;
     switch (port) {
-    case 0x21:
+    case PIC8259_MASTER_DATA:
         if (byte != 0xff && byte != 0xfe) return 0;
         p->imr = byte;
         return 1;
-    case 0x20:
+    case PIC8259_MASTER_CMD:
         if (byte != 0x60 || !p->in_service || !(p->imr & 1)) return 0;
         p->in_service = 0;
         return 1;
@@ -88,7 +90,7 @@ static inline int pit_pic_write(PitPic *p, uint16_t port, uint8_t width, uint8_t
 
 static inline int pit_pic_read(const PitPic *p, uint16_t port, uint8_t width, uint8_t *byte)
 {
-    if (port != 0x21 || width != 1 || !byte) return 0;
+    if (port != PIC8259_MASTER_DATA || width != 1 || !byte) return 0;
     *byte = p->imr;
     return 1;
 }
