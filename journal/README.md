@@ -2,6 +2,12 @@
 
 Development host: Ryzen 9 9950X. Firmware runs use the `HV-SVM-L1` Hyper-V VM; host-only checks are labeled separately. Neither qualifies the 9950X3D deployment target on bare metal.
 
+## 057 · 2026-11-25 · ACPI qualification stopped in the evidence renderer
+
+The firmware rejected the deliberately bad root, then stopped while recording its entry count: the label exceeded the renderer's width limit. Neither the remaining refusal nor the restored NX fetch was verified. The failed frame and prior checkpoint are retained. [Expected vs observed](test-report.md#057--publish-guest-owned-acpi-tables-without-granting-execute).
+
+![ACPI map FAIL: three control fetches and BAD ROOT, followed by OBSERVATION LIMIT](images/l1-acpi-map-057.png)
+
 ## 056 · 2026-11-25 · Returning from a refused control-register write
 
 The fixed guest received one general-protection fault with error code zero. The hardware frame named the refused instruction, not the next instruction. The handler checked the frame and returned to its continuation; the read-only control reached the same HLT without entering the handler. CR4 stayed unchanged. [Contract and observations](test-report.md#056--deliver-a-general-protection-fault-after-a-refused-cr4-write).
