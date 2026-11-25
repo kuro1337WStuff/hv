@@ -1,4 +1,4 @@
-# Project status · through 095
+# Project status · through 096
 
 **On `main`:** firmware baseline [041](README.md), plus CI-only [#2](https://github.com/kuro1337WStuff/hv/pull/2) at `735c8b56` after both hosted checks passed on `54bace3b`. **On `feature/l1-handoff` only:** [#4](https://github.com/kuro1337WStuff/hv/pull/4) merged at `95abe46c`; [#10](https://github.com/kuro1337WStuff/hv/pull/10) retargeted, then squashed at `44fb6247`. The resulting firmware trees matched the source trees used in 060 and 063 respectively. Revert #10 first if both must be undone; #4 is a merge commit. No ordinary Linux boot or bare-metal qualification.
 
@@ -15,7 +15,7 @@
 
 **Merge routing:** [Dated PR-by-PR audit](merge-audit-072.md) · [live open PRs](https://github.com/kuro1337WStuff/hv/pulls) · [workflow and rollback](project-workflow.md). #21's test merge did not promote #12. Check the actual base, scope and source revision before each integration.
 
-**Clock and platform work:** [095](trials/095.md) compared a declared virtual cycle rate to channel-2 transitions driven by the same elapsed time. The sampled interval matched independent integer arithmetic. It does not measure host MHz or a Linux-selected clock. See [#73 · IRQ9 trigger configuration](https://github.com/kuro1337WStuff/hv/issues/73) for the independent platform card. No VM admission changed.
+**Clock and platform work:** [095](trials/095.md) verified virtual cycles against shared PIT time. [096](trials/096.md) verified edge/level setup for the IRQ9 named by the FADT, not delivery. Next: [#78 · bounded Linux fallback calibration replay](https://github.com/kuro1337WStuff/hv/issues/78) and [#79 · PM1 event through slave/master PIC service](https://github.com/kuro1337WStuff/hv/issues/79). Both are host-only; no bench was admitted.
 
 ## Feature evidence before the separate trial ledger
 
