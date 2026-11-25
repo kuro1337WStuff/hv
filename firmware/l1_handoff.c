@@ -2,6 +2,9 @@
 #include <Uefi.h>
 #include <Protocol/GraphicsOutput.h>
 #include <intrin.h>
+#if defined(HV_PACKAGE) || defined(HV_LINUX_ADMISSION)
+#include "observation_row.h"
+#endif
 
 #ifdef HV_STANDALONE_L2
 #include "standalone_l2.h"
@@ -112,7 +115,7 @@ static int use_gop(EFI_GRAPHICS_OUTPUT_PROTOCOL *gop)
     if (i->Version != 0 || (i->PixelFormat != PixelBlueGreenRedReserved8BitPerColor &&
         i->PixelFormat != PixelRedGreenBlueReserved8BitPerColor)) return 0;
 #if defined(HV_PACKAGE) || defined(HV_LINUX_ADMISSION)
-    if (i->HorizontalResolution < 20u + 12u * 32u) return 0;
+    if (i->HorizontalResolution < 20u + 12u * ObservationColumns) return 0;
 #elif defined(HV_STANDALONE_L2) && defined(HV_NPT_WRITE)
     if (i->HorizontalResolution < 20u + 12u * (sizeof(NPT_INFO_LABEL) - 1u + 16u)) return 0;
 #elif defined(HV_STANDALONE_L2) && defined(HV_NPT_REMAP)
@@ -190,7 +193,7 @@ static int send_text(const char *s)
     }
     return 1;
 }
-#else
+#elif !defined(HV_PACKAGE) && !defined(HV_LINUX_ADMISSION)
 /* Callers reserve space for the label, 16 hex digits and the terminator. */
 static void log_hex(char *line, const char *label, UINT64 value)
 {
@@ -254,11 +257,11 @@ __declspec(noreturn) static void fail(const char *reason)
 #if defined(HV_PACKAGE) || defined(HV_LINUX_ADMISSION)
 static void pkg_observe(const char *label, UINT64 value)
 {
-    static char lines[LOG_ROWS][12 + 16 + 1];
-    UINTN len=0;
-    while (label[len] && len<12) ++len;
-    if (label[len] || logged>=LOG_ROWS) fail("OBSERVATION LIMIT");
-    log_hex(lines[logged],label,value);
+    static char lines[LOG_ROWS][ObservationColumns + 1];
+    if (logged>=LOG_ROWS) fail("OBSERVATION ROW LIMIT");
+    if (!observation_row(lines[logged],label,value)) fail("OBSERVATION WIDTH");
+    log_lines[logged]=lines[logged];
+    ++logged;
 }
 
 #endif
