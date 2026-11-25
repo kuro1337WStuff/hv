@@ -2,6 +2,14 @@
 
 Development host: Ryzen 9 9950X. Firmware runs use the `HV-SVM-L1` Hyper-V VM; host-only checks are labeled separately. Neither qualifies the 9950X3D deployment target on bare metal.
 
+## 044 · 2026-11-25 · Why the Linux entry fetch reported a page base
+
+**Admission passed with Linux execution still denied.** Two different byte offsets in one guest physical page returned the same raw fault address. Changing the mapped page changed that address. Saved RIP stayed exact throughout. The Linux entry then followed the same rule: RIP and the independent walk gave `0x1000200`, while `EXITINFO2` gave `0x1000000`. Run 043 correctly failed its exact-byte assertion; run 044 separates fault cause, instruction position and fault-address precision.
+
+![Three nonidentity fetch controls and the Linux admission observation in the nested VM](images/l1-linux-admission-044.png)
+
+The [ledger](test-report.md#044--2026-11-25--controlled-nested-fetch-address-precision) records the command, raw values, source and image hashes. The next boundary is verifying staged inputs before any executable Linux profile; this capture is not a Linux boot.
+
 ## 042–043 · 2026-11-25 · Linux layout verified; first-fetch admission stopped
 
 The pinned Alpine kernel, initramfs and command line produced the same hashes in two offline preparations. The host verifier checked their placement, the reserved hole, guest page tables and boot parameters. In the nested VM, L1 then staged those inputs and attempted one kernel-entry fetch while keeping guest RAM non-executable.

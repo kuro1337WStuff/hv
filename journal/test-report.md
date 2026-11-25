@@ -372,3 +372,22 @@ L1 read the three pinned inputs from the frozen ISO before `ExitBootServices`. A
 The whole-tree and private guard checks succeeded before the code returned `ADMIT FETCH NPF`. Neither a wrong mapping nor a Hyper-V defect is established by the byte-offset difference. AMD64 APM Vol. 2 (24593 rev. 3.46), §15.25.7 p. 576 describes EXITINFO2 as the faulting GPA and defines the observed flag bits; that passage does not establish byte-offset behavior for this nested fetch. Keep the original assertion and this result. The next diagnostic is a **distinct** fixed NX-fetch experiment that varies the entry offset and page independently, recording raw EXITINFO2, saved RIP and an independent guest page walk. Do not turn this capture into PASS or retry over the evidence. No userspace boots, shutdown events, native hardware tests or release sign-off.
 
 Media cross-check after the stop: reopened the digest-named ISO, verified its whole-file SHA-256 against the mount event, then hashed `VMLINUZ.BIN`, `INITRD.BIN` and `CMDLINE.BIN` from the embedded FAT volume. All three matched run 042's input digests. This verifies **this artifact** independently of the packer; the current EFI reader checks lengths and EOF, not cryptographic identity in the guest's staged memory. The framebuffer alone cannot authenticate a future kernel image.
+
+### 044 · 2026-11-25 · Controlled nested fetch-address precision
+
+**Question:** Does this virtual AMD platform report the exact byte GPA of a denied instruction fetch, its 4 KiB page base, or neither? AMD64 APM Vol. 2 §15.25.7 identifies the raw faulting GPA field; saved RIP is a separate architectural field. A Linux identity mapping alone cannot distinguish guest linear and guest physical addresses.
+
+**Independent controls:** A and B start at different nonzero byte offsets in the same nonidentity guest mapping. C keeps A's offset but changes the guest physical page. Each arm has a fresh VMCB, a local flush, intercepted `#DB`, an independent bounded walk, and a pre/post NPT allowlist and private guard check. All three must report the same mode. No masking of raw `EXITINFO2`: another page, another offset on the right page, mixed modes, a changed RIP, or a non-final/non-fetch exit stops the test. Only then is the real Linux mapping constructed and tested against that mode. The 043 artifact and failure stand unchanged.
+
+**Host verifier PASS:** compiled `lab/tests/fetch_walk_test.c` with MSVC `/std:c11 /O2 /W4 /WX` and ran `build\fetch_walk_test.exe`. Covered aliases, malformed guest tables, guest NX at all levels, 2 MiB and 4 KiB guest leaves and exact-versus-base discrimination, including rejection of an unrelated byte on the correct page. Firmware source `f3245dc608`. Build: `firmware\build.cmd l1-linux-admission`. VM command: `python lab/hv_queue.py run --session l1-linux-admission`.
+
+**Firmware PASS by review; queue ATTENTION (first capture), not COMPLETE.** Ryzen 9 9950X, `HV-SVM-L1`, Hyper-V. Batch `5ac1618c175b4a0fa2f99d15565f7135` cold-booted ISO SHA-256 `B9212B7A580E7542C5225738E62F703812E9056DFADB6C828604AAA942FBADF9`. [Full framebuffer](images/l1-linux-admission-044.png). Each exit was `0x400` with INFO1 `0x100000015`: present final-GPA instruction fetch, not a guest table walk. No guest was resumed.
+
+| Arm | Saved RIP | Independently walked byte GPA | Raw EXITINFO2 |
+|---|---:|---:|---:|
+| A | `0x81123` | `0x321123` | `0x321000` |
+| B | `0x81678` | `0x321678` | `0x321000` |
+| C | `0x82123` | `0x634123` | `0x634000` |
+| Linux entry | `0x1000200` | `0x1000200` | `0x1000000` |
+
+The raw field tracked the 4 KiB **guest physical page**, not the guest linear address or byte offset. The Linux arm agreed with all three controls, with RSI `0x10000`, CR3 `0x13000`, initrd `0x7E97000` and guard `0x50354E5847554152`. This explains the exact-byte mismatch in run 043 on this nested configuration. It does not identify whether L0 or the CPU chose the granularity, say anything about write-fault precision, or qualify a native AMD platform. Linux remained non-executable; zero boots to PID 1.
