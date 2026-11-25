@@ -71,6 +71,14 @@ if /i "%~1"=="l2" (
   set "ASM_SRC=firmware\l1_handoff.asm"
   set "EXTRA_ASM=vcpu_fpstate cpu_contract"
   set "EXTRA_ASM_FLAGS=/DHV_CPU_CONTRACT"
+) else if /i "%~1"=="l1-serial-8250" (
+  set "SRC=l1_handoff"
+  set "EFI=L1SERIAL8250"
+  set "ISO=hv-l1-serial-8250"
+  set "CASE_FLAGS=/DHV_STANDALONE_L2 /DHV_PACKAGE /DHV_SERIAL_CONTRACT"
+  set "ASM_OBJ=build\l1_serial_handoff.obj"
+  set "ASM_SRC=firmware\l1_handoff.asm"
+  set "EXTRA_ASM=vcpu_gpr uart8250_guest"
 ) else if defined LINUX_MEDIA (
   set "SRC=l1_handoff"
   set "EFI=L1LXADMIT"

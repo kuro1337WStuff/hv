@@ -7,7 +7,7 @@ enum { GuestTables=Pages, GuestStack=GuestTables+NptTableCount,
 _Static_assert(FpScratch<StandaloneGuestPages,"private FX workspace must fit");
 typedef struct { unsigned completed; } StandaloneSample;
 static void pkg_observe(const char *label, UINT64 value);
-#ifndef HV_CPU_CONTRACT
+#ifndef HV_STANDALONE_CONTRACT
 static void pkg_text(const char *text);
 #endif
 
@@ -28,6 +28,9 @@ static void pkg_reset(UINT8 *vmcb)
 #include "long_guest.h"
 #include "vcpu_fpstate.h"
 #include "cpu_contract.h"
+#elif defined(HV_SERIAL_CONTRACT)
+#include "long_guest.h"
+#include "serial_contract.h"
 #else
 #define HV_GUEST_IDT
 #include "long_guest.h"
@@ -51,5 +54,5 @@ static const char *pkg_run(UINT8 *vmcb, StandaloneSample *s)
     if (!reason) ++s->completed;
     return reason;
 }
-#endif /* HV_CPU_CONTRACT */
+#endif
 #endif

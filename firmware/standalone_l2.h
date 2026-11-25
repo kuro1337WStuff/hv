@@ -2,6 +2,9 @@
 #define HV_STANDALONE_L2_H
 #include "fixed_vmcb.h"
 
+#if defined(HV_CPU_CONTRACT) || defined(HV_SERIAL_CONTRACT)
+#define HV_STANDALONE_CONTRACT
+#endif
 #ifdef HV_PACKAGE
 #include "package.h"
 #elif defined(HV_LINUX_ADMISSION)
@@ -65,7 +68,7 @@ typedef struct { UINT64 exitcode, rip, rax; } StandaloneSample;
 
 /* BSP only, interrupts already disabled. reservation is a contiguous identity
  * mapping retained by L1 after ExitBootServices; no firmware calls below. */
-#if defined(HV_LINUX_ADMISSION) || defined(HV_CPU_CONTRACT)
+#if defined(HV_LINUX_ADMISSION) || defined(HV_STANDALONE_CONTRACT)
 static const char *run_standalone_l2(void *reservation)
 #else
 static const char *run_standalone_l2(void *reservation, StandaloneSample *sample)
@@ -74,14 +77,14 @@ static const char *run_standalone_l2(void *reservation, StandaloneSample *sample
     UINTN base=(UINTN)reservation;
     UINT8 *vmcb=(UINT8 *)reservation;
     int r[4];
-#if defined(HV_PACKAGE) && !defined(HV_CPU_CONTRACT)
+#if defined(HV_PACKAGE) && !defined(HV_STANDALONE_CONTRACT)
     sample->completed=0;
 #elif defined(HV_NPT_WRITE)
     __stosb((UINT8 *)sample,0,sizeof(*sample));
     sample->rw_exit=sample->ro_exit=~0ull;
 #elif defined(HV_NPT_REMAP)
     fixed_remap_init_sample(sample);
-#elif !defined(HV_LINUX_ADMISSION) && !defined(HV_CPU_CONTRACT)
+#elif !defined(HV_LINUX_ADMISSION) && !defined(HV_STANDALONE_CONTRACT)
     sample->exitcode=~0ull;
     sample->rip=sample->rax=0;
 #ifdef HV_CPUID_RESUME
@@ -150,6 +153,8 @@ static const char *run_standalone_l2(void *reservation, StandaloneSample *sample
     __writemsr(MSR_HSAVE,base+HostSave*EFI_PAGE_SIZE);
 #ifdef HV_CPU_CONTRACT
     const char *error=cpu_contract_run(vmcb);
+#elif defined(HV_SERIAL_CONTRACT)
+    const char *error=serial_contract_run(vmcb);
 #elif defined(HV_PACKAGE)
     const char *error=pkg_run(vmcb,sample);
 #elif defined(HV_LINUX_ADMISSION)

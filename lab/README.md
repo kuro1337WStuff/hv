@@ -72,6 +72,8 @@ build\linux_layout_test.exe build\linux-inputs\vmlinuz-virt build\linux-inputs\i
 
 `l1-cpu-contract`: run `python lab/hv_queue.py run --session --rebuild l1-cpu-contract` for the standalone, single-vCPU CPUID and state-switch fixture. L2 must see an explicitly virtual processor, use SSE2 across a CPUID exit, and finish at a denied MSR read. L1 checks its own state independently and must not resume the denied operation. The ISO contains the fixed guest only; it neither boots Linux nor changes run 045's NX policy.
 
+`l1-serial-8250`: run `python lab/hv_queue.py run --session --rebuild l1-serial-8250`. A fixed L2 initializes a non-FIFO COM1, polls its line status, transmits `L2:8250` followed by LF, and halts. L1 checks the captured bytes separately from guest memory, then refuses one COM2 write. All port I/O terminates in the VM; no host serial device, Linux image, or serial IRQ is involved.
+
 `vcpu-gpr` is opt-in: `python lab/hv_queue.py run --rebuild vcpu-gpr`. A fixed 64-bit L2 guest checks its integer registers after each of two CPUID intercepts. Expected path: CPUID, CPUID, success HLT. This test does not cover interrupt delivery, extended state, or vCPU migration.
 
 `vcpu-xmm` is opt-in: from the repository root, run `python lab/hv_queue.py run --rebuild vcpu-xmm` to build and run `build/hv-vcpu-xmm.iso`. To build without starting a VM, run `firmware\build.cmd vcpu-xmm`. The profile checks 128-bit XMM register contents across nested guest exits and resumes. It does not test MXCSR, x87/MMX, AVX upper lanes, or general XSAVE state.

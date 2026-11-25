@@ -23,7 +23,7 @@ static UINTN arena_used;
 static __declspec(align(16)) UINT8 map_storage[128 * 1024];
 static volatile UINT32 *pixels;
 static UINT32 width, height, pitch;
-#ifdef HV_CPU_CONTRACT
+#ifdef HV_STANDALONE_CONTRACT
 #define LOG_ROWS 24u
 #elif defined(HV_PACKAGE)
 #define LOG_ROWS 42u
@@ -204,6 +204,8 @@ __declspec(noreturn) static void fail(const char *reason)
     L1DisableInterrupts();
 #ifdef HV_CPU_CONTRACT
     screen("L1 CPU CONTRACT FAIL", reason, 0xff00ff);
+#elif defined(HV_SERIAL_CONTRACT)
+    screen("L1 SERIAL CONTRACT FAIL", reason, 0xff00ff);
 #elif defined(HV_PACKAGE)
     screen("L1 PACKAGE FAIL", reason, 0xff00ff);
 #elif defined(HV_INPUT_TEST)
@@ -237,7 +239,7 @@ static void pkg_observe(const char *label, UINT64 value)
 }
 
 #endif
-#if defined(HV_PACKAGE) && !defined(HV_CPU_CONTRACT)
+#if defined(HV_PACKAGE) && !defined(HV_STANDALONE_CONTRACT)
 static void pkg_text(const char *text)
 {
     if (logged>=LOG_ROWS) fail("OBSERVATION LIMIT");
@@ -273,10 +275,14 @@ __declspec(noreturn) void L1OwnedMain(void)
 #else
     screen("L1 LINUX ADMISSION PASS", "FETCH DENIED: NO LINUX BOOT", 0x00ff00);
 #endif
-#elif defined(HV_CPU_CONTRACT)
+#elif defined(HV_STANDALONE_CONTRACT)
     const char *reason=run_standalone_l2(reservation);
     if (reason) fail(reason);
+#ifdef HV_SERIAL_CONTRACT
+    screen("L1 SERIAL CONTRACT PASS", "POLLED COM1: FIXED GUEST", 0x00ff00);
+#else
     screen("L1 CPU CONTRACT PASS", "ONE VIRTUAL CPU: FIXED GUEST", 0x00ff00);
+#endif
 #else
     StandaloneSample sample;
     const char *reason = run_standalone_l2(reservation, &sample);
