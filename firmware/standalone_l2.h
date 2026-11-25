@@ -44,6 +44,10 @@ static const char *standalone_store_run(UINT8 *vmcb, StandaloneSample *s)
     if (s->after!=s->before) return "RO BYTE CHANGED";
     return NULL;
 }
+#elif defined(HV_NPT_REMAP)
+#include "fixed_npt_remap.h"
+enum { StandaloneGuestPages=RemapPages };
+typedef RemapSample StandaloneSample;
 #else
 enum { StandaloneGuestPages=Pages };
 #ifdef HV_CPUID_RESUME
@@ -64,6 +68,8 @@ static const char *run_standalone_l2(void *reservation, StandaloneSample *sample
 #ifdef HV_NPT_WRITE
     __stosb((UINT8 *)sample,0,sizeof(*sample));
     sample->rw_exit=sample->ro_exit=~0ull;
+#elif defined(HV_NPT_REMAP)
+    fixed_remap_init_sample(sample);
 #else
     sample->exitcode=~0ull;
     sample->rip=sample->rax=0;
@@ -107,6 +113,9 @@ static const char *run_standalone_l2(void *reservation, StandaloneSample *sample
 #elif defined(HV_NPT_WRITE)
     __stosb(vmcb+Data*EFI_PAGE_SIZE,0,EFI_PAGE_SIZE);
     __movsb(vmcb+Code*EFI_PAGE_SIZE,fixed_store_hlt,sizeof(fixed_store_hlt));
+#elif defined(HV_NPT_REMAP)
+    __stosb(vmcb+FrameA*EFI_PAGE_SIZE,0,(RemapPages-FrameA)*EFI_PAGE_SIZE);
+    fixed_remap_prepare(vmcb);
 #else
     __movsb(vmcb+Code*EFI_PAGE_SIZE,fixed_mov_hlt,sizeof(fixed_mov_hlt));
 #endif
@@ -125,6 +134,8 @@ static const char *run_standalone_l2(void *reservation, StandaloneSample *sample
     const char *error=fixed_cpuid_run(vmcb,sample);
 #elif defined(HV_NPT_WRITE)
     const char *error=standalone_store_run(vmcb,sample);
+#elif defined(HV_NPT_REMAP)
+    const char *error=fixed_remap_run(vmcb,sample);
 #else
     __svm_vmrun(base);
 #endif
@@ -135,7 +146,7 @@ static const char *run_standalone_l2(void *reservation, StandaloneSample *sample
     __svm_stgi();
     __writemsr(MSR_EFER,efer);
 
-#if defined(HV_CPUID_RESUME) || defined(HV_NPT_WRITE)
+#if defined(HV_CPUID_RESUME) || defined(HV_NPT_WRITE) || defined(HV_NPT_REMAP)
     return error;
 #else
     sample->exitcode=FIELD(UINT64,ExitCode);

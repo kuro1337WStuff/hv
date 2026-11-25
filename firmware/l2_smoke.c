@@ -24,8 +24,8 @@ enum { GuestTables=Pages, GuestStack=GuestTables+NptTableCount,
 #include "fixed_npt_write.h"
 enum { AllocPages=Data+1 };
 #elif defined(HV_NPT_REMAP)
-enum { DataGpa=0x2000, FrameA=Pages, FrameB, AllocPages, MarkerA=0xa11a, MarkerB=0xb22b };
-typedef struct { UINT64 exit, ip, ax; } ReadSample;
+#include "fixed_npt_remap.h"
+enum { AllocPages=RemapPages };
 #else
 enum { AllocPages=Pages };
 #endif
@@ -215,15 +215,10 @@ static void smoke(EFI_SYSTEM_TABLE *st)
     UINT8 before=0;
 #endif
 #elif defined(HV_NPT_REMAP)
-    /* MOV AX, word ptr DS:[2000h]; HLT. Neither backing frame changes between reads. */
-    const UINT8 payload[]={0xa1,DataGpa & 0xff,DataGpa >> 8,0xf4};
-    bs->CopyMem(vmcb+Code*EFI_PAGE_SIZE,(VOID *)payload,sizeof(payload));
-    *(volatile UINT16 *)(vmcb+FrameA*EFI_PAGE_SIZE)=MarkerA;
-    *(volatile UINT16 *)(vmcb+FrameB*EFI_PAGE_SIZE)=MarkerB;
-    volatile UINT64 *leaf=&((FixedNpt *)(vmcb+Pml4*EFI_PAGE_SIZE))->table[3][DataGpa/NptPageBytes];
-    ReadSample samples[2];
-    UINTN reads=0;
-    BOOLEAN matched=FALSE;
+    RemapSample remap;
+    fixed_remap_init_sample(&remap);
+    fixed_remap_prepare(vmcb);
+    const char *remap_error;
 #else
     /* One read-only guest page, no guest I/O or arbitrary image loader: MOV AX,imm16; HLT. */
     bs->CopyMem(vmcb+Code*EFI_PAGE_SIZE,(VOID *)fixed_mov_hlt,sizeof(fixed_mov_hlt));
@@ -326,21 +321,7 @@ static void smoke(EFI_SYSTEM_TABLE *st)
         __svm_vmrun((UINTN)base);
     }
 #elif defined(HV_NPT_REMAP)
-    for (UINTN arm=0; arm<2; ++arm) {
-        *leaf=(base+(arm ? FrameB : FrameA)*EFI_PAGE_SIZE)|5; /* identical read-only permissions */
-        FIELD(UINT8,TlbControl)=1; /* full flush at VMRUN; retain ASID and N_CR3 */
-        FIELD(UINT64,Rip)=FixedGuestGpa;
-        FIELD(UINT64,Rax)=0; /* a missing load cannot pass either arm */
-        FIELD(UINT64,ExitCode)=~0ull;
-        __svm_vmrun((UINTN)base);
-        ReadSample *s=&samples[reads++];
-        s->exit=FIELD(UINT64,ExitCode);
-        s->ip=FIELD(UINT64,Rip);
-        s->ax=FIELD(UINT64,Rax);
-        matched=s->exit==0x78 && s->ip==FixedGuestGpa+sizeof(payload)-1 &&
-                s->ax==(arm ? MarkerB : MarkerA);
-        if (!matched) break;
-    }
+    remap_error=fixed_remap_run(vmcb,&remap);
 #else
     /* The fixed guest touches only AX. VMRUN saves host RAX and writes guest RAX to the VMCB. */
     __svm_vmrun((UINTN)base);
@@ -366,13 +347,13 @@ static void smoke(EFI_SYSTEM_TABLE *st)
 #elif defined(HV_EXCEPTION_UD)
     ud_report(out,vmcb,&trace);
 #elif defined(HV_NPT_REMAP)
-    for (UINTN i=0; i<reads; ++i) {
+    for (UINTN i=0; i<remap.entries; ++i) {
         out->OutputString(out,i ? L"Frame B:\r\n" : L"Frame A:\r\n");
-        hex(out,L"  EXITCODE: ",samples[i].exit);
-        hex(out,L"  RIP: ",samples[i].ip);
-        hex(out,L"  Guest RAX: ",samples[i].ax);
+        hex(out,L"  EXITCODE: ",remap.arm[i].exit);
+        hex(out,L"  RIP: ",remap.arm[i].ip);
+        hex(out,L"  Guest RAX: ",remap.arm[i].ax);
     }
-    out->OutputString(out,reads==2 && matched
+    out->OutputString(out,!remap_error
         ? L"PASS: same GPA read A then B after remap.\r\n"
         : L"FAIL: unexpected halt or backing-frame marker.\r\n");
 #else

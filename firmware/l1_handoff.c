@@ -26,6 +26,9 @@ static UINT32 width, height, pitch;
 #if defined(HV_STANDALONE_L2) && defined(HV_NPT_WRITE)
 #define LOG_ROWS 11u  /* HANDOFF and ten sampled values */
 #define NPT_INFO_LABEL "EXITINFO1 "
+#elif defined(HV_STANDALONE_L2) && defined(HV_NPT_REMAP)
+#define LOG_ROWS 10u  /* HANDOFF, six arm observations, entries and two backing words */
+#define REMAP_BACKING_LABEL "BACKING A "
 #elif defined(HV_STANDALONE_L2) && defined(HV_CPUID_RESUME)
 #define LOG_ROWS 10u  /* HANDOFF and nine sampled values */
 #else
@@ -95,6 +98,8 @@ static int use_gop(EFI_GRAPHICS_OUTPUT_PROTOCOL *gop)
         i->PixelFormat != PixelRedGreenBlueReserved8BitPerColor)) return 0;
 #if defined(HV_STANDALONE_L2) && defined(HV_NPT_WRITE)
     if (i->HorizontalResolution < 20u + 12u * (sizeof(NPT_INFO_LABEL) - 1u + 16u)) return 0;
+#elif defined(HV_STANDALONE_L2) && defined(HV_NPT_REMAP)
+    if (i->HorizontalResolution < 20u + 12u * (sizeof(REMAP_BACKING_LABEL) - 1u + 16u)) return 0;
 #endif
     if (i->HorizontalResolution < 320 || i->VerticalResolution < 200 ||
         i->VerticalResolution < LOG_Y(LOG_ROWS - 1) + 14 ||
@@ -185,6 +190,8 @@ __declspec(noreturn) static void fail(const char *reason)
     L1DisableInterrupts();
 #if defined(HV_STANDALONE_L2) && defined(HV_NPT_WRITE)
     screen("L1 NPT WRITE FAIL", reason, 0xff00ff);
+#elif defined(HV_STANDALONE_L2) && defined(HV_NPT_REMAP)
+    screen("L1 NPT REMAP FAIL", reason, 0xff00ff);
 #elif defined(HV_STANDALONE_L2) && defined(HV_CPUID_RESUME)
     screen("L1 CPUID FAIL", reason, 0xff00ff);
 #elif defined(HV_STANDALONE_L2)
@@ -234,6 +241,20 @@ __declspec(noreturn) void L1OwnedMain(void)
     log_hex(lines[n++], "ENTRIES ", sample.entries);
     if (reason) fail(reason);
     screen("L1 NPT WRITE PASS", NULL, 0x00ff00);
+#elif defined(HV_NPT_REMAP)
+    static char lines[LOG_ROWS - 1][sizeof(REMAP_BACKING_LABEL) + 16];
+    unsigned n = 0;
+    log_hex(lines[n++], "A EXIT ", sample.arm[0].exit);
+    log_hex(lines[n++], "A RIP ", sample.arm[0].ip);
+    log_hex(lines[n++], "A RAX ", sample.arm[0].ax);
+    log_hex(lines[n++], "B EXIT ", sample.arm[1].exit);
+    log_hex(lines[n++], "B RIP ", sample.arm[1].ip);
+    log_hex(lines[n++], "B RAX ", sample.arm[1].ax);
+    log_hex(lines[n++], "ENTRIES ", sample.entries);
+    log_hex(lines[n++], REMAP_BACKING_LABEL, sample.backing_a);
+    log_hex(lines[n++], "BACKING B ", sample.backing_b);
+    if (reason) fail(reason);
+    screen("L1 NPT REMAP PASS", NULL, 0x00ff00);
 #else
     static char lines[LOG_ROWS - 1][sizeof("EXITCODE ") + 16];
     unsigned n = 0;
