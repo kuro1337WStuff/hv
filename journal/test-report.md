@@ -338,3 +338,19 @@ This verifies same-vCPU behavior **with** invalidation. It does not establish th
 | [Separate two-CPU control](images/npt-cross-041.png) | Locally measured APIC IDs `0` and `1`, A/A (`0xA11A`), then B/B (`0xB22B`) after quiesced remap and local flushes. Four HLTs at `0x1003`. Uses the Limine payload, not SMP support in `l1-package`. |
 
 ISO SHA-256: `l1-package` `AEDF74D3E4C8E9E416A0C6B78C05BE3003C0FFECA4CF1BB63CFD8403795DECFD`; `npt-cross` `9D7A5434BD3A5253155DBD4318E362CF8C30EDD0A090162A2C0E1EB99F3AAB24`. Build environment: Visual Studio installation `18.6.11822.322`, EDK II `fbe0805b2091393406952e84724188f8c1941837`, pycdlib `1.22.0`, pyfatfs `1.1.0`. No physical boot, Linux userspace, calibrated timer frequency or multi-tenant isolation is established by this test.
+
+### 042 · 2026-11-25 · Pinned diskless Linux inputs and host handoff verification
+
+**Host PASS only.** Recipe `4fa5cdfd3f`, layout `f8c6295a72`. On Windows x64, `python lab/linux/prepare.py` read the checksum-pinned local Alpine 3.24.4 virt ISO. A second invocation targeting `build/linux-inputs-repeat` produced the identical `SHA256SUMS`. `tar.exe -tvf build/linux-inputs/initramfs.cpio` showed the executable `/init`, BusyBox, musl, and guest console device node. This did not mount media, boot an image, or run PID 1.
+
+| Input | SHA-256 |
+|---|---|
+| Alpine ISO | `157d353f8e54252cad2d9812a0d56bb7fa2231fc154a110e1d180d7480ef8b4f` |
+| Linux `vmlinuz-virt` | `1e8ac7aebfab3f0fcb443eae94ad320efbbda51be91b928c32ca1740b44ebe9d` |
+| `config-6.18.60-0-virt` | `29636aa39722a1e48b440f3b48bd3f579f88f7f498552789a735791235e8050b` |
+| `initramfs.cpio` | `99db7e0bb0742619d85deaab031ff7a539cd8e46cb6b7dd8ed8dd01196e3baa4` |
+| NUL-terminated `cmdline.bin` | `5161eac9cd95353e2d47917e60e46bef0630b64f4bc2645f4cffd2b17f1bf958` |
+
+Ran the [MSVC host verifier](../lab/README.md) with those three input files. It materialized real payload bytes after the `0x4000`-byte setup section in a 128 MiB buffer: kernel `0x1000000+0xC0C400`, initialization window `0x260A000` bytes, initrd `0x7E97000+0x168964`, command line `0x11000+123`. Entry `0x1000200`, RSI `0x10000`, CR3 `0x13000`, GDTR `0x12000:0x1F`, CS/DS `0x10/0x18`, RSP `0x18000`. Verified all initial guest-paging entries, the untouched/unmapped reserved hole, e820, and rejection of truncated or overlapping layouts. These guest page tables are **not** proof of NPT isolation.
+
+The userspace oracle is ordered `HV:P5:USER pid=1 kernel=6.18.60-0-virt`, `HV:P5:TIMER` with measured forward progress across a two-second sleep, and `HV:P5:SHUTDOWN`, followed by a distinct L1-observed poweroff operation. None of those events occurred in this host test.
