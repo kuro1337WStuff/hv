@@ -5,7 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "../../firmware/pit_periodic.h"
+#include "../../firmware/pit_periodic_irq0.h"
 
 #define CHECK(e) do { if (!(e)) { fprintf(stderr, "%d: %s\n", __LINE__, #e); exit(EXIT_FAILURE); } } while (0)
 #define REFUSE(p, e) do { unsigned char before[sizeof(p)]; memcpy(before, &(p), sizeof(p)); \
@@ -126,8 +126,53 @@ static void refused_writes_and_restart(void)
     sample(&p, 1003, 1, 1);
 }
 
+static void irq0_service(void)
+{
+    PitPeriodicIrq0 s;
+    _Static_assert(PIT_PIC_VECTOR == 0x30, "IRQ0 acceptance vector");
+    pit_periodic_irq0_init(&s);
+    CHECK(pit_periodic_irq0_write(&s, 0x43, 1, 0x34));
+    CHECK(pit_periodic_irq0_write(&s, 0x40, 1, 4));
+    CHECK(pit_periodic_irq0_write(&s, 0x40, 1, 0));
+    CHECK(pit_periodic_irq0_advance(&s, 4));
+    CHECK(!pit_periodic_out(&s.pit) && !s.pic.pending);
+    CHECK(pit_periodic_irq0_advance(&s, 5));
+    CHECK(pit_periodic_out(&s.pit) && !s.pit.pending && s.pic.pending);
+    CHECK(pit_periodic_irq0_advance(&s, 21)); /* four more masked rises */
+    CHECK(pit_periodic_irq0_advance(&s, 21)); /* no edge; retain PIC IRR */
+    CHECK(s.pic.pending == 1 && !s.pic.in_service && !s.pic.armed && s.pic.now == 0);
+    REFUSE(s, pit_pic_take(&s.pic)); /* masked */
+    CHECK(pit_periodic_irq0_write(&s, 0x21, 1, 0xfe));
+    CHECK(pit_pic_take(&s.pic) && s.pic.in_service && !s.pic.pending);
+    CHECK(pit_periodic_irq0_advance(&s, 21) && !s.pic.pending); /* high is not an edge */
+
+    CHECK(pit_periodic_irq0_advance(&s, 32)); /* crossed rises; ends LOW */
+    CHECK(!pit_periodic_out(&s.pit) && !s.pit.pending && s.pic.pending == 1);
+    REFUSE(s, pit_pic_take(&s.pic)); /* unmasked but in service */
+    REFUSE(s, pit_periodic_irq0_advance(&s, 20));
+    REFUSE(s, pit_periodic_irq0_write(&s, 0x43, 1, 0x38)); /* no mode-4 clock */
+    REFUSE(s, pit_periodic_irq0_write(&s, 0x20, 1, 0x60)); /* mask first */
+    CHECK(pit_periodic_irq0_write(&s, 0x21, 1, 0xff));
+    REFUSE(s, pit_periodic_irq0_write(&s, 0x20, 1, 0x61)); /* wrong IRQ */
+    CHECK(pit_periodic_irq0_write(&s, 0x20, 1, 0x60));
+    REFUSE(s, pit_periodic_irq0_write(&s, 0x20, 1, 0x60)); /* duplicate */
+    REFUSE(s, pit_pic_take(&s.pic));
+    CHECK(pit_periodic_irq0_write(&s, 0x21, 1, 0xfe));
+    CHECK(pit_pic_take(&s.pic) && s.pic.in_service && !s.pic.pending);
+    CHECK(pit_periodic_irq0_write(&s, 0x21, 1, 0xff));
+    CHECK(pit_periodic_irq0_write(&s, 0x20, 1, 0x60));
+    CHECK(pit_periodic_irq0_write(&s, 0x21, 1, 0xfe));
+    CHECK(pit_periodic_irq0_advance(&s, 32));
+    REFUSE(s, pit_pic_take(&s.pic)); /* no queued ticks or phantom after EOI */
+
+    CHECK(pit_periodic_irq0_write(&s, 0x43, 1, 0x34)); /* low -> high at cursor */
+    CHECK(pit_pic_take(&s.pic) && !s.pit.pending);
+    CHECK(pit_periodic_irq0_write(&s, 0x43, 1, 0x34) && !s.pic.pending);
+}
+
 int main(void)
 {
+    irq0_service();
     linux_periodic();
     live_reload();
     long_jump();

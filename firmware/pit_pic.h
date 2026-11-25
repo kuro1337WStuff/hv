@@ -95,8 +95,14 @@ static inline int pit_pic_read(const PitPic *p, uint16_t port, uint8_t width, ui
     return 1;
 }
 
-/* One rising edge per completed one-shot; the PIC IRR is a bit, not a queue.
- * Masking and in-service inhibit acceptance, not edge latching. */
+/* One semantic IRQ0 edge. The IRR is a bit, not a queue; the mask and ISR
+ * inhibit acceptance, not latching. This does not advance either timer. */
+static inline void pit_pic_latch_irq0(PitPic *p)
+{
+    p->pending = 1;
+}
+
+/* One rising edge per completed one-shot. */
 static inline int pit_pic_advance(PitPic *p, uint64_t absolute_tick)
 {
     if (absolute_tick < p->now) return 0;
@@ -104,7 +110,7 @@ static inline int pit_pic_advance(PitPic *p, uint64_t absolute_tick)
     if (p->armed && p->now >= p->deadline) {
         p->armed = 0;
         p->deadline = 0;
-        p->pending = 1;
+        pit_pic_latch_irq0(p);
     }
     return 1;
 }
