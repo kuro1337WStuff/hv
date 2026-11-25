@@ -2,6 +2,14 @@
 
 Development host: Ryzen 9 9950X. Firmware runs use the `HV-SVM-L1` Hyper-V VM; host-only checks are labeled separately. Neither qualifies the 9950X3D deployment target on bare metal.
 
+## 032–033 · 2026-11-25 · One vCPU switches integer and floating-point state together
+
+**Run 033 passed in `HV-SVM-L1`.** L2 changed its integer registers, XMM registers, x87 stack and rounding controls, then exited through `VMMCALL`. On resume it used the two preserved x87 values, `5` and `6`, to round `5 + 6 + 0.25` up to `12`. A separate SSE conversion rounded `0.25` up to `1` using MXCSR. The host recovered its own values after each exit. Restoring the guest's *initial* state would not have passed.
+
+![Console showing distinct host and guest state at VMMCALL and HLT, and both resumed rounding results](images/vcpu-fpstate-033.png)
+
+Reproduce with `python lab/hv_queue.py run --session --rebuild vcpu-fpstate`. The [ledger](test-report.md#033--2026-11-25-local--integrated-legacy-vcpu-context) records the image, exit addresses, and limits of this fixed guest. Run 032 stopped at assembly and did not change the VM.
+
 ## 029–030 · 2026-11-25 · Guest rounding mode survives a VM exit
 
 **Run 030 passed in `HV-SVM-L1`.** L2 rounded `1.5` down to integer `1`, changed its mode to round up, and executed `VMMCALL`. After resume, the same conversion produced `2`. Each conversion set only the precision flag. L1 read its own live MXCSR after each exit and found its original rounding mode and status flags, not the guest's.

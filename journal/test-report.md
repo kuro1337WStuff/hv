@@ -234,3 +234,20 @@ L2 explicitly cleared the precision flag when selecting round-up before `VMMCALL
 ### 031 · 2026-11-25 local · Delegated VM batch completes from a standard terminal
 
 **PASS / COMPLETE.** On the 9950X nested lab, one foreground administrator session accepted `python lab/hv_queue.py run --session vcpu-mxcsr` from a non-administrator terminal. Batch `ced6858a810c46f68a78adab61140783` checkpointed the prior guest, mounted the existing run 030 ISO (`990A9D737822DE1C38829789027874F59A5E8A8D43C98F09853AC15503A3C970`), booted `HV-SVM-L1`, and returned a fresh PNG matching the [reviewed guest screen](images/vcpu-mxcsr-030.png). The submitting process received a COMPLETE result without elevating. Separately, an invalid session credential was rejected, and stopping a batch during preparation returned STOPPED before VM management. This exercises the control workflow, not new processor behavior.
+
+### 032 · 2026-11-25 local · Integrated vCPU fixture stopped at assembly
+
+**BUILD ERROR; no VM result.** `python lab/hv_queue.py run --session --rebuild vcpu-fpstate`, batch `1f8b53330af843dc93e3489bd438d682`. ML64 could not locate `firmware\fpstate_guest.inc` (`A1000`). No ISO was staged and no VM operation was issued. The corrected build gives ML64 the firmware include directory explicitly and includes the guest fixture by filename.
+
+### 033 · 2026-11-25 local · Integrated legacy vCPU context
+
+**Firmware PASS; queue ATTENTION for first-time screen review.** Nested `HV-SVM-L1` on the Ryzen 9 9950X. `python lab/hv_queue.py run --session --rebuild vcpu-fpstate`; source `792342dc46`; batch `c8f535348db247919395e4cf4eaa5c42`; ISO SHA-256 `272E8951F71B14D6940E7EDA5F17D7A73D8AFC4DF19759A50A536CBB07869FEF`. The delegated worker checkpointed the prior `vcpu-mxcsr` PASS. It captured the [new screen](images/vcpu-fpstate-033.png) and stopped for review rather than reporting COMPLETE.
+
+| Guest exit / RIP | Guest RAX | Restored L1 FCW / MXCSR | Captured L2 FCW / MXCSR |
+| --- | --- | --- | --- |
+| VMMCALL `0x81` / `0x1028` | `0x46504332` | `0x037F` / `0x1F81` | `0x0B7F` / `0x5F80` |
+| HLT `0x78` / `0x1082` | `0x50415353` | `0x077F` / `0x3F84` | `0x0F7F` / `0x7F80` |
+
+The guest bank was initialized once. `RunLegacyVcpu` switched the 14 software-managed GPRs and an aligned 64-bit FXSAVE image together; RAX, RSP and RIP remained VMCB-managed. The fixture compared guest entry snapshots, exit banks, restored L1 state and the actual caller before/after the harness. It checked both halves of XMM0–15, the occupied 80-bit stack values, TOP and the physical tag mask, and both rounding controls. After resume, SSE produced `1` and x87 produced `12` (`0x0C`). Only then did L2 install its final state and halt.
+
+AMD64 APM Vol. 2 §§2.5.12 and 11.4.4 describe the format. The profile requires L1 `EFER.FFXSR=0` so CPL0 saves include XMM. This is not qualification of AVX/XSAVE, every x87 environment field, vCPU migration, or the physical 9950X3D.
