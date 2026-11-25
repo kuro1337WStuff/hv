@@ -46,6 +46,41 @@ static void hex(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *out, CHAR16 *label, UINT64 v)
     out->OutputString(out,buf);
 }
 
+#ifdef HV_FORENSIC_WRITE
+/* AMD APM Vol. 2 §15.25.7. U/S is not the guest CPL. This non-SNP fixture
+ * uses no shadow stack or verify-paging-write features. */
+static BOOLEAN final_write_fault(UINT64 exit, UINT64 info)
+{
+    const UINT64 required=(1ull<<32)|3;
+    const UINT64 excluded=(1ull<<38)|(1ull<<37)|(1ull<<33)|0x58;
+    return exit==0x400 && (info & (required|excluded))==required;
+}
+
+/* Only decode C6 /0 [disp16],imm8 from our immutable real-mode payload.
+ * CS.base and DS.base are zero. Never use the reported GPA as a host pointer. */
+static BOOLEAN forensic_report(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *out, const UINT8 *code,
+                               UINTN length, UINT64 exit, UINT64 info, UINT64 gpa,
+                               UINT64 ip, UINT8 before, UINT8 after)
+{
+    hex(out,L"EXITCODE: ",exit);
+    hex(out,L"EXITINFO1: ",info);
+    hex(out,L"Fault GPA (EXITINFO2): ",gpa);
+    hex(out,L"Saved RIP: ",ip);
+    hex(out,L"Backing byte before: ",before);
+    hex(out,L"Backing byte after:  ",after);
+    if (!final_write_fault(exit,info)) return FALSE;
+    out->OutputString(out,L"Access: final data write, present-page protection fault\r\n");
+    if (length<5 || ip<FixedGuestGpa || ip-FixedGuestGpa>length-5) return FALSE;
+    const UINT8 *p=code+(UINTN)(ip-FixedGuestGpa);
+    if (p[0]!=0xc6 || p[1]!=0x06) return FALSE;
+    UINT16 dest=(UINT16)(p[2] | ((UINT16)p[3]<<8));
+    hex(out,L"MOV byte [disp16], imm8 | destination: ",dest);
+    hex(out,L"Attempted byte from instruction: ",p[4]);
+    return ip==0x1000 && gpa==0x2000 && dest==gpa && p[4]==0xa5 &&
+           before==0x5a && after==before;
+}
+#endif
+
 static void smoke(EFI_SYSTEM_TABLE *st)
 {
     EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *out=st->ConOut;
@@ -106,6 +141,9 @@ static void smoke(EFI_SYSTEM_TABLE *st)
     UINT64 control_exit, control_ip;
     UINT8 control_byte;
     BOOLEAN control_ok;
+#ifdef HV_FORENSIC_WRITE
+    UINT8 before=0;
+#endif
 #elif defined(HV_NPT_REMAP)
     /* MOV AX, word ptr DS:[2000h]; HLT. Neither backing frame changes between reads. */
     const UINT8 payload[]={0xa1,DataGpa & 0xff,DataGpa >> 8,0xf4};
@@ -150,6 +188,8 @@ static void smoke(EFI_SYSTEM_TABLE *st)
 
 #ifdef HV_CPUID_RESUME
     out->OutputString(out,L"Entering L2: CPUID -> validate 4 replies -> HLT\r\n");
+#elif defined(HV_FORENSIC_WRITE)
+    out->OutputString(out,L"Forensic NPT test | fixed MOV byte [2000h], A5h\r\n");
 #elif defined(HV_NPT_WRITE)
     out->OutputString(out,L"NPT store to GPA 2000: writable control, then read-only\r\n");
 #elif defined(HV_NPT_REMAP)
@@ -188,8 +228,14 @@ static void smoke(EFI_SYSTEM_TABLE *st)
     control_ip=FIELD(UINT64,Rip);
     control_byte=*target;
     control_ok=control_exit==0x78 && control_ip==FixedGuestGpa+sizeof(payload)-1 && control_byte==StoredByte;
+#ifdef HV_FORENSIC_WRITE
+    control_ok=control_ok && !final_write_fault(control_exit,FIELD(UINT64,Info1));
+#endif
     if (control_ok) {
         *target=InitialByte;
+#ifdef HV_FORENSIC_WRITE
+        before=*target;
+#endif
         *leaf &= ~2ull; /* retain backing frame and all non-write attributes */
         FIELD(UINT64,Rip)=FixedGuestGpa;
         FIELD(UINT8,TlbControl)=1; /* revoke the cached writable translation before re-entry */
@@ -246,6 +292,13 @@ static void smoke(EFI_SYSTEM_TABLE *st)
     } else {
         UINT64 info=FIELD(UINT64,Info1), gpa=FIELD(UINT64,Info2);
         UINT8 protected_byte=*target;
+#ifdef HV_FORENSIC_WRITE
+        BOOLEAN matched=forensic_report(out,vmcb+Code*EFI_PAGE_SIZE,sizeof(payload),
+                                        exit,info,gpa,ip,before,protected_byte);
+        out->OutputString(out,matched
+            ? L"PASS: attempted write identified; no byte committed.\r\n"
+            : L"FAIL: forensic event or backing byte differs from fixture.\r\n");
+#else
         hex(out,L"RO EXITCODE: ",exit);
         hex(out,L"RO RIP: ",ip);
         hex(out,L"RO EXITINFO1: ",info);
@@ -257,6 +310,7 @@ static void smoke(EFI_SYSTEM_TABLE *st)
             out->OutputString(out,L"PASS: writable store retired; read-only store faulted.\r\n");
         else
             out->OutputString(out,L"FAIL: wrong nested fault, RIP, GPA or target byte.\r\n");
+#endif
     }
 #else
     UINT64 ax=FIELD(UINT64,Rax);

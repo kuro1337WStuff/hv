@@ -22,6 +22,11 @@ if /i "%~1"=="l2" (
   set "EFI=NPTWRITE"
   set "ISO=hv-npt-write"
   set "CASE_FLAGS=/DHV_NPT_WRITE"
+) else if /i "%~1"=="forensic-write" (
+  set "SRC=l2_smoke"
+  set "EFI=FORENSIC"
+  set "ISO=hv-forensic-write"
+  set "CASE_FLAGS=/DHV_NPT_WRITE /DHV_FORENSIC_WRITE"
 ) else if /i "%~1"=="npt-remap" (
   set "SRC=l2_smoke"
   set "EFI=NPTREMAP"
@@ -34,7 +39,7 @@ if /i "%~1"=="l2" (
 ) else if /i "%~1"=="npt-broadcast" (
   set "ISO=hv-npt-broadcast"
   set "CROSS_PROFILE=npt-broadcast"
-) else if not "%~1"=="" (echo Usage: build.cmd [l2 or cpuid or npt-write or npt-remap or npt-cross or npt-broadcast] & exit /b 1)
+) else if not "%~1"=="" (echo Usage: build.cmd [l2 or cpuid or npt-write or npt-remap or npt-cross or npt-broadcast or forensic-write] & exit /b 1)
 set "TOOLS=build\tools"
 set "INC_EDK=%TOOLS%\edk2\MdePkg\Include"
 set "PACK=%TOOLS%\packenv\Scripts\python.exe"
