@@ -2,6 +2,16 @@
 
 Development host: Ryzen 9 9950X. Firmware runs use the `HV-SVM-L1` Hyper-V VM; host-only checks are labeled separately. Neither qualifies the 9950X3D deployment target on bare metal.
 
+## 041 · 2026-11-25 · State, bounded exits, and timer wake after firmware handoff
+
+**Passed on the nested 9950X.** After a `VMMCALL`, the resumed guest used its changed rounding state to calculate 1 (SSE) and 12 (x87); L1 independently checked its registers at both exits. Rejecting an unsupported CPUID request took exactly one entry and left RIP on the instruction. In a fresh guest, L1 reinjected `#UD` at the faulting `UD2`, and the guest handler ran once and returned past it.
+
+The last byte of guest data was writable; the first byte beyond it faulted and left L1's guard intact. In the interrupt fixture, three delivered requests produced three acknowledgements, including one after the guest halted and its virtual timer expired. L2 transmitted `L2:UART:TX` one byte at a time, then halted at a different site with a success marker.
+
+![Standalone L1 observations, from FP state and the unsupported exit through the independent UART and timer-wake halt](images/l1-package-041.png)
+
+The [test ledger](test-report.md#041--2026-11-25--standalone-runtime-package-and-two-processor-control) includes the separate two-processor control, the media hashes, and why the queue ended `ATTENTION` even though the firmware passed. This is a fixed guest, not a Linux boot.
+
 ## 040 · 2026-11-25 · One guest address reads two different backing frames
 
 **Passed in `HV-SVM-L1`.** The same guest load from GPA `0x2000` returned `0xA11A`, then `0xB22B` after the standalone L1 changed the backing frame and requested a local translation flush. Both entries reached the same halt. L1 independently read the two backing words and found both original markers intact: this was a mapping change, not a rewrite of the data.

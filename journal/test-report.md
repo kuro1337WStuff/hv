@@ -323,3 +323,18 @@ The protected exit reported `EXITINFO1=0x0000000100000007` and `EXITINFO2=0x2000
 After `ExitBootServices`, L1 seeded two distinct owned pages once. `MOV AX,[0x2000]; HLT` ran twice, starting with full RAX zero each time. Frame A returned `RAX=0xA11A`; frame B returned `RAX=0xB22B`. Both exits were `0x78` at RIP `0x1003`. Final L1 backing reads were `0xA11A` and `0xB22B`. Only the leaf address bits changed on replacement; the read-only permissions, guest code, ASID and NPT root did not. Both entries requested a full local flush (`TLB_CONTROL=1`); see AMD64 APM Vol. 2 §15.16.
 
 This verifies same-vCPU behavior **with** invalidation. It does not establish that omitting a flush would fail on this run, that a remote vCPU saw the remap, or that the physical 9950X3D is qualified. The UEFI `npt-remap` control rebuilt against the same fixed fixture but was not booted here.
+
+### 041 · 2026-11-25 · Standalone runtime package and two-processor control
+
+`HV-SVM-L1`, Hyper-V on Ryzen 9 9950X. Built `firmware\build.cmd l1-package` from the changes in `79982549af`, then ran `python lab/hv_queue.py run --session npt-cross l1-package` using the existing two-processor control. Batch `1236321e451f46b180605eb9bb146ebe` checkpointed the prior remap PASS. The two-CPU profile passed automatically. The package booted at 16:49:32 UTC; after 60 seconds the worker captured an unknown screen and stopped with `ATTENTION`, exit 3. The [live framebuffer](images/l1-package-041.png) meets the predeclared four-part contract. **Firmware PASS by review, not queue COMPLETE.**
+
+| Check | Required and observed |
+|---|---|
+| Legacy vCPU state | `VMMCALL` exit `0x81` at `0x1028`, AX `0x46504332`; L1 resumes at `0x102B`. Second exit `0x78` at `0x1082`, AX `0x50415353`. Both entries compared L1 and L2 GPR/x87/MXCSR/XMM banks; resumed SSE and x87 calculations returned `1` and `12`. No AVX/XSAVE claim. |
+| Unsupported request | CPUID exit `0x72` at `0x100C`, still on the faulting instruction with `EAX=0x400000FF`. One entry, no emulation, no second entry. |
+| Guest exception | `#UD` exit `0x46` at `0x100C`. L1 left the fault RIP unchanged for injection; the guest handler advanced its own stacked RIP past `UD2`. Handler count `1`, continuation phase `3`, terminal HLT RIP `0x104F` (not the IRETQ destination). |
+| Private-memory boundary | Write to `0x2FFF` committed `0xA5`; write to `0x3000` produced `0x400` at RIP `0x1005`, INFO1 `0x100000006` (nonpresent final write), guard `0xF1358B76D94A20CE` unchanged. Root and all 2,048 table entries matched the allowlist before and after. |
+| Interrupts and guest TX | IF `0` with request pending; STI-shadow return `0x100C`. Equal TPR `4` held the next request; lowering to `3` yielded `0x1013`. Intercepted HLT at `0x1013`, then TSC one-shot due; interrupt return `0x1014`. Three IRQs, three guest EOIs, one post-wake increment. Ten byte OUTs yielded `L2:UART:TX`. Independent terminal HLT `0x78` at `0x1060`, AX `0x50415353`. No host serial passthrough or APIC emulation. |
+| [Separate two-CPU control](images/npt-cross-041.png) | Locally measured APIC IDs `0` and `1`, A/A (`0xA11A`), then B/B (`0xB22B`) after quiesced remap and local flushes. Four HLTs at `0x1003`. Uses the Limine payload, not SMP support in `l1-package`. |
+
+ISO SHA-256: `l1-package` `AEDF74D3E4C8E9E416A0C6B78C05BE3003C0FFECA4CF1BB63CFD8403795DECFD`; `npt-cross` `9D7A5434BD3A5253155DBD4318E362CF8C30EDD0A090162A2C0E1EB99F3AAB24`. Build environment: Visual Studio installation `18.6.11822.322`, EDK II `fbe0805b2091393406952e84724188f8c1941837`, pycdlib `1.22.0`, pyfatfs `1.1.0`. No physical boot, Linux userspace, calibrated timer frequency or multi-tenant isolation is established by this test.

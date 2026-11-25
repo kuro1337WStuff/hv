@@ -5,7 +5,7 @@
   {"profile":"l1-cpuid","stem":"hv-l1-cpuid","pass":"1eec7ae3127b4f1d44eebf41b2fe59ee7a316252c94ee76da70f91f7c7d3a4ff"},
   {"profile":"l1-npt-write","stem":"hv-l1-npt-write","pass":"a62a7fd6e1e4b2c0bec41598f494a75c6d6c4aaaea78c24f18c495a47c8831bf"},
   {"profile":"l1-npt-remap","stem":"hv-l1-npt-remap","pass":"27aaf2b14b2559647bb800e6a31b5b189b871103814d59a20951bbba570ef295"},
-  {"profile":"l1-package","stem":"hv-l1-package","pass":null},
+  {"profile":"l1-package","stem":"hv-l1-package","pass":"acf5dfc5f5a7af762132fe0c2fbe7f6823cec7f67e28cbb5a11cc40ef31b4a0c"},
   {"profile":"l2","stem":"hv-l2-smoke","pass":"36bcc11f3dbf69b38bef1466e06eb42ae3fc6b23697b49ee1a947842635164c2"},
   {"profile":"cpuid","stem":"hv-cpuid-resume","pass":"27b75d52c2332aa952d1f256b59a4104d7cfa4022af87a9027f51b6c3f063cfc"},
   {"profile":"npt-write","stem":"hv-npt-write","pass":"4aceae05f48c8e62541b279e0124295daf6ded6147ece66c928493b42a78030c"},
