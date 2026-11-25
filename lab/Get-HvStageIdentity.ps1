@@ -73,6 +73,15 @@ function Get-CurrentStageIdentity([string]$SessionRoot,[string]$RunnerWorker) {
             try {
                 if ($guard.Length -ne 0) { throw 'Invalid readiness file length.' }
                 if (Test-StageWriter $lease) {
+                    # The publisher renames this file into place as its last
+                    # step. Check only its presence, never its contents. On
+                    # rollback it closes the writer before removing the file.
+                    try {
+                        $null = [IO.File]::GetAttributes([IO.Path]::Combine($dir,'session.pending'))
+                        throw 'Stage publication is incomplete.'
+                    } catch {
+                        if ($_.Exception.GetBaseException() -isnot [IO.FileNotFoundException]) { throw }
+                    }
                     if ($selected) { throw 'Multiple ready stages.' }
                     $selected = $dir
                     $selectedLease = $lease
