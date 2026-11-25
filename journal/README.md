@@ -2,6 +2,12 @@
 
 Development host: Ryzen 9 9950X. Firmware runs use the `HV-SVM-L1` Hyper-V VM; host-only checks are labeled separately. Neither qualifies the 9950X3D deployment target on bare metal.
 
+## 055 · 2026-11-25 · Refusing a control-register write before it takes effect
+
+With the CR4 write intercept armed, the read-only guest reached HLT. The matched write arm requested `40020h` but stopped on the write itself: CR4 remained `20h`, and the following instruction never changed the witness byte. [Source, instruction offsets and both exit records](test-report.md#055--intercept-a-cr4-write-before-guest-state-changes).
+
+![Control arm reaches HLT; write arm exits at MOV CR4 with its original value and untouched marker](images/l1-cr4-guard-055.png)
+
 ## 054 · 2026-11-25 · Staged-input regression after the handoff change
 
 The rebuilt input-refusal guest matched run 045's unchanged oracle. Wrong kernel, initramfs and command line each stopped before any guest entry. Restored bytes took four expected NX faults. The queue reached `COMPLETE`; independent readback verified all three files inside the mounted ISO. [Batch, image and terminal](test-report.md#054--regression-of-staged-identity-through-the-new-handoff-guard).
