@@ -21,7 +21,12 @@ if /i "%~1"=="l2" (
   set "EFI=NPTWRITE"
   set "ISO=hv-npt-write"
   set "CASE_FLAGS=/DHV_NPT_WRITE"
-) else if not "%~1"=="" (echo Usage: build.cmd [l2 or cpuid or npt-write] & exit /b 1)
+) else if /i "%~1"=="npt-remap" (
+  set "SRC=l2_smoke"
+  set "EFI=NPTREMAP"
+  set "ISO=hv-npt-remap"
+  set "CASE_FLAGS=/DHV_NPT_REMAP"
+) else if not "%~1"=="" (echo Usage: build.cmd [l2 or cpuid or npt-write or npt-remap] & exit /b 1)
 set "TOOLS=build\tools"
 set "INC_EDK=%TOOLS%\edk2\MdePkg\Include"
 set "PACK=%TOOLS%\packenv\Scripts\python.exe"
