@@ -209,6 +209,8 @@ __declspec(noreturn) static void fail(const char *reason)
     screen("L1 CPU FLOOR FAIL", reason, 0xff00ff);
 #elif defined(HV_PAGE_PAIR)
     screen("L1 PAGE PAIR FAIL", reason, 0xff00ff);
+#elif defined(HV_PAGE_TRANSITION)
+    screen("L1 PAGE TRANSITION FAIL", reason, 0xff00ff);
 #elif defined(HV_CR4_GUARD)
     screen("L1 CR4 GUARD FAIL", reason, 0xff00ff);
 #elif defined(HV_CR4_GP)
@@ -315,6 +317,8 @@ __declspec(noreturn) void L1OwnedMain(void)
     screen("L1 CPU FLOOR PASS", "FIXED GUEST: FEATURE FLOOR", 0x00ff00);
 #elif defined(HV_PAGE_PAIR)
     screen("L1 PAGE PAIR PASS", "GUEST PF AND NESTED FAULT", 0x00ff00);
+#elif defined(HV_PAGE_TRANSITION)
+    screen("L1 PAGE TRANSITION PASS", "FIXED PAGE: WRITE SEAL EXECUTE", 0x00ff00);
 #elif defined(HV_CR4_GUARD)
     screen("L1 CR4 GUARD PASS", "WRITE REFUSED BEFORE EFFECT", 0x00ff00);
 #elif defined(HV_CR4_GP)

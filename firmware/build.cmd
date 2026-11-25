@@ -91,6 +91,15 @@ if /i "%~1"=="l2" (
   set "ASM_SRC=firmware\l1_handoff.asm"
   set "EXTRA_ASM=vcpu_gpr page_pair"
   set "EXTRA_ASM_FLAGS=/DHV_COUNT_ENTRIES"
+) else if /i "%~1"=="l1-page-transition" (
+  set "SRC=l1_handoff"
+  set "EFI=L1PAGETRANSITION"
+  set "ISO=hv-l1-page-transition"
+  set "CASE_FLAGS=/DHV_STANDALONE_L2 /DHV_PACKAGE /DHV_PAGE_TRANSITION"
+  set "ASM_OBJ=build\l1_page_transition_handoff.obj"
+  set "ASM_SRC=firmware\l1_handoff.asm"
+  set "EXTRA_ASM=vcpu_gpr page_transition"
+  set "EXTRA_ASM_FLAGS=/DHV_COUNT_ENTRIES"
 ) else if /i "%~1"=="l1-cr4-guard" (
   set "SRC=l1_handoff"
   set "EFI=L1CR4GUARD"
