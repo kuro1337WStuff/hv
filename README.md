@@ -6,6 +6,8 @@ This project builds small x86-64 hypervisor images to test AMD Secure Virtual Ma
 
 The standalone L1 now has a [reviewed post-handoff runtime test](journal/test-report.md#041--2026-11-25--standalone-runtime-package-and-two-processor-control) for vCPU state, reject-without-resume, exception return, private memory and timer wake. [Diskless Linux input preparation](journal/test-report.md#042--2026-11-25--pinned-diskless-linux-inputs-and-host-handoff-verification) is tracked separately: preparing a kernel, initramfs and boot parameters is not a userspace boot.
 
+[Runs 048–055](journal/README.md#055--2026-11-25--refusing-a-control-register-write-before-it-takes-effect) cover IRQ0 pending and HLT wake, bounded serial TX, virtual S5 versus halt, pre-entry state validation, a fixed CPU feature floor, guest-versus-nested page faults, and refusal of a CR4 write before it takes effect. The rebuilt staged-input test rejected all three substitutions before guest entry. Linux pages remain non-executable; there is no ordinary Linux boot or physical deployment result.
+
 ## Build and run one guest
 
 Start with `cpuid`: the guest executes `CPUID`, L1 handles the exit, and L2 must resume and reach its success halt. Booting an ISO alone does not pass the test.
