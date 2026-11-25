@@ -8,19 +8,61 @@ This lab builds a small x86-64 hypervisor using AMD Secure Virtual Machine (SVM)
 
 ## Capability roadmap
 
-The middle column describes the [firmware on `main` through run 041](journal/README.md). The right column describes what the first ordinary guest must demonstrate, **not** what runs today.
+**M** = tested on [`main`][ledger] · **F** = tested on a [feature branch][features] · **H** = host check only · **T** = target, not demonstrated. VM results are from fixed guests under Hyper-V, not bare metal.
 
-| Area | Observed in the nested lab | Next evidence needed |
-| --- | --- | --- |
-| Boot chain | After leaving UEFI boot services, L1 used its own stack and allocator, reported an expected allocation failure, and [launched a fixed L2](journal/test-report.md#037--2026-11-25-local--one-l2-entry-from-the-standalone-l1). | Load a pinned kernel and initramfs; reach a userspace serial marker and shut down cleanly on repeat cold boots. |
-| SVM state and exits | [L2 checked all four CPUID reply registers after resume](journal/test-report.md#038--2026-11-25-local--standalone-l1-cpuid-resume). Separate fixtures preserved integer and legacy floating-point state, stopped on an unsupported request, and delivered an invalid-opcode fault. | Account for every CPU feature advertised to the guest, including the state L1 must save and restore. |
-| Nested Page Tables (NPT) | L1 [revoked write access](journal/test-report.md#039--2026-11-25-local--standalone-l1-npt-write-protection) and [changed the backing frame](journal/test-report.md#040--2026-11-25-local--standalone-backing-frame-remap-and-baseline-batch) for one guest-physical address. A separate two-processor control tested invalidation with both guests stopped. | Apply those ownership and permission checks to the kernel's whole memory map, keeping L1's private pages outside guest RAM. |
-| Guest I/O and interrupts | A [fixed guest](journal/test-report.md#041--2026-11-25--standalone-runtime-package-and-two-processor-control) woke from halt on a virtual timer interrupt and sent bytes to a virtual serial port. | Show the kernel's own serial, timer and interrupt drivers working together through userspace and shutdown. |
-| Diagnostics | The [handoff test](journal/test-report.md#036--2026-11-25-local--standalone-l1-handoff) compared L1's serial output with its framebuffer; the guest I/O test required guest-originated bytes **and** an independent success halt. | Tie each ordinary boot's guest output and terminal state to the exact image and configuration. |
+| Boot, CPU & memory | Interrupts, devices & qualification |
+|---|---|
+| M · [UEFI boot-services handoff][handoff] | M · [Interrupt wakes a halted guest][wake] |
+| M · [Bootstrap allocator survives OOM][handoff] | M · [IRQ deferred past STI shadow][sti] |
+| M · [Standalone L1 launches L2][entry] | M · [Virtual IRQ priority masking][priority] |
+| M · [CPUID emulation and resume][cpuid] | M · [Invalid-opcode delivery and return][ud] |
+| M · [Unsupported CPUID stops the guest][runtime] | F · [Refused CR4 write raises #GP][gp] |
+| M · [64-bit GPR preservation][runtime] | M · [Fixed guest serial transmit][runtime] |
+| M · [XMM0–15 preservation][runtime] | F · [Polled 8250 serial output][uart] |
+| M · [x87 stack and control restore][runtime] | F · [UART transmit interrupt (IRQ4)][irq4] |
+| M · [MXCSR rounding and status restore][mxcsr] | F · [One-shot PIT interrupt (IRQ0)][pit] |
+| H · [Four-level NPT layout check][layout] | H · [Dual 8259A PIC initialization][pic] |
+| M · [NPT write-permission revocation][protect] | F · [Virtual ACPI S5 power-off request][s5] |
+| M · [Backing-frame remap at fixed GPA][remap] | H · [EFI image readback from boot media][media] |
+| M · [Private-page boundary enforcement][runtime] | M · [Fixed-work guest exit counts][runtime] |
+| M · [Two-vCPU remap with local flushes][cross] | T · Pinned Linux kernel boot |
+| M · [Hyper-V guest-physical space flush][flush] | T · Linux serial console handover |
+| F · [Staged Linux input identity check][inputs] | T · Initramfs reaches PID 1 |
+| F · [Pre-entry CR3 and RSI checks][guard] | T · Linux timer tick progress |
+| F · [Guest vs. nested page-fault attribution][faults] | T · Repeatable cold boots |
+| F · [Owned page: writable to executable][seal] | T · Per-exit latency measurement |
+| F · [Nested instruction-fetch fault address][fetch] | T · Same-work native timing baseline |
 
-**Feature experiments are not `main` runtime.** The [feature trial index](journal/status.md#feature-evidence-before-the-separate-trial-ledger) distinguishes later nested UART interrupt and memory tests from unbooted images. The [PIT timer builds (080)](journal/trials/080.md) and [PIC interrupt-controller checks (082)](journal/trials/082.md) were host-only; neither proves delivery to a guest on those builds.
+Physical qualification targets: Ryzen 9 **9950X** first, then **9950X3D**. Other AMD CPUs from the last five years need per-model SVM/NPT checks; none are claimed qualified here. Intel VMX/EPT is out of scope.
 
-**Qualification and performance come after correctness.** The compatibility goal is AMD processors from the last five years that provide the required SVM and NPT features. A model's release date is not a qualification result. Physical testing starts with the 9950X, then separately verifies the 9950X3D. To measure overhead, count exits separately from timing them and compare repeated boots of the same workload against a named native baseline. Nested correctness runs are not benchmarks. Intel VMX/EPT is out of scope.
+[ledger]: journal/test-report.md
+[features]: journal/status.md#feature-evidence-before-the-separate-trial-ledger
+[handoff]: journal/test-report.md#036--2026-11-25-local--standalone-l1-handoff
+[entry]: journal/test-report.md#037--2026-11-25-local--one-l2-entry-from-the-standalone-l1
+[cpuid]: journal/test-report.md#038--2026-11-25-local--standalone-l1-cpuid-resume
+[runtime]: journal/test-report.md#041--2026-11-25--standalone-runtime-package-and-two-processor-control
+[mxcsr]: journal/test-report.md#030--2026-11-25-local--mxcsr-rounding-and-status-preservation
+[layout]: journal/test-report.md#004006--2026-11-24--fixed-npt-layout
+[protect]: journal/test-report.md#039--2026-11-25-local--standalone-l1-npt-write-protection
+[remap]: journal/test-report.md#040--2026-11-25-local--standalone-backing-frame-remap-and-baseline-batch
+[cross]: journal/test-report.md#015--2026-11-24-local--two-measured-l1-processor-ids-and-shared-npt-remap
+[flush]: journal/test-report.md#017--2026-11-24-local--one-all-processor-nested-gpa-flush
+[wake]: journal/test-report.md#022--2026-11-24-local--one-virtual-interrupt-wakes-l2
+[sti]: journal/test-report.md#025--2026-11-24-local--pending-vector-delivered-after-the-sti-shadow
+[priority]: journal/test-report.md#026--2026-11-24-local--virtual-interrupt-priority-threshold
+[ud]: journal/test-report.md#027--2026-11-24-local--invalid-opcode-delivery-and-return
+[inputs]: https://github.com/kuro1337WStuff/hv/blob/c50789a0dbe11690abed52f00a92d900775f7021/journal/test-report.md#045--staged-linux-input-identity-before-guest-entry
+[guard]: https://github.com/kuro1337WStuff/hv/blob/c50789a0dbe11690abed52f00a92d900775f7021/journal/test-report.md#051--pre-entry-state-guard-for-the-pinned-nx-fetch
+[faults]: https://github.com/kuro1337WStuff/hv/blob/c50789a0dbe11690abed52f00a92d900775f7021/journal/test-report.md#053--paired-guest-and-nested-page-faults
+[seal]: https://github.com/kuro1337WStuff/hv/blob/429a6814bfbe4f0ad21acba345b5a2bdd7e62865/journal/runs/060-l1-page-transition.md
+[fetch]: https://github.com/kuro1337WStuff/hv/blob/c50789a0dbe11690abed52f00a92d900775f7021/journal/test-report.md#044--2026-11-25--controlled-nested-fetch-address-precision
+[gp]: https://github.com/kuro1337WStuff/hv/blob/c50789a0dbe11690abed52f00a92d900775f7021/journal/test-report.md#056--deliver-a-general-protection-fault-after-a-refused-cr4-write
+[uart]: https://github.com/kuro1337WStuff/hv/blob/c50789a0dbe11690abed52f00a92d900775f7021/journal/test-report.md#047--polled-8250-compatible-serial-output
+[irq4]: https://github.com/kuro1337WStuff/hv/blob/0b7c28a4cb7f39d0e09073415dfcf2efa823a47b/journal/runs/062-l1-uart-irq4.md
+[pit]: https://github.com/kuro1337WStuff/hv/blob/c50789a0dbe11690abed52f00a92d900775f7021/journal/test-report.md#048--pit-one-shot-legacy-irq0-and-a-specific-eoi
+[pic]: journal/trials/082.md
+[s5]: https://github.com/kuro1337WStuff/hv/blob/c50789a0dbe11690abed52f00a92d900775f7021/journal/test-report.md#050--virtual-s5-request-versus-guest-text-and-hlt
+[media]: journal/trials/078.md
 
 ## Build and run one guest
 
