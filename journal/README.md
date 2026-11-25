@@ -4,13 +4,9 @@ Development host: Ryzen 9 9950X. Firmware runs use the `HV-SVM-L1` Hyper-V VM; h
 
 **Start here:** [Current status, feature trials and integration order](status.md). The entries below describe the integrated baseline through 041. Later feature evidence is published on `main` independently of its implementation; see [how trials are published](project-workflow.md).
 
-**[090 · Init output and virtual S5](trials/090.md):** the host verifier required an independent terminal stop bound to the same capture. The genuine fixed S5 fixture was not mistaken for Linux shutdown.
+**[091 · PIT timer transitions](trials/091.md):** the one-shot strobed once; Linux's disable sequence cancelled the counter without losing a pending IRQ.
 
-**[089 · Periodic IRQ0 service](trials/089.md):** masked rising edges coalesced; a new request during service survived the specific EOI. No guest interrupt was injected.
-
-**[088 · Pinned init serial milestones](trials/088.md):** eight offline tests passed. A synthetic capture kept its `ATTENTION` disposition; genuine 047 UART bytes were rejected as Linux init evidence.
-
-**[087 · PIT channel 0 periodic reload](trials/087.md):** the host observed the first and repeated rising edges, deferred reload, and one latched edge after a long jump. No guest IRQ or clock calibration.
+Earlier host controls: [090 · independent virtual shutdown](trials/090.md), [089 · periodic IRQ0 service](trials/089.md), [088 · pinned init serial markers](trials/088.md), [087 · PIT periodic reload](trials/087.md). None established a Linux boot.
 
 Latest host-only trials: [086 · corrected PIC formatter and retained image](trials/086.md), [085 · PIC profile and formatter controls](trials/085.md), [084 · IRQ0 build comparison](trials/084.md), [083 · fixed-read guide and media readback](trials/083.md), [082 · PIC setup and IRQ0](trials/082.md), [081 · session startup success and refusal](trials/081.md), [080 · PIT integration and profile builds](trials/080.md), [079 · worker identity; B refused](trials/079.md), [078 · frozen UART media](trials/078.md). Earlier: [077 · lane and board controls](trials/077.md), [076 · UART EFI differences](trials/076.md), [073 · UART identity gate](trials/073.md), [074 · lane preflight](trials/074.md), [075 · external holds and STOP](trials/075.md). [072 · PIC formatter diagnosis](trials/072.md) does not change 068.
 
