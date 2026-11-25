@@ -1,6 +1,6 @@
-# Project status · 2026-11-25, after 072
+# Project status · 2026-11-25, after 075
 
-**Integrated firmware:** [041 on `main`](README.md). **Latest trial:** [072](trials/072.md) identified the PIC evidence failure on the host; 068 remains failed, 069 did not run, and 070/071 remain nested regression passes. No feature firmware was promoted. Ryzen 9 9950X3D bare-metal qualification and an ordinary Linux boot remain outstanding.
+**On `main`:** firmware baseline [041](README.md), plus CI-only [#2](https://github.com/kuro1337WStuff/hv/pull/2) at `735c8b56` after both hosted checks passed on `54bace3b`. **On `feature/l1-handoff` only:** [#4](https://github.com/kuro1337WStuff/hv/pull/4) merged at `95abe46c`; [#10](https://github.com/kuro1337WStuff/hv/pull/10) retargeted, then squashed at `44fb6247`. The resulting firmware trees matched the source trees used in 060 and 063 respectively. Revert #10 first if both must be undone; #4 is a merge commit. No ordinary Linux boot or bare-metal qualification.
 
 ## Where to resume
 
@@ -8,8 +8,8 @@
 | --- | --- | --- |
 | [PIC evidence #14](https://github.com/kuro1337WStuff/hv/issues/14) | [068 FAIL](trials/068.md); [072 host control](trials/072.md) isolated the 13-character width refusal at 11/24 rows. Lane A held; #12 draft. | Review existing shared formatter #3 with host regression #21. Do not reboot or register the failed frame. Any guest confirmation requires a separate reservation, reviewed recovery and all refusal witnesses. |
 | [CPU, loader and reference recovery #15](https://github.com/kuro1337WStuff/hv/issues/15) | CPU/loader contract incomplete; [069 NOT RUN](trials/069.md); original VM held at 057 | Review remaining CPU-state ownership and loader criteria independently. Keep 058 unbooted until an explicit recovery decision. No ordinary guest or physical promotion. |
-| [Device integration #16](https://github.com/kuro1337WStuff/hv/issues/16) | Fixed device controls only | Review UART #6 before #8, PIC #11 before #12; PIT #5 is independent. Requalify changed integration trees before merging. |
-| [Test supervisor #17](https://github.com/kuro1337WStuff/hv/issues/17) | [070 COMPLETE](trials/070.md) → [071 COMPLETE](trials/071.md); lane B retained at IRQ0 | Review dedicated lanes #7 before supervisor #18. After 071: 12 open board cards; 2 manual, 10 dependency-blocked, none eligible. A stopped scheduler is expected here. |
+| [Device integration #16](https://github.com/kuro1337WStuff/hv/issues/16) | [073: binary identity not established](trials/073.md) on the UART parent preview. Build passed; exact EFI comparison did not. | Hold #6 → #8. Classify the differences before admitting another trial. Do not substitute the earlier combined-tree IRQ4 result for this parent profile. |
+| [Test supervisor #17](https://github.com/kuro1337WStuff/hv/issues/17) | [074 preflight](trials/074.md) and [075 external holds](trials/075.md) passed **host only**. Repairs [#25](https://github.com/kuro1337WStuff/hv/pull/25) and [#26](https://github.com/kuro1337WStuff/hv/pull/26) are open; no elevated broker was replaced. | Review repair children onto #7 and #18 respectively before integrating their parents. Lane A remains held at 068; the updated board explicitly reports the hold. No automatic VM card ready. |
 
 **Merge routing:** [Dated PR-by-PR merge audit and maintenance queue](merge-audit-072.md) · [live open PRs](https://github.com/kuro1337WStuff/hv/pulls). The host formatter test #21 targets the held PIC branch #12; it is not a reason to merge #12. Check the actual base, scope and source revision before each integration. [Project workflow](project-workflow.md) covers rollback and dependent PR retargeting.
 
