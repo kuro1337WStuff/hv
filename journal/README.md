@@ -1,6 +1,12 @@
 # Hypervisor development journal
 
-These runs were observed in the `HV-SVM-L1` Hyper-V VM on a Ryzen 9 9950X. They are nested-virtualization results, not bare-metal qualification or tests of the 9950X3D deployment target.
+Development host: Ryzen 9 9950X. Firmware runs use the `HV-SVM-L1` Hyper-V VM; host-only checks are labeled separately. Neither qualifies the 9950X3D deployment target on bare metal.
+
+## 004–006 · 2026-11-24 · Check the nested page tables before entering L2
+
+Both guests execute from one page at guest physical address `0x1000`. We extracted the table builder used by the firmware so a host program can inspect its output without entering a VM. The host test used different physical addresses for the tables and code, checked every slot, and found exactly one read-only leaf. Rebuilt halt and CPUID guests then reproduced their earlier results in Hyper-V.
+
+The [test report](test-report.md) ties each run to the source commit, binary hash and [host output](npt-layout-004.txt), [halt screenshot](images/npt-005.png) or [resume screenshot](images/npt-006.png). **Still open:** neither guest attempted a store. A writable control and an observed nested protection fault on the read-only page are needed before claiming write enforcement.
 
 ## 003 · 2026-11-24 · Resume after CPUID
 
