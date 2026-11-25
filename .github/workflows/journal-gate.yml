@@ -1,0 +1,48 @@
+name: Journal gate
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, reopened, synchronize, edited, ready_for_review]
+
+permissions:
+  contents: read
+
+jobs:
+  journal-gate:
+    name: Published trial record
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      BASE_SHA: ${{ github.event.pull_request.base.sha }}
+    steps:
+      - name: Check out the published base, never the PR tree
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+
+      - name: Require a published record for runtime changes
+        shell: bash
+        run: |
+          # Fetch the event's synthetic merge as objects only. Compare to its
+          # first parent, so unrelated changes on a moving main do not count.
+          git fetch --no-tags --depth=2 origin "$GITHUB_SHA"
+          if [[ $(git rev-parse "$GITHUB_SHA^1") != "$BASE_SHA" ]]; then
+            echo 'Merge preview and event base differ; refresh the PR against main.' >&2
+            exit 1
+          fi
+          # No rename detection: moving a file out of scope is still a deletion.
+          # Do not use workflow path filters (truncated file lists, skipped checks).
+          if git diff --quiet --no-ext-diff --no-renames "$BASE_SHA" "$GITHUB_SHA" -- \
+              firmware/ lab/ ':(exclude,glob)**/*.md' ':(exclude,glob)**/*.rst' \
+              ':(exclude,glob)**/*.adoc' ':(exclude)firmware/docs/' ':(exclude)lab/docs/' \
+              ':(exclude)lab/tests/journal_gate.py' ':(exclude)lab/tests/test_journal_gate.py'; then
+            echo 'No firmware or lab runtime change.'
+            exit 0
+          else
+            status=$?
+            if [[ $status != 1 ]]; then exit "$status"; fi
+          fi
+          # Only the base version is present, including on fork PRs. The PR
+          # description stays in the event file; it is never shell input.
+          python3 -I lab/tests/journal_gate.py "$BASE_SHA" "$GITHUB_EVENT_PATH"
