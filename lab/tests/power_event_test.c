@@ -7,14 +7,22 @@
 
 static int reads(PowerPm1aEventRegs *pm, uint16_t port, uint32_t expected)
 {
-    uint32_t value = UINT32_MAX;
-    return power_event_io(pm, PowerScalarIn, port, 2, &value) == PowerIoHandled && value == expected;
+    uint32_t word = UINT32_MAX, low = UINT32_MAX, high = UINT32_MAX;
+    return power_event_io(pm, PowerScalarIn, port, 2, &word) == PowerIoHandled && word == expected &&
+        power_event_io(pm, PowerScalarIn, port, 1, &low) == PowerIoHandled && low == (word & 0xff) &&
+        power_event_io(pm, PowerScalarIn, port + 1, 1, &high) == PowerIoHandled && high == (word >> 8);
 }
 
 static int writes(PowerPm1aEventRegs *pm, uint16_t port, uint32_t word)
 {
     uint32_t value = word;
     return power_event_io(pm, PowerScalarOut, port, 2, &value) == PowerIoHandled && value == word;
+}
+
+static int write_byte(PowerPm1aEventRegs *pm, uint16_t port, uint32_t byte)
+{
+    uint32_t value = byte;
+    return power_event_io(pm, PowerScalarOut, port, 1, &value) == PowerIoHandled && value == byte;
 }
 
 static int io_gas(const uint8_t *gas, unsigned bits, uint16_t port)
@@ -36,6 +44,8 @@ int main(void)
     const uint16_t cnt = (uint16_t)linux_le64(f + 176);
     CHECK(en == 0x602);
 
+    PowerPm1aEventRegs dirty = { UINT16_MAX, UINT16_MAX };
+    CHECK(reads(&dirty, sts, 0x8020) && reads(&dirty, en, 0x0020)); /* unsupported bits read zero */
     PowerPm1aEventRegs pm = {0};
     CHECK(reads(&pm, sts, 0) && reads(&pm, en, 0));
     /* Independent bit oracle across both words, including ignored STS[11],
@@ -52,6 +62,13 @@ int main(void)
         CHECK(reads(&pm, en, bit & 0x0020));
         CHECK(writes(&pm, sts, 0xffff));
     }
+
+    CHECK(power_event_latch(&pm, 0x8020));
+    CHECK(write_byte(&pm, sts, 0x20) && reads(&pm, sts, 0x8000));
+    CHECK(power_event_latch(&pm, 0x20));
+    CHECK(write_byte(&pm, sts + 1, 0x80) && reads(&pm, sts, 0x0020));
+    CHECK(write_byte(&pm, en, 0xff) && reads(&pm, en, 0x20));
+    CHECK(write_byte(&pm, en + 1, 0xff) && reads(&pm, en, 0x20));
 
     CHECK(writes(&pm, en, 0) && power_event_latch(&pm, 0x8000));
     CHECK(power_event_latch(&pm, 0x20) && reads(&pm, sts, 0x8020)); /* disabled still latches */
@@ -80,7 +97,10 @@ int main(void)
     static const struct { enum PowerIoForm form; uint16_t port; unsigned bytes; uint32_t value; } bad[] = {
         {PowerScalarIn, 0x5ff, 2, 0xabcd}, {PowerScalarOut, 0x601, 2, 0x8020},
         {PowerScalarIn, 0x603, 2, 0xabcd}, {PowerScalarOut, 0x604, 2, 0x3401},
-        {PowerScalarOut, 0x600, 1, 0x20}, {PowerScalarIn, 0x602, 1, 0xabcd},
+        {PowerScalarOut, 0x604, 1, 0x20}, {PowerScalarIn, 0x5ff, 1, 0xabcd},
+        {PowerScalarOut, 0x601, 1, 0x180}, {PowerScalarOut, 0x602, 1, 0x100},
+        {PowerScalarOut, 0x600, 0, 0x20}, {PowerScalarIn, 0x603, 3, 0xabcd},
+        {PowerScalarOut, 0x600, 257, 0x20}, {PowerOtherIo, 0x602, 1, 0},
         {PowerScalarOut, 0x600, 4, 0x8020}, {PowerScalarOut, 0x602, 4, 0},
         {PowerOtherIo, 0x600, 2, 0x8020}, {PowerOtherIo, 0x602, 2, 0},
         {PowerScalarOut, 0x600, 2, 0x18020}, {PowerScalarOut, 0x602, 2, 0x10000}
@@ -110,6 +130,6 @@ int main(void)
     CHECK(power_event_io(&pm, PowerScalarOut, cnt, 2, &value) == PowerIoRejected);
     CHECK(power_pm1_io(&control, PowerScalarOut, cnt, 2, &value) == PowerIoShutdown);
     CHECK(control.lifecycle == PowerStopped && reads(&pm, sts, 0x8000) && reads(&pm, en, 0));
-    puts("PM1a event: FADT words 0600/0602; STS 8020 -> 0020 -> 0000, EN 0020 retained; only 0604 stops");
+    puts("PM1a event: 0600/0601 W1C leaves 8000/0020; 0602/0603 EN 0020 retained; only 0604 stops");
     return 0;
 }

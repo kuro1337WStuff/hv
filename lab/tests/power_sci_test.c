@@ -24,6 +24,11 @@ static void outw(PowerSci *s, uint16_t port, uint32_t word)
     CHECK(power_event_io(&s->event, PowerScalarOut, port, 2, &word) == PowerIoHandled);
 }
 
+static void event_byte(PowerSci *s, uint16_t port, uint32_t byte)
+{
+    CHECK(power_event_io(&s->event, PowerScalarOut, port, 1, &byte) == PowerIoHandled);
+}
+
 static void no_take(PowerSci *s)
 {
     unsigned char before[sizeof(*s)];
@@ -82,6 +87,11 @@ static void hardware_service(PowerSci *s, uint16_t sts, uint16_t en)
     outw(s, en, 0x20);
     CHECK(!power_sci_take(s, NULL) && !s->slave_isr && !s->master_isr);
     take(s);
+    event_byte(s, en, 0);
+    CHECK(!power_sci_asserted(s) && s->slave_isr == 2 && s->master_isr == 4);
+    event_byte(s, en, 0x20);
+    CHECK(power_sci_asserted(s) && s->slave_isr == 2 && s->master_isr == 4);
+    no_take(s); /* toggling the source does not acknowledge either PIC */
 
     /* With the line high and both IMRs open, either surviving ISR alone
      * blocks another take. Test both orders; neither EOI clears PM1. */
@@ -149,15 +159,16 @@ int main(void)
     CHECK(!power_sci_init(&s, 0x109)); /* don't truncate SCI_INT */
     CHECK(!pic8259_read(&s.pic, 0xa0, 1, &byte) && byte == 0xab);
     CHECK(power_event_io(&s.event, PowerOtherIo, sts, 2, &word) == PowerIoRejected && word == 0x8020);
+    /* Byte access is valid, but 0x8020 is not a byte payload. */
     CHECK(power_event_io(&s.event, PowerScalarOut, sts, 1, &word) == PowerIoRejected && word == 0x8020);
     CHECK(!power_event_latch(&s.event, 0x10020));
     CHECK(!memcmp(before, &s, sizeof(before)));
-    outw(&s, sts, 0x20);
+    event_byte(&s, sts, 0x20);
     CHECK(!power_sci_asserted(&s) && s.slave_isr == 2 && s.master_isr == 4);
     CHECK(power_sci_init(&s, irq)); /* explicit reset discards active cycle */
     CHECK(!s.event.status && !s.event.enable && !s.slave_isr && !s.master_isr);
     CHECK(!pic8259_ready(&s.pic) && inb(&s, 0x21) == 0xff && inb(&s, 0xa1) == 0xff && !inb(&s, 0x4d1));
     refused(&s, 0xa0, 1, 0x61); refused(&s, 0x20, 1, 0x62); no_take(&s);
-    puts("PASS: FADT SCI_INT 9; PM1 0600/0602; slave IR1/master IR2 accept 39; W1C and both specific EOIs independent");
+    puts("PASS: FADT SCI_INT 9 -> vector 39; byte enable/W1C change SCI without PIC EOI; WAK alone stays low");
     return 0;
 }
