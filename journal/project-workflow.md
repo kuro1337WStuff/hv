@@ -11,6 +11,7 @@ Start with [current status](status.md) on `main` and the [trial reservation inde
 | `journal/trials/NNN.md` | The public record for one reserved trial, including holds and non-runs. |
 | `journal/README.md`, `journal/status.md` | The journal index and the current handoff, respectively. |
 | `journal/test-report.md`, `journal/images/` | Historical results and reviewed evidence. Check existing published paths before adding or linking evidence. |
+| `journal/reports/` | Source JSON and generated SVG figures. Link both from the trial; do not hand-edit the rendered values. |
 | `firmware/`, `lab/` | Firmware sources, and lab tooling and instructions, respectively. Unmerged implementation belongs on its actual feature base. |
 | GitHub Issues and PRs | Work ownership, dependencies, run reservations, review and integration decisions. |
 
@@ -29,6 +30,8 @@ In the PR body, put the following line in its own paragraph, replacing `NNN` wit
 Journal: journal/trials/NNN.md
 
 Report hosted CI, reviewed VM evidence and the integration decision separately. A successful build is not a VM pass; a skipped run, a journal merge or a green status check never automatically approves a change or marks a trial passed. Keep the implementation PR in draft while its required evidence is missing. When evidence or interpretation changes, append a dated correction to the same trial in a docs-only PR: identify the superseded statement, evidence and revised conclusion. Preserve the original observation and update the index/status pointers as needed. Reserve a new ID for a new trial.
+
+For a journal figure, retain the source revision, trial ID, scope and disposition for every row. Regenerate the SVG using the [reporting guide](../lab/measurement/README.md), review it, then publish it and its input together. To report a performance change, retain the raw matched baseline and candidate cohorts as well. Without those runs, leave performance **unmeasured**; neither a passing capability check nor an illustrative screenshot is a timing sample.
 
 ## Merge and close
 

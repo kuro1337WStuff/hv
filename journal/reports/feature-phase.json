@@ -1,0 +1,70 @@
+{
+  "title": "Feature phase: selected trial evidence",
+  "records": [
+    {
+      "label": "Legacy serial port discovery",
+      "scope": "host",
+      "status": "passed",
+      "trial": "099",
+      "commit": "17c5a00131da",
+      "source": "journal/trials/099.md"
+    },
+    {
+      "label": "ACPI fixed-event byte access",
+      "scope": "host",
+      "status": "passed",
+      "trial": "100",
+      "commit": "c78c5fce31fc",
+      "source": "journal/trials/100.md"
+    },
+    {
+      "label": "Fallback PIT calibration replay",
+      "scope": "host",
+      "status": "passed",
+      "trial": "097",
+      "commit": "50b804c0fccc",
+      "source": "journal/trials/097.md"
+    },
+    {
+      "label": "ACPI event through both PICs",
+      "scope": "host",
+      "status": "passed",
+      "trial": "098",
+      "commit": "f077610886f2",
+      "source": "journal/trials/098.md"
+    },
+    {
+      "label": "Bench B session release",
+      "scope": "host",
+      "status": "held",
+      "trial": "094",
+      "commit": "21c389e0",
+      "source": "journal/trials/094.md"
+    },
+    {
+      "label": "Fixed IRQ0 regression",
+      "scope": "nested",
+      "status": "passed",
+      "trial": "071",
+      "commit": "68a5723f92",
+      "source": "journal/trials/071.md"
+    },
+    {
+      "label": "PIC initialization receipts",
+      "scope": "nested",
+      "status": "failed",
+      "trial": "068",
+      "commit": "377df490f0",
+      "source": "journal/trials/068.md"
+    },
+    {
+      "label": "Relocated guest page trial",
+      "scope": "nested",
+      "status": "not-run",
+      "trial": "069",
+      "commit": "d388e058acec",
+      "source": "journal/trials/069.md"
+    }
+  ],
+  "comparisons": []
+}

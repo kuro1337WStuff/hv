@@ -4,6 +4,8 @@ Development host: Ryzen 9 9950X. Firmware runs use the `HV-SVM-L1` Hyper-V VM; h
 
 **Start here:** [Current status, feature trials and integration order](status.md). The entries below describe the integrated baseline through 041. Later feature evidence is published on `main` independently of its implementation; see [how trials are published](project-workflow.md).
 
+**[101 · Feature-phase journal report](trials/101.md):** [rendered figure](reports/feature-phase.svg) and [source records](reports/feature-phase.json). Host and nested outcomes stay separate, including failure, hold and not-run. No performance baseline yet.
+
 **[100 · Byte access to the PM1a event block](trials/100.md):** byte writes independently cleared global or wake status. Deasserting IRQ9 did not acknowledge either interrupt controller or shut down a guest.
 
 **[099 · Legacy serial existence probe](trials/099.md):** COM1 returned `0/f` across the two IER reads. COM2–4 returned `f/f` and never touched COM1. This was a host replay, not guest serial discovery.
