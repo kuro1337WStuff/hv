@@ -42,6 +42,8 @@ For a manual handoff instead, `run --stage-only` builds/stages without starting 
 
 `vcpu-mxcsr` is opt-in. From the repository root, run `python lab/hv_queue.py run --rebuild vcpu-mxcsr` to build and run `build/hv-vcpu-mxcsr.iso`, or `firmware\build.cmd vcpu-mxcsr` to build it without starting a VM. This profile checks whether the L2 guest retains its SSE control/status register (MXCSR) across nested exits and resumes. It does not test XMM register contents, floating-point arithmetic correctness, or full XSAVE state.
 
+`vcpu-fpstate` combines the integer-register and legacy floating-point switch in one 64-bit guest. Run `python lab/hv_queue.py run --session --rebuild vcpu-fpstate` in the foreground lab session. The same guest changes its x87 stack and rounding controls, integer registers and XMM values before a VMMCALL, then uses the restored state after resume. The host checks its own state after each exit. This is a legacy FXSAVE/FXRSTOR path, not AVX/XSAVE or vCPU migration.
+
 `irq-wake` is opt-in: `python lab/hv_queue.py run --rebuild irq-wake`. L1 intercepts the fixed guest's HLT and queues one maskable virtual interrupt. The handler records its return RIP and count; the resumed guest separately records forward progress. This exercises virtual HLT emulation without a host timer, device IRQ, or physical sleep.
 
 `irq-shadow` is opt-in: `python lab/hv_queue.py run --rebuild irq-shadow`. The guest makes a checkpoint while interrupts are disabled. L1 verifies the original virtual IRQ is still pending there and resumes without queuing it again. The handler records which instruction had just completed and its return address; both must match the end of the `STI` shadow.

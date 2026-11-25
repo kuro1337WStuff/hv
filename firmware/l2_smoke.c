@@ -14,7 +14,7 @@ enum { Vmcb, HostSave, Pml4, Code=Pml4+NptTableCount, Iopm, Msrpm=Iopm+3, Pages=
 #if defined(HV_IRQ_WAKE) || defined(HV_EXCEPTION_UD)
 #define HV_GUEST_IDT
 #endif
-#if defined(HV_VCPU_XMM) || defined(HV_VCPU_MXCSR)
+#if defined(HV_VCPU_XMM) || defined(HV_VCPU_MXCSR) || defined(HV_VCPU_FPSTATE)
 #define HV_GUEST_SSE2
 #endif
 #if defined(HV_VCPU_GPR) || defined(HV_GUEST_SSE2) || defined(HV_GUEST_IDT)
@@ -24,6 +24,8 @@ enum { GuestTables=Pages, GuestStack=GuestTables+NptTableCount,
        GuestDescriptors=GuestStack+1, AllocPages=GuestDescriptors+1
 #elif defined(HV_VCPU_XMM)
        XmmScratch=GuestStack+1, AllocPages=XmmScratch+1 /* L1 only, never NPT-mapped */
+#elif defined(HV_VCPU_FPSTATE)
+       FpScratch=GuestStack+1, AllocPages=FpScratch+1 /* not mapped into L2 */
 #else
        AllocPages=GuestStack+1
 #endif
@@ -72,6 +74,8 @@ static void hex(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *out, CHAR16 *label, UINT64 v)
 #include "vcpu_xmm.h"
 #elif defined(HV_VCPU_MXCSR)
 #include "vcpu_mxcsr.h"
+#elif defined(HV_VCPU_FPSTATE)
+#include "vcpu_fpstate.h"
 #elif defined(HV_IRQ_WAKE)
 #include "irq_wake.h"
 #elif defined(HV_EXCEPTION_UD)
@@ -130,6 +134,9 @@ static void smoke(EFI_SYSTEM_TABLE *st)
         (__readcr0()&((1u<<2)|(1u<<3))) || !(__readcr4()&(1u<<9))) {
         out->OutputString(out,L"SKIP: L1 SSE2 unavailable or disabled.\r\n"); return;
     }
+#ifdef HV_VCPU_FPSTATE
+    if (!(r[3]&1)) { out->OutputString(out,L"SKIP: x87 unavailable.\r\n"); return; }
+#endif
 #endif
     __cpuid(r,0x40000000);
     if (r[1]!=0x7263694d || r[2]!=0x666f736f || r[3]!=0x76482074) {
@@ -171,6 +178,12 @@ static void smoke(EFI_SYSTEM_TABLE *st)
         out->OutputString(out,L"FAIL: invalid fixed MXCSR guest layout.\r\n"); return;
     }
     MxTrace trace;
+#elif defined(HV_VCPU_FPSTATE)
+    UINTN length=FpLayout.size;
+    if (!fp_layout_ok(length)) {
+        out->OutputString(out,L"FAIL: invalid fixed FP state guest layout.\r\n"); return;
+    }
+    FpTrace trace;
 #elif defined(HV_IRQ_WAKE)
     UINTN length=IrqLayout.size;
     if (!irq_layout_ok(length)) {
@@ -190,6 +203,11 @@ static void smoke(EFI_SYSTEM_TABLE *st)
     if (__readmsr(MSR_VM_CR) & (1u<<4)) { out->OutputString(out,L"SKIP: VM_CR disables SVM.\r\n"); return; }
     UINT64 efer=__readmsr(MSR_EFER);
     if (efer & SVME) { out->OutputString(out,L"SKIP: SVM already enabled; leaving existing state alone.\r\n"); return; }
+#ifdef HV_VCPU_FPSTATE
+    if (efer&(1ull<<14)) {
+        out->OutputString(out,L"SKIP: L1 FFXSR omits XMM state at CPL0.\r\n"); return;
+    }
+#endif
 
     EFI_PHYSICAL_ADDRESS base=0;
     if (EFI_ERROR(bs->AllocatePages(AllocateAnyPages,EfiLoaderData,AllocPages,&base))) {
@@ -209,6 +227,8 @@ static void smoke(EFI_SYSTEM_TABLE *st)
     bs->CopyMem(vmcb+Code*EFI_PAGE_SIZE,(VOID *)XmmStart,length);
 #elif defined(HV_VCPU_MXCSR)
     bs->CopyMem(vmcb+Code*EFI_PAGE_SIZE,(VOID *)MxStart,length);
+#elif defined(HV_VCPU_FPSTATE)
+    bs->CopyMem(vmcb+Code*EFI_PAGE_SIZE,(VOID *)FpStart,length);
 #elif defined(HV_IRQ_WAKE)
     bs->CopyMem(vmcb+Code*EFI_PAGE_SIZE,(VOID *)IrqStart,length);
 #elif defined(HV_EXCEPTION_UD)
@@ -299,6 +319,8 @@ static void smoke(EFI_SYSTEM_TABLE *st)
     out->OutputString(out,L"XMM0-15: check L1 and L2 register banks across two entries\r\n");
 #elif defined(HV_VCPU_MXCSR)
     out->OutputString(out,L"MXCSR: host and guest rounding across VMMCALL and resume\r\n");
+#elif defined(HV_VCPU_FPSTATE)
+    out->OutputString(out,L"GPR + x87 + XMM + MXCSR: one context across VMMCALL and resume\r\n");
 #elif defined(HV_EXCEPTION_UD)
     out->OutputString(out,L"Exception return: intercept UD2, inject #UD at fault RIP\r\n");
 #elif defined(HV_IRQ_WAKE)
@@ -349,6 +371,8 @@ static void smoke(EFI_SYSTEM_TABLE *st)
     xmm_run(vmcb,&trace);
 #elif defined(HV_VCPU_MXCSR)
     mx_run(vmcb,&trace);
+#elif defined(HV_VCPU_FPSTATE)
+    fp_run(vmcb,&trace);
 #elif defined(HV_IRQ_WAKE)
     irq_run(vmcb,&trace);
 #elif defined(HV_EXCEPTION_UD)
@@ -408,6 +432,8 @@ static void smoke(EFI_SYSTEM_TABLE *st)
     xmm_report(out,vmcb,&trace);
 #elif defined(HV_VCPU_MXCSR)
     mx_report(out,vmcb,&trace);
+#elif defined(HV_VCPU_FPSTATE)
+    fp_report(out,vmcb,&trace);
 #elif defined(HV_IRQ_WAKE)
     irq_report(out,vmcb,&trace);
 #elif defined(HV_EXCEPTION_UD)
