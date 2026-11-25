@@ -2,6 +2,14 @@
 
 Development host: Ryzen 9 9950X. Firmware runs use the `HV-SVM-L1` Hyper-V VM; host-only checks are labeled separately. Neither qualifies the 9950X3D deployment target on bare metal.
 
+## 046 · 2026-11-25 · What the fixed guest sees across a CPU exit
+
+**Passed in `HV-SVM-L1`.** L2 saw one explicitly virtual CPU with SSE2 advertised and AVX/XSAVE absent from its feature bits. It put 21 in XMM0, took a CPUID exit, then doubled the preserved value to 42 after resume. L1 independently checked its own register state after all five exits.
+
+The fifth exit was the deliberate unsupported MSR read. L1 stopped at the guest's `RDMSR` instruction, without forwarding it or resuming L2. This was a fixed guest on the 9950X development VM, not Linux or a bare-metal qualification. [Run command, expected contract and observed fields](test-report.md#046--single-vcpu-contract-and-terminal-msr-refusal).
+
+![CPU contract: four CPUID leaves, SSE2 result 2A, five restores, and final read-MSR exit 7C](images/l1-cpu-contract-046.png)
+
 ## 045 · 2026-11-25 · Staged input verification before VMRUN
 
 **Passed in the nested VM.** Changing one bit of the kernel, initramfs, or command line in L1's private staging memory caused L1 to identify that specific input and reject it with **zero guest entries**. File lengths and the mounted ISO did not change.
