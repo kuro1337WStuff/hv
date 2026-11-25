@@ -1,0 +1,1 @@
+nokaslr maxcpus=1 noapic pci=off idle=halt earlycon=uart8250,io,0x3f8,115200n8 console=ttyS0,115200n8 rdinit=/init panic=0

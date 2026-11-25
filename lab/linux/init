@@ -1,0 +1,16 @@
+#!/bin/sh
+# Fixed diskless PID 1. Nothing is read from the serial port.
+set -eu
+exec </dev/null >/dev/console 2>&1
+/bin/busybox mount -t proc proc /proc
+[ "$$" -eq 1 ]
+read -r release </proc/sys/kernel/osrelease
+[ "$release" = 6.18.60-0-virt ]
+printf 'HV:P5:USER pid=%s kernel=%s\n' "$$" "$release"
+read -r before idle </proc/uptime
+/bin/busybox sleep 2
+read -r after idle </proc/uptime
+[ "${after%.*}" -gt "${before%.*}" ]
+printf 'HV:P5:TIMER before=%s after=%s\n' "$before" "$after"
+printf 'HV:P5:SHUTDOWN\n'
+exec /bin/busybox poweroff -f
