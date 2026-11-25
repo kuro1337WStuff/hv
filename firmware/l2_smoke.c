@@ -1,5 +1,6 @@
 #include <Uefi.h>
 #include <intrin.h>
+#include "fixed_npt.h"
 
 /* AMD64 APM Vol. 2, Appendix B: all offsets here are from the VMCB page base. */
 enum {
@@ -9,12 +10,12 @@ enum {
     Es=0x400, Cs=0x410, Ss=0x420, Ds=0x430, GuestEfer=0x4d0, Cr0=0x558,
     Dr7=0x560, Dr6=0x568, Flags=0x570, Rip=0x578, Rsp=0x5d8, Rax=0x5f8, Pat=0x668
 };
-enum { Vmcb, HostSave, Pml4, Pdpt, Pd, Pt, Code, Iopm, Msrpm=Iopm+3, Pages=Msrpm+2 };
+enum { Vmcb, HostSave, Pml4, Code=Pml4+NptTableCount, Iopm, Msrpm=Iopm+3, Pages=Msrpm+2 };
+_Static_assert(sizeof(FixedNpt)==NptTableCount*EFI_PAGE_SIZE, "NPT allocation size mismatch");
 #define MSR_EFER 0xc0000080u
 #define MSR_VM_CR 0xc0010114u
 #define MSR_HSAVE 0xc0010117u
 #define SVME (1ull << 12)
-#define GPA 0x1000u
 #define MARKER 0x4c32u
 #define FIELD(t, offset) (*(volatile t *)(vmcb + (offset)))
 
@@ -25,7 +26,7 @@ extern void RunCpuidGuest(UINTN vmcb_pa, CpuidFrame *frame);
 extern const UINT8 L2Start[], L2Cpuid[], L2AfterCpuid[], L2PassHlt[], L2End[];
 static UINT64 guest_ip(const UINT8 *label)
 {
-    return GPA + ((UINTN)label - (UINTN)L2Start);
+    return FixedGuestGpa + ((UINTN)label - (UINTN)L2Start);
 }
 #endif
 
@@ -82,9 +83,8 @@ static void smoke(EFI_SYSTEM_TABLE *st)
     UINT8 *vmcb=(UINT8 *)(UINTN)base;
     bs->SetMem(vmcb, EFI_PAGES_TO_SIZE(Pages), 0);
     bs->SetMem(vmcb+Iopm*EFI_PAGE_SIZE, 5*EFI_PAGE_SIZE, 0xff);
-    for (UINTN i=Pml4; i<Pt; ++i)
-        *(UINT64 *)(UINTN)(base+i*EFI_PAGE_SIZE)=(base+(i+1)*EFI_PAGE_SIZE)|7;
-    ((UINT64 *)(UINTN)(base+Pt*EFI_PAGE_SIZE))[GPA/EFI_PAGE_SIZE]=(base+Code*EFI_PAGE_SIZE)|5;
+    build_fixed_npt((FixedNpt *)(vmcb+Pml4*EFI_PAGE_SIZE),
+                    base+Pml4*EFI_PAGE_SIZE, base+Code*EFI_PAGE_SIZE);
 #ifdef HV_CPUID_RESUME
     bs->CopyMem(vmcb+Code*EFI_PAGE_SIZE,(VOID *)L2Start,length);
 #else
@@ -114,8 +114,8 @@ static void smoke(EFI_SYSTEM_TABLE *st)
     FIELD(UINT64,Dr6)=0xffff0ff0u;
     FIELD(UINT64,Dr7)=0x400;
     FIELD(UINT64,Flags)=2;
-    FIELD(UINT64,Rip)=GPA;
-    FIELD(UINT64,Rsp)=GPA+EFI_PAGE_SIZE-16; /* no stack accesses in this payload */
+    FIELD(UINT64,Rip)=FixedGuestGpa;
+    FIELD(UINT64,Rsp)=FixedGuestGpa+EFI_PAGE_SIZE-16; /* no stack accesses in this payload */
     FIELD(UINT64,Pat)=__readmsr(0x277);
     FIELD(UINT64,ExitCode)=~0ull; /* never confuse unmodified memory with success */
 
@@ -177,7 +177,7 @@ static void smoke(EFI_SYSTEM_TABLE *st)
     if (resumed && exit==0x78 && ax==0x50415353 && ip==guest_ip(L2PassHlt))
         out->OutputString(out,L"PASS: L2 validated EAX/EBX/ECX/EDX after resume.\r\n");
 #else
-    if (exit==0x78 && ax==MARKER && ip==GPA+sizeof(payload)-1)
+    if (exit==0x78 && ax==MARKER && ip==FixedGuestGpa+sizeof(payload)-1)
         out->OutputString(out,L"PASS: L2 marker executed; HLT intercepted; returned to L1.\r\n");
 #endif
     else {
