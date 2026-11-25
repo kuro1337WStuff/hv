@@ -1,12 +1,12 @@
-# Project status · 2026-11-25, after 071
+# Project status · 2026-11-25, after 072
 
-**Integrated firmware:** [041 on `main`](README.md). **Latest feature trials:** 068 failed, 069 did not run, 070 and 071 completed on nested Hyper-V. None promotes feature firmware to `main`. Ryzen 9 9950X3D bare-metal qualification and an ordinary Linux boot remain outstanding.
+**Integrated firmware:** [041 on `main`](README.md). **Latest trial:** [072](trials/072.md) identified the PIC evidence failure on the host; 068 remains failed, 069 did not run, and 070/071 remain nested regression passes. No feature firmware was promoted. Ryzen 9 9950X3D bare-metal qualification and an ordinary Linux boot remain outstanding.
 
 ## Where to resume
 
 | Work item | State | Next decision |
 | --- | --- | --- |
-| [PIC evidence #14](https://github.com/kuro1337WStuff/hv/issues/14) | [068 FAIL](trials/068.md); lane A retained; [PR #12](https://github.com/kuro1337WStuff/hv/pull/12) draft | Reproduce the first missing row with a host formatter control. Check label width and row count before reserving another guest attempt. Do not reboot or register the failed frame. |
+| [PIC evidence #14](https://github.com/kuro1337WStuff/hv/issues/14) | [068 FAIL](trials/068.md); [072 host control](trials/072.md) isolated the 13-character width refusal at 11/24 rows. Lane A held; #12 draft. | Review existing shared formatter #3 with host regression #21. Do not reboot or register the failed frame. Any guest confirmation requires a separate reservation, reviewed recovery and all refusal witnesses. |
 | [CPU, loader and reference recovery #15](https://github.com/kuro1337WStuff/hv/issues/15) | CPU/loader contract incomplete; [069 NOT RUN](trials/069.md); original VM held at 057 | Review remaining CPU-state ownership and loader criteria independently. Keep 058 unbooted until an explicit recovery decision. No ordinary guest or physical promotion. |
 | [Device integration #16](https://github.com/kuro1337WStuff/hv/issues/16) | Fixed device controls only | Review UART #6 before #8, PIC #11 before #12; PIT #5 is independent. Requalify changed integration trees before merging. |
 | [Test supervisor #17](https://github.com/kuro1337WStuff/hv/issues/17) | [070 COMPLETE](trials/070.md) → [071 COMPLETE](trials/071.md); lane B retained at IRQ0 | Review dedicated lanes #7 before supervisor #18. After 071: 12 open board cards; 2 manual, 10 dependency-blocked, none eligible. A stopped scheduler is expected here. |
