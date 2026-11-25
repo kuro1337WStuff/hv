@@ -35,6 +35,9 @@ static void pkg_reset(UINT8 *vmcb)
 #elif defined(HV_PAGE_PAIR)
 #include "long_guest.h"
 #include "page_pair.h"
+#elif defined(HV_CR4_GUARD)
+#include "long_guest.h"
+#include "cr4_guard.h"
 #elif defined(HV_SERIAL_CONTRACT)
 #include "long_guest.h"
 #include "serial_contract.h"
