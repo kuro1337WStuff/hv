@@ -230,3 +230,7 @@ This is an explicit legacy XMM0–15 switch on one nested vCPU, not a full exten
 | HLT `0x78` / `0x1069` | `0x7F84` | `0x5F80` (up) | 2 | `0x5FA0` | `0x5FA0` |
 
 L2 explicitly cleared the precision flag when selecting round-up before `VMMCALL`. Its next entry had to recover that captured value, not the initial round-down value. `CVTSS2SI` set just the precision flag (`0x20`) in both conversions. L1 used different status flags and rounding controls on each entry; `STMXCSR` sampled the restored live register separately from its save slot. Final guest RAX was `0x50415353`. Reference: AMD64 APM Vol. 1 §4.2.2. This covers masked exceptions and the tested MXCSR values on one nested vCPU, not unmasked SIMD exceptions, x87 state, or bare metal.
+
+### 031 · 2026-11-25 local · Delegated VM batch completes from a standard terminal
+
+**PASS / COMPLETE.** On the 9950X nested lab, one foreground administrator session accepted `python lab/hv_queue.py run --session vcpu-mxcsr` from a non-administrator terminal. Batch `ced6858a810c46f68a78adab61140783` checkpointed the prior guest, mounted the existing run 030 ISO (`990A9D737822DE1C38829789027874F59A5E8A8D43C98F09853AC15503A3C970`), booted `HV-SVM-L1`, and returned a fresh PNG matching the [reviewed guest screen](images/vcpu-mxcsr-030.png). The submitting process received a COMPLETE result without elevating. Separately, an invalid session credential was rejected, and stopping a batch during preparation returned STOPPED before VM management. This exercises the control workflow, not new processor behavior.

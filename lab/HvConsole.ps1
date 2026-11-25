@@ -31,32 +31,58 @@ function Test-HvConsoleFrame {
     return ($Frame.Width -eq 1024 -and $Frame.Height -eq 768 -and $Frame.ImageData -is [byte[]] -and $Frame.ImageData.Length -ge (1024 * 768 * 2))
 }
 
+# Accept only data that is safe to use in fixed ISO and evidence filenames.
+function Read-HvProfiles {
+    param([Parameter(Mandatory)][string]$Path)
+
+    $stream = [IO.File]::Open($Path, 'Open', 'Read', 'Read')
+    try {
+        if ($stream.Length -gt 32768) { throw 'Profile manifest exceeds 32 KiB.' }
+        $reader = [IO.StreamReader]::new($stream, [Text.UTF8Encoding]::new($false, $true), $false)
+        try { $json = $reader.ReadToEnd().TrimStart([char]0xfeff).Trim() } finally { $reader.Dispose() }
+    } finally { $stream.Dispose() }
+    if (!$json.StartsWith('[')) { throw 'Expected a profile manifest array.' }
+    $entries = ConvertFrom-Json -InputObject $json -ErrorAction Stop
+    $count = @($entries).Count
+    if ($null -eq $entries -or $count -lt 1 -or $count -gt 128) { throw 'Expected 1 to 128 manifest entries.' }
+    $map = @{}
+    $usedStems = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach ($entry in $entries) {
+        if ($entry -isnot [pscustomobject]) { throw 'Expected a profile manifest object.' }
+        $fields = @($entry.PSObject.Properties.Name)
+        if ($fields.Count -ne 3 -or $fields -cnotcontains 'profile' -or
+            $fields -cnotcontains 'stem' -or $fields -cnotcontains 'pass') { throw 'Invalid profile manifest fields.' }
+        $name = $entry.profile
+        if ($name -isnot [string] -or $name.Length -gt 48 -or $name -cnotmatch '\A[a-z][a-z0-9]*(?:-[a-z0-9]+)*\z' -or
+            $name -cmatch '\A(?:con|prn|aux|nul|com[0-9]|lpt[0-9])\z' -or $map.ContainsKey($name)) {
+            throw 'Invalid or duplicate profile name.'
+        }
+        if ($name -ceq 'probe') {
+            if ($null -ne $entry.stem) { throw 'The probe profile is screen-only.' }
+        } elseif ($entry.stem -isnot [string] -or $entry.stem.Length -gt 64 -or
+            $entry.stem -cnotmatch '\Ahv-[a-z0-9]+(?:-[a-z0-9]+)*\z' -or !$usedStems.Add($entry.stem)) {
+            throw 'Invalid or duplicate ISO stem.'
+        }
+        if ($null -ne $entry.pass -and ($entry.pass -isnot [string] -or $entry.pass -cnotmatch '\A[0-9a-fA-F]{64}\z')) {
+            throw 'Expected a reviewed SHA-256 screen digest or null.'
+        }
+        $map.Add($name, $entry)
+    }
+    return $map
+}
+
 function Get-HvConsoleVerdict {
-    param([Parameter(Mandatory)][AllowNull()]$Frame, [Parameter(Mandatory)][string]$Profile)
+    param([Parameter(Mandatory)][AllowNull()]$Frame, [Parameter(Mandatory)][string]$Profile, [hashtable]$Profiles)
 
     # SHA-256 of the reviewed journal/images pixels, not the PNG file. Pack each
     # RGB pixel as little-endian R5:G6:B5 (R >> 3, G >> 2, B >> 3), top row first.
     # UNKNOWN may mean different text, layout, colours, or an unfinished boot;
     # inspect the actual capture. It is neither a firmware failure nor a pass.
-    $expected = switch -Exact ($Profile) {
-        'probe'     { 'a255bc97bb907bcbf88474a182d6010dae63b696b7d43253efc9325055f26fc1' } # uefi-probe-console.png
-        'l2'        { '36bcc11f3dbf69b38bef1466e06eb42ae3fc6b23697b49ee1a947842635164c2' } # npt-005.png
-        'cpuid'     { '27b75d52c2332aa952d1f256b59a4104d7cfa4022af87a9027f51b6c3f063cfc' } # npt-006.png
-        'npt-write' { '4aceae05f48c8e62541b279e0124295daf6ded6147ece66c928493b42a78030c' } # npt-write-007.png
-        'forensic-write' { 'cf64cac4363291a8d1cab01816d3d854a99eb02adf6351bfdd2ba125abd3a24c' } # forensic-write-018.png
-        'vcpu-gpr' { 'deb4feb5f6706e8ce0f31a17e00deee2ad7f48792ad7a497981d63b2b5928d4f' } # vcpu-gpr-020.png
-        'vcpu-xmm' { '5849357d3e8ab8c20dbb6d63865ebb0a882e807bb2c55ab5c2497462d75ee6c2' } # vcpu-xmm-028.png
-        'vcpu-mxcsr' { 'a5fa85ee9b789ad648b1d9a86f36f31b91424ab80852f0495d002af76ee952bd' } # vcpu-mxcsr-030.png
-        'irq-wake'  { 'dd0cd66333528c1938541b88a921ad6e05d823446d9fbc3213ed2c8c4a856862' } # irq-wake-022.png
-        'irq-shadow' { 'b12003240f8b92fc92ea2dc7ad572ff0b94f86e617f03c2e3080d1dcc2280883' } # irq-shadow-025.png
-        'irq-priority' { '28003ccd910e792954d485335b8f82963552f8ac9bd6c0f9e25192afa216e97c' } # irq-priority-026.png
-        'exception-ud' { 'eb952d11473fe23fa5a4ceafbb3918e7a83321a963004c6ca57529876293f382' } # exception-ud-027.png
-        'npt-remap' { 'b8a89c55ff3785983d41f30855c7af3e04fc0d5e87cb6122ab62a2c23affc061' } # npt-remap-008.png
-        'npt-cross' { 'b4e0ee475d7add3a84c8294c3f69800fdf0244f315ba16375a645c1aa8f95d9e' } # npt-cross-015.png
-        'npt-broadcast' { '7812af2f7444f89ad7c52b68fc8e72a202ce23c8a39e5a2eb98bf0a18863da7c' } # npt-broadcast-017.png
-        default     { return 'UNKNOWN' }
-    }
     if (!(Test-HvConsoleFrame $Frame)) { return 'UNKNOWN' }
+    if ($null -eq $Profiles) { $Profiles = Read-HvProfiles (Join-Path $PSScriptRoot 'hv-profiles.json') }
+    if (!$Profiles.ContainsKey($Profile)) { return 'UNKNOWN' }
+    $expected = $Profiles[$Profile].pass
+    if (!$expected -and $Profile -ne 'npt-cross') { return 'UNKNOWN' }
     # ImageData can have a provider prefix. Only the complete pixel tail is evidence.
     $size = $Frame.Width * $Frame.Height * 2
     $sha = [Security.Cryptography.SHA256]::Create()

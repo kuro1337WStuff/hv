@@ -1,16 +1,19 @@
 #Requires -Version 5.1
 #Requires -RunAsAdministrator
 #Requires -Modules Hyper-V
-[CmdletBinding()]
-param([Parameter(Mandatory)][string]$RunDir)
+[CmdletBinding(DefaultParameterSetName='Direct')]
+param(
+    [Parameter(Mandatory, Position=0, ParameterSetName='Direct')]
+    [Parameter(Mandatory, Position=0, ParameterSetName='Session')]
+    [string]$RunDir,
+    [Parameter(Mandatory, ParameterSetName='Session')][string]$SessionLabRoot,
+    [Parameter(Mandatory, ParameterSetName='Session')][string]$SessionStopFile,
+    [Parameter(Mandatory, ParameterSetName='Session')][guid]$SessionVmId
+)
 
 $ErrorActionPreference = 'Stop'
 $vmName = 'HV-SVM-L1'
-$root = Split-Path -Parent $PSScriptRoot
-$runs = Join-Path $root 'build\runs'
-$media = Join-Path $PSScriptRoot 'media'
-$store = Join-Path $PSScriptRoot "machines\$vmName"
-$stems = @{ l2='hv-l2-smoke'; cpuid='hv-cpuid-resume'; 'npt-write'='hv-npt-write'; 'npt-remap'='hv-npt-remap'; 'npt-cross'='hv-npt-cross'; 'npt-broadcast'='hv-npt-broadcast'; 'forensic-write'='hv-forensic-write'; 'vcpu-gpr'='hv-vcpu-gpr'; 'vcpu-xmm'='hv-vcpu-xmm'; 'vcpu-mxcsr'='hv-vcpu-mxcsr'; 'irq-wake'='hv-irq-wake'; 'irq-shadow'='hv-irq-shadow'; 'irq-priority'='hv-irq-priority'; 'exception-ud'='hv-exception-ud' }
+$sessionMode = $PSCmdlet.ParameterSetName -eq 'Session'
 $images = @{}
 $events = $null
 $mutex = $null
@@ -33,6 +36,11 @@ function Request-Attention([string]$Detail) {
 
 function Assert-QueueActive {
     $quit = Test-Path -LiteralPath $stopFile
+    if (!$quit -and $sessionMode) {
+        # Inspect the directory entry, not the target of a caller-supplied STOP link.
+        Assert-PlainPath $stopDir
+        $quit = [IO.Directory]::GetFileSystemEntries($stopDir, 'STOP').Length -ne 0
+    }
     if (!$quit -and $interactive) {
         try {
             if ([Console]::KeyAvailable) { $quit = [Console]::ReadKey($true).Key -eq 'Q' }
@@ -63,12 +71,72 @@ function Assert-PlainPath([string]$Path) {
     }
 }
 
+# The broker pins the media directory and its ancestors. Open the final entry
+# itself, not a reparse target, and validate the same handle we keep for the run.
+function Initialize-SessionMedia {
+    Add-Type -TypeDefinition @'
+using System;
+using System.ComponentModel;
+using System.IO;
+using System.Runtime.InteropServices;
+using System.Text;
+using Microsoft.Win32.SafeHandles;
+
+public static class HvSessionImage {
+    [StructLayout(LayoutKind.Sequential)]
+    struct FileInfo {
+        public FileAttributes Attributes;
+        public System.Runtime.InteropServices.ComTypes.FILETIME Created, Accessed, Written;
+        public uint VolumeSerial, SizeHigh, SizeLow, Links, IndexHigh, IndexLow;
+    }
+
+    [DllImport("kernel32.dll", CharSet=CharSet.Unicode, ExactSpelling=true, SetLastError=true)]
+    static extern SafeFileHandle CreateFileW(string path, uint access, FileShare share,
+        IntPtr security, FileMode mode, uint flags, IntPtr template);
+    [DllImport("kernel32.dll", SetLastError=true)]
+    static extern bool GetFileInformationByHandle(SafeFileHandle file, out FileInfo info);
+    [DllImport("kernel32.dll")]
+    static extern uint GetFileType(SafeFileHandle file);
+    [DllImport("kernel32.dll", CharSet=CharSet.Unicode, ExactSpelling=true, SetLastError=true)]
+    static extern uint GetFinalPathNameByHandleW(SafeFileHandle file, StringBuilder path, uint size, uint flags);
+
+    public static FileStream OpenRead(string path) {
+        const uint GenericRead = 0x80000000, OpenReparsePoint = 0x00200000, Disk = 1;
+        SafeFileHandle handle = CreateFileW(path, GenericRead, FileShare.Read, IntPtr.Zero,
+            FileMode.Open, OpenReparsePoint, IntPtr.Zero);
+        try {
+            if (handle.IsInvalid) throw new Win32Exception(Marshal.GetLastWin32Error());
+            FileInfo info;
+            if (!GetFileInformationByHandle(handle, out info)) throw new Win32Exception(Marshal.GetLastWin32Error());
+            if (GetFileType(handle) != Disk || info.Links != 1 ||
+                (info.Attributes & (FileAttributes.Directory | FileAttributes.ReparsePoint)) != 0)
+                throw new IOException("Session media must be a regular file with a single link.");
+            string expected = @"\\?\" + path;
+            var actual = new StringBuilder(expected.Length + 1);
+            uint length = GetFinalPathNameByHandleW(handle, actual, (uint)actual.Capacity, 0);
+            if (length == 0) throw new Win32Exception(Marshal.GetLastWin32Error());
+            if (length != expected.Length || !String.Equals(expected, actual.ToString(), StringComparison.OrdinalIgnoreCase))
+                throw new IOException("Unexpected resolved session media path.");
+            return new FileStream(handle, FileAccess.Read);
+        } catch {
+            handle.Dispose();
+            throw;
+        }
+    }
+}
+'@
+}
+
 function Open-FrozenImage([string]$Profile, [string]$Digest) {
-    $path = Join-Path $media ("{0}-{1}.iso" -f $stems[$Profile], $Digest.ToUpperInvariant())
+    $path = Join-Path $media ("{0}-{1}.iso" -f $profiles[$Profile].stem, $Digest.ToUpperInvariant())
     if (!$images.ContainsKey($path)) {
-        Assert-PlainPath $path
         # No write or delete sharing, from hashing through the last VM operation.
-        $stream = [IO.File]::Open($path, 'Open', 'Read', 'Read')
+        if ($sessionMode) {
+            $stream = [HvSessionImage]::OpenRead($path)
+        } else {
+            Assert-PlainPath $path
+            $stream = [IO.File]::Open($path, 'Open', 'Read', 'Read')
+        }
         $images.Add($path, $stream)
         if ((Get-FileHash -InputStream $stream -Algorithm SHA256).Hash -ine $Digest) {
             Request-Attention "Digest mismatch for staged $Profile media."
@@ -88,13 +156,13 @@ function Read-Worklist {
     } finally { $stream.Dispose() }
     if (!$json.StartsWith('[')) { throw 'Expected a JSON array.' }
     $items = ConvertFrom-Json -InputObject $json
-    if (!$items -or $items.Count -gt $stems.Count) { throw 'Invalid number of queued profiles.' }
+    if (!$items -or $items.Count -gt $profiles.get_Count()) { throw 'Invalid number of queued profiles.' }
     $seen = @{}
     foreach ($item in $items) {
         Assert-QueueActive
         if ($item -isnot [pscustomobject] -or @($item.PSObject.Properties).Count -ne 2 -or
             $item.profile -isnot [string] -or $item.sha256 -isnot [string] -or
-            $stems.Keys -cnotcontains $item.profile -or $seen.ContainsKey($item.profile) -or
+            $profiles.get_Keys() -cnotcontains $item.profile -or !$profiles[$item.profile].stem -or $seen.ContainsKey($item.profile) -or
             $item.sha256 -cnotmatch '\A[0-9a-fA-F]{64}\z') { throw 'Malformed, unreviewed or duplicate worklist entry.' }
         $seen.Add($item.profile, $true)
         [pscustomobject]@{ Profile=$item.profile; Digest=$item.sha256; Path=(Open-FrozenImage $item.profile $item.sha256) }
@@ -127,8 +195,10 @@ function Get-LabView([string]$ExpectedState, [string]$ExpectedPath) {
 
 function Get-MountedProfile($View) {
     if (!$View.Path -and $View.State -eq 'Off') { return '' }
-    foreach ($profile in $stems.Keys) {
-        $pattern = '\A' + [regex]::Escape($stems[$profile]) + '-([0-9a-fA-F]{64})\.iso\z'
+    foreach ($profile in $profiles.get_Keys()) {
+        $stem = $profiles[$profile].stem
+        if (!$stem) { continue } # screen-only, never authorized as boot media
+        $pattern = '\A' + [regex]::Escape($stem) + '-([0-9a-fA-F]{64})\.iso\z'
         if ([IO.Path]::GetFileName($View.Path) -imatch $pattern) {
             $digest = $Matches[1]
             if ($View.Path -ieq (Join-Path $media ([IO.Path]::GetFileName($View.Path)))) {
@@ -150,7 +220,7 @@ function Save-Evidence($Frame, [string]$Name) {
 function Assert-Terminal($View, [string]$Profile, [switch]$Prior) {
     $frame = Get-HvConsoleFrame -VmId $View.VM.Id
     if ($null -eq $frame) { Request-Attention 'No live frame for the running VM. Will not interrupt it.' }
-    $verdict = Get-HvConsoleVerdict -Frame $frame -Profile $Profile
+    $verdict = Get-HvConsoleVerdict -Frame $frame -Profile $Profile -Profiles $profiles
     if ($verdict -notin 'PASS','SKIP') {
         Save-Evidence $frame "guard-$Profile.png"
         Request-Attention "Unrecognized live $Profile console; see guard-$Profile.png. No power-off."
@@ -175,7 +245,7 @@ function Wait-ConsoleResult($Item) {
         Assert-QueueActive
         if ($null -ne $frame) {
             $lastFrame = $frame
-            $verdict = Get-HvConsoleVerdict -Frame $frame -Profile $Item.Profile
+            $verdict = Get-HvConsoleVerdict -Frame $frame -Profile $Item.Profile -Profiles $profiles
             if ($verdict -in 'PASS','SKIP' -and $timer.Elapsed.TotalSeconds -lt 60) {
                 $null = Get-LabView 'Running' $Item.Path
                 Save-Evidence $frame "$activeProfile.png"
@@ -195,12 +265,35 @@ function Wait-ConsoleResult($Item) {
 }
 
 try {
+    $lab = $PSScriptRoot
+    if ($sessionMode) {
+        $lab = $SessionLabRoot.TrimEnd('\')
+        if ($lab -notmatch '\A[A-Za-z]:\\' -or [IO.Path]::GetFullPath($lab) -ine $lab -or
+            [IO.Path]::GetFileName($lab) -ine 'lab' -or ![IO.Directory]::Exists($lab)) {
+            throw 'SessionLabRoot must be the absolute project lab directory.'
+        }
+        Assert-PlainPath $lab
+        $runs = Join-Path $PSScriptRoot 'runs'
+    } else {
+        $runs = Join-Path (Split-Path -Parent $lab) 'build\runs'
+    }
+    $media = Join-Path $lab 'media'
+    $store = Join-Path $lab "machines\$vmName"
     $RunDir = [IO.Path]::GetFullPath($ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($RunDir)).TrimEnd('\')
     $runId = [IO.Path]::GetFileName($RunDir)
     if ($runId -cnotmatch '\A[0-9a-fA-F]{32}\z' -or [IO.Path]::GetDirectoryName($RunDir) -ine $runs -or
-        ![IO.Directory]::Exists($RunDir)) { throw 'Expected an existing build/runs/<32-hex-id> directory.' }
+        ![IO.Directory]::Exists($RunDir)) { throw "Expected an existing $runs\<32-hex-id> directory." }
     Assert-PlainPath $RunDir
     $stopFile = Join-Path $RunDir 'STOP'
+    if ($sessionMode) {
+        $stopDir = Join-Path (Split-Path -Parent $lab) "build\runs\$runId"
+        if ($SessionStopFile -ine (Join-Path $stopDir 'STOP')) { throw 'Unexpected session STOP path.' }
+        Assert-PlainPath $stopDir
+        Initialize-SessionMedia
+        $manifest = Join-Path $RunDir 'hv-profiles.json'
+    } else {
+        $manifest = Join-Path $PSScriptRoot 'hv-profiles.json'
+    }
     $eventPath = Join-Path $RunDir 'events.jsonl'
     if (Test-Path -LiteralPath $eventPath) {
         Assert-PlainPath $eventPath
@@ -218,10 +311,17 @@ try {
     Write-QueueEvent 'PREFLIGHT' 'Three-second stop window before any VM change. Press Q or create STOP in this run.'
     Wait-Interruptible 3000
     . (Join-Path $PSScriptRoot 'HvConsole.ps1')
+    Assert-PlainPath $manifest
+    $profiles = Read-HvProfiles $manifest
     $queue = @(Read-Worklist)
     $vms = @(Get-VM -Name $vmName)
     if ($vms.Count -ne 1) { Request-Attention 'Expected exactly one lab VM by name.' }
-    $vmId = $vms[0].Id
+    if ($sessionMode) {
+        if ($vms[0].Id -ne $SessionVmId) { Request-Attention 'Lab VM no longer has the approved session identity.' }
+        $vmId = $SessionVmId
+    } else {
+        $vmId = $vms[0].Id
+    }
     $view = Get-LabView
     $driveId = $view.DVD.Id
     $mounted = Get-MountedProfile $view

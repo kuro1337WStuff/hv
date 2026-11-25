@@ -8,7 +8,27 @@ python lab/hv_queue.py run
 
 The default order is `l2`, `cpuid`, `npt-write`, `npt-remap`, `npt-cross`. To rebuild and run just two profiles: `python lab/hv_queue.py run --rebuild npt-write npt-remap`. Without `--rebuild`, the runner uses the already-built ISOs in `build/`. It freezes the ordered profiles and SHA-256 digests for this batch before asking Windows to launch the visible Hyper-V worker. Building and staging use the caller's existing privileges. No change to UAC, no service and no per-test approval. An operator must still authorize elevation when Windows requires it.
 
-**Reuse one elevation for a lab session:** open Windows PowerShell as administrator once. In your **ordinary** terminal, run `python lab/hv_queue.py run --stage-only --rebuild vcpu-mxcsr` (or list several profiles). This only builds and stages a frozen batch; exit code 0 here is not a guest PASS. Check the printed paths, then paste the printed `powershell.exe -NoProfile -File ... -RunDir ...` command into the already elevated window. It runs one guarded batch and returns to that window. Keep the window for the next batch or close it to end the session. No scheduled task, directory watcher or automatic execution of new batches is installed.
+### One launch for a supervised session
+
+From the checkout, run **once** and approve the Windows elevation prompt:
+
+```powershell
+powershell.exe -NoProfile -File .\lab\Start-HvLabSession.ps1
+```
+
+Leave the visible **LAB SESSION READY** window open. The ordinary build terminal can now submit any number of finite batches without another UAC prompt or a pasted worker command:
+
+```powershell
+python lab/hv_queue.py run --session --rebuild vcpu-mxcsr
+```
+
+`--session` never falls back to elevation. The foreground process accepts a run ID and bounded JSON data on loopback, not commands or scripts. Anyone running as your account can submit lab batches while it is open. It pins the `HV-SVM-L1` VM ID; the existing media digest, offline-network, checkpoint and console checks still apply. Guest images and the declarative `hv-profiles.json` can change between batches. Review new screenshots before adding PASS digests. The privileged worker and console code are hash-checked and copied at launch; changes to that code require a fresh session. Build tools, the repo and the submitting terminal get no administrator token.
+
+**Revoke:** press **Q** in the session window or close it. An active batch can also be stopped using the run-specific `stop` command. A cooperative STOP ends the session; it does not undo an issued Hyper-V operation. Closing the session installs no task, service, or logon trigger. Per-batch events and PNGs arrive in `build/runs/<id>/`; the protected worker copies and recovery artifacts are under the checkout-specific `HvLabSession-*` directory in native Program Files. Do not share its session descriptor.
+
+For a manual handoff instead, `run --stage-only` builds/stages without starting a worker and prints a command for an existing administrator console. Staging is not a guest PASS.
+
+### Test profiles
 
 `npt-cross` uses its own two-processor L1 payload. Rebuild with `firmware\build.cmd npt-cross`, then run `python lab/hv_queue.py run npt-cross`. The builder caches hash-pinned Limine v8 UEFI loader/header and Zig 0.13 tools under `build/tools`; first build needs network access. Other profiles remain UEFI applications. The cross test is read-only with respect to guest disks: it exits boot services via Limine, measures both local APIC IDs, runs four fixed L2 loads and halts on its evidence screen. Do not install this lab image as a host bootloader.
 
