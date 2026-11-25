@@ -219,6 +219,8 @@ __declspec(noreturn) static void fail(const char *reason)
     screen("L1 CPU CONTRACT FAIL", reason, 0xff00ff);
 #elif defined(HV_SERIAL_CONTRACT)
     screen("L1 SERIAL CONTRACT FAIL", reason, 0xff00ff);
+#elif defined(HV_PIT_CH2)
+    screen("L1 PIT CH2 FAIL", reason, 0xff00ff);
 #elif defined(HV_TICK_CONTRACT)
     screen("L1 PIT IRQ0 FAIL", reason, 0xff00ff);
 #elif defined(HV_TX_CONTRACT)
@@ -311,6 +313,8 @@ __declspec(noreturn) void L1OwnedMain(void)
     if (reason) fail(reason);
 #ifdef HV_SERIAL_CONTRACT
     screen("L1 SERIAL CONTRACT PASS", "POLLED COM1: FIXED GUEST", 0x00ff00);
+#elif defined(HV_PIT_CH2)
+    screen("L1 PIT CH2 PASS", "FIXED GUEST: VIRTUAL PULSES", 0x00ff00);
 #elif defined(HV_TICK_CONTRACT)
     screen("L1 PIT IRQ0 PASS", "TWO IRQ0: SPECIFIC PIC EOI", 0x00ff00);
 #elif defined(HV_TX_CONTRACT)
