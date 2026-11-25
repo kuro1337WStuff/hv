@@ -1,39 +1,43 @@
 # AMD SVM hypervisor lab
 
-This lab builds a small x86-64 hypervisor using AMD Secure Virtual Machine (SVM) and Nested Page Tables (NPT). Its fixed guests make each claim testable: the same store must succeed on a writable page and fault on a read-only page **without changing the backing byte**.
+An x86-64 lab for **AMD Secure Virtual Machine (SVM) and Nested Page Tables (NPT)**. The goal is a type-1 hypervisor that boots directly from removable media and runs a single-vCPU Linux guest. Today, Windows Hyper-V on a **Ryzen 9 9950X** hosts the experiment. The guests that passed are short, fixed instruction sequences, not ordinary operating systems.
 
-**Tested:** nested virtualization on Windows Hyper-V with a Ryzen 9 9950X. **Target, not tested:** a removable-media hypervisor running a single-vCPU Linux guest on a physical Ryzen 9 9950X3D. No ordinary Linux boot or bare-metal qualification is claimed. These images are not replacements for a host bootloader.
-
-![On the 9950X, Hyper-V hosts the standalone L1 hypervisor; a fixed L2 guest exits on CPUID and L1 resumes it. The 9950X3D is a separate, unqualified bare-metal target.](docs/images/amd-svm-lab.svg)
-
-## Capability roadmap
-
-**M** = tested on [`main`][ledger] · **F** = tested on a [feature branch][features] · **H** = host check only · **T** = target, not demonstrated. VM results are from fixed guests under Hyper-V, not bare metal.
-
-| Boot, CPU & memory | Interrupts, devices & qualification |
+| Evidence | Result and limit |
 |---|---|
-| M · [UEFI boot-services handoff][handoff] | M · [Interrupt wakes a halted guest][wake] |
-| M · [Bootstrap allocator survives OOM][handoff] | M · [IRQ deferred past STI shadow][sti] |
-| M · [Standalone L1 launches L2][entry] | M · [Virtual IRQ priority masking][priority] |
-| M · [CPUID emulation and resume][cpuid] | M · [Invalid-opcode delivery and return][ud] |
-| M · [Unsupported CPUID stops the guest][runtime] | F · [Refused CR4 write raises #GP][gp] |
-| M · [64-bit GPR preservation][runtime] | M · [Fixed guest serial transmit][runtime] |
-| M · [XMM0–15 preservation][runtime] | F · [Polled 8250 serial output][uart] |
-| M · [x87 stack and control restore][runtime] | F · [UART transmit interrupt (IRQ4)][irq4] |
-| M · [MXCSR rounding and status restore][mxcsr] | F · [One-shot PIT interrupt (IRQ0)][pit] |
-| H · [Four-level NPT layout check][layout] | H · [Dual 8259A PIC initialization][pic] |
-| M · [NPT write-permission revocation][protect] | F · [Virtual ACPI S5 power-off request][s5] |
-| M · [Backing-frame remap at fixed GPA][remap] | H · [EFI image readback from boot media][media] |
-| M · [Private-page boundary enforcement][runtime] | M · [Fixed-work guest exit counts][runtime] |
-| M · [Two-vCPU remap with local flushes][cross] | T · Pinned Linux kernel boot |
-| M · [Hyper-V guest-physical space flush][flush] | T · Linux serial console handover |
-| F · [Staged Linux input identity check][inputs] | T · Initramfs reaches PID 1 |
-| F · [Pre-entry CR3 and RSI checks][guard] | T · Linux timer tick progress |
-| F · [Guest vs. nested page-fault attribution][faults] | T · Repeatable cold boots |
-| F · [Owned page: writable to executable][seal] | T · Per-exit latency measurement |
-| F · [Nested instruction-fetch fault address][fetch] | T · Same-work native timing baseline |
+| **`main` firmware through [041][runtime]** | A standalone L1 took control after UEFI boot services ended, ran fixed L2 guests, and checked their registers, memory and exits. |
+| **Feature branches through host trial [100][pm1]** | Some earlier [feature trials][features] ran fixed guests. Recent host-only trials checked device behavior: [099][com] distinguished COM1 from three absent ports; [100][pm1] covers ACPI PM1a byte access. Neither booted a guest or advanced `main` firmware. |
+| **Not qualified** | No ordinary Linux or Windows guest boot; no physical boot from removable media. The physical targets are **9950X first, then 9950X3D**; each requires separate qualification. There is no five-year AMD compatibility promise; Intel VMX/EPT is out of scope. |
 
-Physical qualification targets: Ryzen 9 **9950X** first, then **9950X3D**. Other AMD CPUs from the last five years need per-model SVM/NPT checks; none are claimed qualified here. Intel VMX/EPT is out of scope.
+## What the nested lab proves
+
+![Trial 039: Hyper-V on the 9950X hosts L1, which maps a page for a fixed L2 guest. With writes allowed the backing byte changes from 5A to A5. After resetting the byte and revoking write permission, the same store faults and the byte remains 5A.](docs/images/amd-svm-lab.svg)
+
+[Trial 039][protect] checks the forbidden store **and** the byte it must not change. [Trial 040][remap] asks a different question: can the same guest address read from a new backing frame after a translation flush? A halt or a screenshot without the expected values would not answer either question.
+
+## Capability map
+
+The middle column is [integrated, nested evidence][ledger]. In the right column **Nested** means a controlled VM trial on a feature revision; **Host** means a model or offline inspection with no guest execution. Follow the links for the exact fixture and its limits.
+
+| Subsystem | `main` · nested fixtures | Additional evidence, by scope |
+|---|---|---|
+| Boot & loader | [UEFI handoff, private stack and bounded allocator][handoff]; [first L2 entry][entry] | **Nested:** [staged input identity][inputs], [pre-entry CR3 and RSI checks][guard]. **Host:** [EFI media readback][media]. |
+| CPU & exits | [CPUID reply and resume][cpuid]; [unsupported-leaf stop][runtime]; [invalid-opcode delivery and return][ud] | **Nested:** [refused CR4 write raises #GP][gp]; [fixed EFER read][efer]. |
+| Register state | [Integer registers, XMM0–15 and x87 stack/control][runtime]; [MXCSR rounding and status][mxcsr] | These are legacy FP/SSE checks, not AVX/XSAVE or vCPU migration. |
+| Address translation | [Write revocation][protect]; [frame remap][remap]; [private-page boundary][runtime]; [two-processor local flushes][cross]; [Hyper-V GPA flush][flush] | **Nested:** [page-fault attribution][faults], [owned page from writable to executable][seal], [fetch-fault address][fetch]. **Host:** [four-level NPT layout][layout]. |
+| Interrupts & time | [Wake after HLT][wake]; [defer past STI][sti]; [priority masking][priority] | **Nested:** [one-shot PIT IRQ0][pit]. **Host:** [dual PIC setup][pic], [virtual-clock calibration][calibration], [IRQ9 controller acceptance][sci] (not CPU delivery). |
+| Console & power | [Fixed guest serial transmit][runtime] | **Nested:** [polled 8250 output][uart], [UART IRQ4][irq4], [virtual ACPI S5 request][s5]. **Host:** [COM1 presence/absent ports][com], [PM1a status and enable bytes][pm1]. |
+
+**Open loader questions:** [#90](https://github.com/kuro1337WStuff/hv/issues/90) asks which bytes and sections share the kernel entry page; it does not grant execute permission. [#91](https://github.com/kuro1337WStuff/hv/issues/91) asks whether the pinned initramfs contains the interpreter chain for `/init`; finding the files is not evidence that PID 1 ran.
+
+## Qualification roadmap
+
+![Two independent decisions follow repeatable nested Linux evidence: an optional offline Windows 10 L2 installer and guest trial, or an operator-led removable-media trial. Neither lane has started.](docs/images/qualification-gates.svg)
+
+1. **First, pinned Linux under Hyper-V.** Require a serial console, an initramfs PID 1 marker, advancing ticks across a declared uptime interval, and an orderly shutdown on **two fresh boots** of the same pinned inputs. Record both runs. Review the firmware, storage, timer and interrupt paths the next guest would need; a passing host model alone does not open the gate.
+2. **Windows 10 trial, VM first.** After the Linux evidence and capability review, try a licensed, offline Windows 10 L2 inside the lab hypervisor. Pin the edition, build and media; [Home/Pro 22H2 reached end of standard support in October 2025](https://learn.microsoft.com/en-us/lifecycle/products/windows-10-home-and-pro). Use a disposable virtual disk and an outer Hyper-V checkpoint. Test installer startup before installed-guest boot, uptime and clean shutdown. Repeat from cold state; resuming a snapshot does not count as another boot. Set a timeout. On a crash or unexplained stop, preserve the logs and failed disk state before rolling back. This limits disruption; it does not guarantee a crash-free host.
+3. **Separate physical decision.** Stable, repeated nested evidence is a prerequisite, not permission to deploy. An operator would need independent recovery media, a verified recovery procedure and **no primary disk attached** before considering removable media on a 9950X, then a separate qualification on a 9950X3D. A Windows VM result would not qualify either machine.
+
+**Correctness before speed.** The [feature report](journal/reports/feature-phase.svg) comes from [eight retained trial records](journal/reports/feature-phase.json); [trial 101](journal/trials/101.md) records its scope. Use the [reporting guide](lab/measurement/README.md) to regenerate it or add a workload. Start comparing speed only after the feature baseline and repeatable workloads are stable: match platform, workload, clock and controls across independent cold boots and require correctness on both builds. No matched performance runs exist in this report.
 
 [ledger]: journal/test-report.md
 [features]: journal/status.md#feature-evidence-before-the-separate-trial-ledger
@@ -63,23 +67,38 @@ Physical qualification targets: Ryzen 9 **9950X** first, then **9950X3D**. Other
 [pic]: journal/trials/082.md
 [s5]: https://github.com/kuro1337WStuff/hv/blob/c50789a0dbe11690abed52f00a92d900775f7021/journal/test-report.md#050--virtual-s5-request-versus-guest-text-and-hlt
 [media]: journal/trials/078.md
+[efer]: https://github.com/kuro1337WStuff/hv/blob/0fe588858882b35f0df82ad0a2700f0550b4e5a8/journal/runs/064-l1-efer-read.md
+[calibration]: journal/trials/097.md
+[sci]: journal/trials/098.md
+[com]: journal/trials/099.md
+[pm1]: journal/trials/100.md
 
-## Build and run one guest
+## Quickstart: stage one fixed guest
 
-Start with `cpuid`: after L1 handles the exit, L2 checks the reply registers and reaches its success halt. This is the small UEFI-hosted profile, not the post-handoff `l1-cpuid` test.
-
-- **Host:** Windows with Hyper-V and its PowerShell module, AMD SVM enabled in firmware, and support for AMD nested virtualization (VM configuration version 9.3 or newer).
-- **Build tools:** Git, Python 3.11+, Windows PowerShell 5.1, and Visual Studio Build Tools with the MSVC x64 C/C++ tools and assembler. The first build needs internet access for EDK II headers and the Python ISO-packaging dependencies.
-- **Isolation:** Use a fresh checkout and a fresh, dedicated lab on a host you control. **Never reuse the project's held VMs.** If `HV-SVM-L1` or its store already exists, leave it untouched; use a separate lab host rather than repointing the runner.
-- **VM:** In that lab, create a Generation 2 VM named `HV-SVM-L1`, stored under `lab/machines/HV-SVM-L1/` in the checkout. Set two vCPUs with virtualization extensions exposed, 2 GiB static RAM, no network adapter, standard checkpoints, and exactly one DVD drive first in boot order. Disable Secure Boot **in the VM only**. Leave the new VM **off with an empty DVD drive**. The [provisioning script](lab/New-HvLab.ps1) illustrates the settings; do not run it for this quickstart, as it requires and boots a separate Alpine ISO.
-
-From the repository root in PowerShell:
+From a fresh Windows checkout, use Git, Python 3.11+, Windows PowerShell 5.1, and Visual Studio Build Tools with the MSVC x64 C/C++ tools and assembler. The first build needs internet access for EDK II headers and the Python ISO-packaging dependencies. From the repository root:
 
 ```powershell
-python lab/hv_queue.py run --rebuild cpuid
+python lab/hv_queue.py run --stage-only --rebuild cpuid
 ```
 
-The launcher builds `build/hv-cpuid-resume.iso`, stages a digest-named copy, and requests elevation for the VM worker. The worker checkpoints the VM before boot. `PASS` means the captured guest console matched the reviewed success screen; `COMPLETE` means the batch finished. `ATTENTION` means the queue stopped for inspection, **not** that the guest passed. Find the events and console capture in `build/runs/<run-id>/` using the printed run ID. Press **Q** in the worker window to request a stop.
+This builds `build/hv-cpuid-resume.iso` and stages a digest-named copy. **Stop here for a build-only check:** do not execute the printed worker command. No VM starts; staging is not a guest pass. `cpuid` is the small UEFI-hosted profile, distinct from the post-handoff `l1-cpuid` fixture.
+
+<details>
+<summary>Optional: run the fixed guest in your own isolated Hyper-V lab</summary>
+
+- **Host:** AMD SVM enabled in firmware, Hyper-V and its PowerShell module. [Microsoft's AMD nesting prerequisites](https://learn.microsoft.com/en-us/windows-server/virtualization/hyper-v/enable-nested-virtualization#prerequisites) specify **Windows 11 or later, or Windows Server 2022 or later**, and VM configuration version **9.3+**. Windows 10 above is a proposed **L2 guest**, not the Hyper-V host. Microsoft [does not support third-party hypervisors nested under Hyper-V](https://learn.microsoft.com/en-us/windows-server/virtualization/hyper-v/nested-virtualization#non-microsoft-virtualization-on-hyper-v-virtualization); this is a lab result, not a support claim.
+- **Isolation:** Use a fresh, dedicated lab on a host you control. Never reuse the project's held VMs. If `HV-SVM-L1` or its store already exists, leave it untouched and use a separate lab host.
+- **VM:** Create a Generation 2 VM named `HV-SVM-L1` under `lab/machines/HV-SVM-L1/` in the checkout. Use two vCPUs with virtualization extensions exposed, 2 GiB static RAM, no network adapter, standard checkpoints and exactly one DVD drive first in boot order. Disable Secure Boot **in the VM only**. Leave the VM **off with an empty DVD drive**. The [provisioner](lab/New-HvLab.ps1) illustrates these settings; do not run it for this quickstart, as it requires and boots a separate Alpine ISO.
+
+After staging, from the same checkout:
+
+```powershell
+python lab/hv_queue.py run cpuid
+```
+
+The launcher requests elevation for the visible VM worker, which checkpoints the VM before boot. `PASS` means the captured guest console matched the reviewed success screen; `COMPLETE` means the batch finished. `ATTENTION` stops the queue for inspection; it is **not** a guest pass. Use the printed run ID to find events and console capture in `build/runs/<run-id>/`. Press **Q** in the worker window to request a stop. A stop does not automatically rewind a checkpoint.
+
+</details>
 
 ## Where to go next
 
