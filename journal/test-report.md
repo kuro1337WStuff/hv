@@ -178,3 +178,15 @@ The queue did not auto-advance or report COMPLETE. This covers one eligible mask
 | Success HLT at `0x1059` | IF=1, V_IRQ=0, handler count=1, phase=3, RSP=`0x7FF0`, RAX=`0x50415353` |
 
 L1 did not reassert the IRQ or set IF at the checkpoint. Guest `STI` set IF, the next instruction incremented the phase, and only then did the handler run. Checking both phase and stacked RIP distinguishes delivery at the shadow boundary from merely seeing the handler eventually. Reference: AMD64 APM Vol. 2, §§15.21.4–5, p. 557. This is one maskable vector on one nested vCPU; no timer, priority arbitration or physical target was tested.
+
+### 026 · 2026-11-24 local · Virtual interrupt priority threshold
+
+**Firmware PASS; queue ATTENTION for first-time screen review.** Ryzen 9 9950X, nested `HV-SVM-L1`; source `4279c63f1a`. `python lab/hv_queue.py run --rebuild irq-priority`, batch `424915930b264f5c8ab2d98cf282af95`, ISO SHA-256 `FC81939C9723BA484B8D7328D8F8A22850D46C95824282D4ABE70AEA3815EA8D`. The worker checkpointed the prior `irq-shadow` PASS before booting. The [captured console](images/irq-priority-026.png) was reviewed after the queue stopped; the batch did not report COMPLETE.
+
+| Checkpoint | Expected | Observed |
+| --- | --- | --- |
+| Equal threshold at `VMMCALL` | With IF set, no shadow and no priority bypass, priority 4 cannot exceed `V_TPR=4` | RIP `0x100C`; vector `0x41`, priority 4, `V_TPR=4`, `V_IRQ=1`, `V_IGN_TPR=0`, IF=1, shadow=0, phase=1, count=0 |
+| Resume with `V_TPR=3` | Same request delivered before the first continuation instruction | Handler saw phase 1, count 1, stacked RIP `0x100F` (immediately after `VMMCALL`) |
+| Guest returns and halts | Pending bit clears; guest advances and restores its stack | `V_TPR=3`, `V_IRQ=0`, IF=1, shadow=0, phase=2, RSP `0x7FF0`, RIP `0x1050`, HLT exit `0x78`, RAX `0x50415353` |
+
+The only interrupt-control change on resume was the priority threshold. AMD64 APM Vol. 2, §§15.21.2 and 15.21.4 (pp. 556–557): without `V_IGN_TPR`, the pending interrupt's priority must be **greater than** `V_TPR`. This tests one pending vector on one nested vCPU, not arbitration between vectors, guest CR8 writes, APIC EOI, a timer, or bare metal.

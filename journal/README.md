@@ -2,6 +2,14 @@
 
 Development host: Ryzen 9 9950X. Firmware runs use the `HV-SVM-L1` Hyper-V VM; host-only checks are labeled separately. Neither qualifies the 9950X3D deployment target on bare metal.
 
+## 026 · 2026-11-24 · Equal interrupt priority stays pending
+
+**Run 026 passed in `HV-SVM-L1`.** At `V_TPR=4`, a queued priority-4 interrupt remained pending even though guest interrupts were enabled and there was no interrupt shadow. The handler count was zero. L1 lowered `V_TPR` to 3 without queuing another interrupt. The handler ran once and saved return RIP `0x100F`, the first instruction after the checkpoint. The guest returned from the handler, recorded progress and halted.
+
+![VM console showing the equal-priority checkpoint and one interrupt delivered after lowering V_TPR](images/irq-priority-026.png)
+
+Reproduce with `python lab/hv_queue.py run --rebuild irq-priority`. The [ledger](test-report.md#026--2026-11-24-local--virtual-interrupt-priority-threshold) distinguishes the firmware result from the queue's first-screen review stop.
+
 ## 023–025 · 2026-11-24 · A pending IRQ waits for the STI shadow
 
 **Run 025 passed in `HV-SVM-L1`.** L1 queued vector `0x41` once. At a guest checkpoint with interrupts disabled, the IRQ was still pending and the handler count was zero. L1 resumed L2 without requeuing it. The instruction after `STI` incremented a phase counter. The interrupt handler saw the increment and recorded `0x1018` as its return address: exactly the next instruction.
