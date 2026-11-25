@@ -4,6 +4,8 @@ Development host: Ryzen 9 9950X. Firmware runs use the `HV-SVM-L1` Hyper-V VM; h
 
 **Start here:** [Current status, feature trials and integration order](status.md). The entries below describe the integrated baseline through 041. Later feature evidence is published on `main` independently of its implementation; see [how trials are published](project-workflow.md).
 
+**[093 · One pulse source for two PIT channels](trials/093.md):** gating channel 2 did not suppress IRQ0, and shutting down channel 0 did not stop channel 2. Three host tests passed.
+
 **[092 · ACPI event registers](trials/092.md):** clearing wake status preserved global-event status and enable. Only the separate S5 control could stop the model.
 
 **[091 · PIT timer transitions](trials/091.md):** the one-shot strobed once; Linux's disable sequence cancelled the counter without losing a pending IRQ.

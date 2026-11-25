@@ -1,4 +1,4 @@
-# Project status · through 092
+# Project status · through 093
 
 **On `main`:** firmware baseline [041](README.md), plus CI-only [#2](https://github.com/kuro1337WStuff/hv/pull/2) at `735c8b56` after both hosted checks passed on `54bace3b`. **On `feature/l1-handoff` only:** [#4](https://github.com/kuro1337WStuff/hv/pull/4) merged at `95abe46c`; [#10](https://github.com/kuro1337WStuff/hv/pull/10) retargeted, then squashed at `44fb6247`. The resulting firmware trees matched the source trees used in 060 and 063 respectively. Revert #10 first if both must be undone; #4 is a merge commit. No ordinary Linux boot or bare-metal qualification.
 
@@ -15,7 +15,7 @@
 
 **Merge routing:** [Dated PR-by-PR audit](merge-audit-072.md) · [live open PRs](https://github.com/kuro1337WStuff/hv/pulls) · [workflow and rollback](project-workflow.md). #21's test merge did not promote #12. Check the actual base, scope and source revision before each integration.
 
-**Feature integration, host evidence only:** [091](trials/091.md) verified the PIT mode switch; [092](trials/092.md) verified the ACPI event words independently of S5 control. Neither booted Linux. Next in parallel: [#68 · shared pulse source for PIT channels 0 and 2](https://github.com/kuro1337WStuff/hv/issues/68) and [#69 · read-only check of the previous B session](https://github.com/kuro1337WStuff/hv/issues/69). B stays fenced even if closure can be shown.
+**Feature integration, host evidence only:** [093](trials/093.md) verified that PIT channels 0 and 2 share input pulses but not gates or interrupts; [092](trials/092.md) separated ACPI events from the S5 control. No TSC frequency or Linux boot was measured. Bench B admission remains separate: see [#69 · session closure](https://github.com/kuro1337WStuff/hv/issues/69).
 
 ## Feature evidence before the separate trial ledger
 
