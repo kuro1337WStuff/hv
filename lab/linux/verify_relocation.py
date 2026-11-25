@@ -14,6 +14,11 @@ RAM_END = 0x8000000
 
 
 def reconstruct(image):
+    """Return the 4 KiB relocated entry page reconstructed from pinned bzImage bytes.
+
+    Raise ValueError on an unknown image or copy window. Does not emulate earlier
+    guest writes or grant execute permission to the resulting bytes.
+    """
     if len(image) != IMAGE_BYTES or hashlib.sha256(image).hexdigest() != IMAGE_HASH:
         raise ValueError('unreviewed image')
     setup = (image[0x1f1] + 1) * 512
@@ -31,7 +36,11 @@ def reconstruct(image):
 
 
 def compare(page, gpa=ENTRY, backing=('guest', ENTRY), writable_backings=()):
-    # Symbolic backing IDs, not host physical addresses or live NPT inspection.
+    """Check one candidate page against the fixed guest-physical destination and digest.
+
+    Backing IDs and writable aliases are supplied by the offline model, not read
+    from a live NPT. Raise ValueError on a mismatch; never change page permissions.
+    """
     if gpa % PAGE:
         raise ValueError('unaligned GPA')
     if not 0 <= gpa <= RAM_END - PAGE:
@@ -47,6 +56,7 @@ def compare(page, gpa=ENTRY, backing=('guest', ENTRY), writable_backings=()):
 
 
 def require_refusal(label, reason, fn, *args, **kwargs):
+    """Require the named ValueError; a different refusal does not verify this case."""
     try:
         fn(*args, **kwargs)
     except ValueError as exc:
@@ -58,6 +68,7 @@ def require_refusal(label, reason, fn, *args, **kwargs):
 
 
 def witness(image):
+    """Run the offline controls; consumes a mutable image buffer for the final corruption test."""
     page = reconstruct(image)
     compare(page)
     print(f'file [0xc02000,0xc03000) -> GPA {ENTRY:#x}: {PAGE} bytes SHA256 {PAGE_HASH}')

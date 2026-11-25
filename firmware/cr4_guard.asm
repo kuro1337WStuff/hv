@@ -1,7 +1,10 @@
 option casemap:none
 .code
 PUBLIC CrGuardStart, CrGuardWrite, CrGuardHlt, CrGuardEnd
-; RCX: fixed guest witness, EDX: zero for read control, one for refused write.
+; Fixed L2 entry, not a callable host procedure. RCX = guest-linear address of
+; the identity-mapped witness; EDX = 0 (read/HLT) or 1 (refused write).
+; Changes RAX, arithmetic flags and witness memory. The write arm may not
+; reach after_write. See cr4_guard_run for the entry/exit contract (run 055).
 CrGuardStart LABEL BYTE
     mov rax, cr4
     mov [rcx], eax

@@ -1,3 +1,6 @@
+/** @file cr4_guard.h
+ * Fixed AMD SVM control-register interception fixture for the nested lab.
+ */
 #ifndef HV_CR4_GUARD_H
 #define HV_CR4_GUARD_H
 
@@ -5,8 +8,17 @@ extern void RunGprGuest(UINTN vmcb_pa, UINT64 frame[14]);
 extern volatile unsigned linux_vmrun_count;
 extern const UINT8 CrGuardStart[], CrGuardWrite[], CrGuardHlt[], CrGuardEnd[];
 
-/* APM vol. 2, App. B: CR write intercept bitmap at 002h; App. C:
- * VMEXIT_CR4_WRITE = 014h. Never clear this bit or resume a refused write. */
+/** Verify that refusing a guest CR4 write leaves guest state unchanged.
+ * @param[in,out] vmcb Page-aligned L1-owned standalone arena, starting at its VMCB.
+ * @pre The caller owns the BSP SVM context and has installed its private HSAVE page.
+ * @return NULL if both arms match; otherwise a static diagnostic for the L1 terminal.
+ *
+ * APM vol. 2 appendices B and C: bit 4 at VMCB offset 002h intercepts
+ * a write to CR4 with exit 014h. Reset the fixture for each arm. The write
+ * arm stops at the faulting RIP: no emulation, RIP advance, re-entry or exception injection.
+ * RCX addresses the guest witness through an identity-mapped linear address;
+ * it is not an L1 pointer. No guest value is written to a host control register.
+ */
 static const char *cr4_guard_run(UINT8 *vmcb)
 {
     const UINTN bytes=(UINTN)CrGuardEnd-(UINTN)CrGuardStart;
