@@ -31,6 +31,7 @@ _Static_assert(sizeof(FpLayout)==20 && LongStackGpa==0x7000 &&
                LongStackGpa+sizeof(FpBank)+2*sizeof(UINT32)<LongInitialRsp,
                "fixed guest snapshot must fit below its stack");
 
+#ifndef HV_CPU_CONTRACT
 static BOOLEAN fp_layout_ok(UINTN length)
 {
     if (length!=FpLayout.size || length>EFI_PAGE_SIZE || FpLayout.fail>=length ||
@@ -40,6 +41,7 @@ static BOOLEAN fp_layout_ok(UINTN length)
            FpStart[FpLayout.call+1]==1 && FpStart[FpLayout.call+2]==0xd9 &&
            FpStart[FpLayout.pass]==0xf4 && FpStart[FpLayout.fail]==0xf4;
 }
+#endif
 
 static UINT64 fp_lane(UINT64 base, UINT64 generation, UINT64 slot)
 {
@@ -83,12 +85,14 @@ typedef struct {
     UINT32 sse_result, x87_result;
 } FpTrace;
 
+#ifndef HV_CPU_CONTRACT
 static void fp_clue(FpClue *c, const FpBank *b)
 {
     c->cw=b->fx.cw; c->top=(b->fx.sw>>11)&7; c->tw=b->fx.tw; c->mx=b->fx.mx;
     c->st0_high=(UINT16)(b->fx.st[0].sig>>48);
     c->xmm15_high=(UINT16)b->fx.xmm[31]; c->r15_low=(UINT16)b->gpr[13];
 }
+#endif
 
 static BOOLEAN fp_equal(FpTrace *t, CHAR16 *field, UINTN index, UINT64 expected, UINT64 actual)
 {
@@ -125,6 +129,7 @@ static BOOLEAN fp_match(FpTrace *t, CHAR16 *where, const FpBank *want,
     return TRUE;
 }
 
+#ifndef HV_CPU_CONTRACT
 static void fp_run(UINT8 *vmcb, FpTrace *t)
 {
     FpWorkspace *w=(FpWorkspace *)(vmcb+FpScratch*EFI_PAGE_SIZE);
@@ -168,6 +173,7 @@ static void fp_run(UINT8 *vmcb, FpTrace *t)
         ++t->checked;
     }
 }
+#endif
 
 #ifndef HV_PACKAGE
 /* Fixed-width hex, no formatting library or full-bank console dump. */

@@ -70,6 +70,8 @@ build\linux_layout_test.exe build\linux-inputs\vmlinuz-virt build\linux-inputs\i
 
 `forensic-write` is opt-in: `python lab/hv_queue.py run --rebuild forensic-write`. The same 16-bit store runs against a writable mapping and then a read-only mapping. The report uses the VMCB fault fields, decodes the destination and immediate byte from the fixed guest code at the saved RIP, and samples the owned backing byte before and after the protected attempt. It does not resume or emulate the faulting store.
 
+`l1-cpu-contract`: run `python lab/hv_queue.py run --session --rebuild l1-cpu-contract` for the standalone, single-vCPU CPUID and state-switch fixture. L2 must see an explicitly virtual processor, use SSE2 across a CPUID exit, and finish at a denied MSR read. L1 checks its own state independently and must not resume the denied operation. The ISO contains the fixed guest only; it neither boots Linux nor changes run 045's NX policy.
+
 `vcpu-gpr` is opt-in: `python lab/hv_queue.py run --rebuild vcpu-gpr`. A fixed 64-bit L2 guest checks its integer registers after each of two CPUID intercepts. Expected path: CPUID, CPUID, success HLT. This test does not cover interrupt delivery, extended state, or vCPU migration.
 
 `vcpu-xmm` is opt-in: from the repository root, run `python lab/hv_queue.py run --rebuild vcpu-xmm` to build and run `build/hv-vcpu-xmm.iso`. To build without starting a VM, run `firmware\build.cmd vcpu-xmm`. The profile checks 128-bit XMM register contents across nested guest exits and resumes. It does not test MXCSR, x87/MMX, AVX upper lanes, or general XSAVE state.

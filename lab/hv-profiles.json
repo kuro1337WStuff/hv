@@ -8,6 +8,7 @@
   {"profile":"l1-package","stem":"hv-l1-package","pass":"acf5dfc5f5a7af762132fe0c2fbe7f6823cec7f67e28cbb5a11cc40ef31b4a0c"},
   {"profile":"l1-linux-admission","stem":"hv-l1-linux-admission","pass":"060864118f65c812ddf33daefb60a62ac123226b8749cdf87b1f0535107a84ac"},
   {"profile":"l1-linux-inputs","stem":"hv-l1-linux-inputs","pass":"474d9f6d0b3c7bea8253ffbcec2625ab853ef7d93587064d211502934284dfee"},
+  {"profile":"l1-cpu-contract","stem":"hv-l1-cpu-contract","pass":null},
   {"profile":"l2","stem":"hv-l2-smoke","pass":"36bcc11f3dbf69b38bef1466e06eb42ae3fc6b23697b49ee1a947842635164c2"},
   {"profile":"cpuid","stem":"hv-cpuid-resume","pass":"27b75d52c2332aa952d1f256b59a4104d7cfa4022af87a9027f51b6c3f063cfc"},
   {"profile":"npt-write","stem":"hv-npt-write","pass":"4aceae05f48c8e62541b279e0124295daf6ded6147ece66c928493b42a78030c"},

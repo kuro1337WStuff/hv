@@ -410,3 +410,7 @@ The raw field tracked the 4 KiB **guest physical page**, not the guest linear ad
 In the restored arm, all four exits were `0x400` with `EXITINFO1=0x100000015`. For the Linux entry, saved RIP and independent walk were `0x1000200`; raw `EXITINFO2` was `0x1000000`. Guard `0x50354E5847554152` remained intact. The counter was incremented immediately before the assembly `VMRUN`, so a rejection with no entries is distinct from a guest that ran and then faulted. The measured gate authenticates these staged bytes relative to the trusted firmware's pins, not the firmware or boot chain. No executable Linux boot or physical qualification.
 
 After review, `Get-HvConsoleVerdict` classified the archived 045 framebuffer as `PASS` and the prior 044 framebuffer as `UNKNOWN` for `l1-linux-inputs`. This was an offline check of those captures, not a second boot.
+
+### 046 · Single-vCPU contract and terminal MSR refusal
+
+**Pre-boot criteria:** on the standalone AMD/NPT runtime, a fixed 64-bit guest must observe `AuthenticAMD`, one logical processor, an explicit hypervisor bit and lab vendor, the legacy feature mask `EDX=0x07000001`, no XSAVE/AVX advertisement, and zero for unsupported leaf 7. The guest must use SSE2 state from before a CPUID exit to calculate 42 after resume. L1 must independently observe four CPUID exits followed by a read-MSR intercept for `0xDEADBEEF` at the fixed instruction, with restored L1 state each time. No emulated MSR read, RIP advance, or re-entry at the terminal exit. No Linux payload or claim of a complete Linux CPU model.

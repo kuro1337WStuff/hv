@@ -62,6 +62,15 @@ if /i "%~1"=="l2" (
   set "ASM_OBJ=build\l1_package_handoff.obj"
   set "ASM_SRC=firmware\l1_handoff.asm"
   set "EXTRA_ASM=vcpu_fpstate cpuid_resume exception_ud vcpu_gpr pkg_devices"
+) else if /i "%~1"=="l1-cpu-contract" (
+  set "SRC=l1_handoff"
+  set "EFI=L1CPUCONTRACT"
+  set "ISO=hv-l1-cpu-contract"
+  set "CASE_FLAGS=/DHV_STANDALONE_L2 /DHV_PACKAGE /DHV_CPU_CONTRACT"
+  set "ASM_OBJ=build\l1_cpu_handoff.obj"
+  set "ASM_SRC=firmware\l1_handoff.asm"
+  set "EXTRA_ASM=vcpu_fpstate cpu_contract"
+  set "EXTRA_ASM_FLAGS=/DHV_CPU_CONTRACT"
 ) else if defined LINUX_MEDIA (
   set "SRC=l1_handoff"
   set "EFI=L1LXADMIT"

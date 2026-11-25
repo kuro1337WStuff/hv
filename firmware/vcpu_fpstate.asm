@@ -110,5 +110,7 @@ ObserveLegacyRun PROC FRAME
     ret
 ObserveLegacyRun ENDP
 
+IFNDEF HV_CPU_CONTRACT
 include fpstate_guest.inc
+ENDIF
 END
