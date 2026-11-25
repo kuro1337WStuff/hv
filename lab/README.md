@@ -1,5 +1,7 @@
 # Supervised Hyper-V regression queue
 
+For scheduling across both dedicated lanes, see [task-board dispatch, holds and recovery](#re-read-a-task-board-after-every-result).
+
 From the project root on the Windows lab host (Python 3.11+, PowerShell 5.1, Hyper-V), run:
 
 ```powershell
@@ -132,3 +134,17 @@ Offline admission checks do not boot the VM. With an archived `l1-entry-guard` I
 **Results:** `build/runs/RUN_ID/` contains the frozen queue (`queue.json`), timestamped events (`events.jsonl`) and captured console evidence. An exact match to a reviewed guest success screen is required to advance. A reviewed skip is not a pass; an unrecognized screen times out for operator review. A booted VM, an exit code from the launcher, or text printed by a build is not guest evidence. New guest output requires independent review before changing the expected result. Exit codes: `0` complete, `2` stopped, `3` attention, `1` runner error.
 
 Only known firmware profiles in the isolated project VM are eligible. Each batch preserves the starting state with a checkpoint; inspect checkpoint storage as it accumulates. No host boot changes, networking changes, background source edits, automatic commits, or retries of failures. Review evidence before adding it to the [journal](../journal/README.md). Raw batch artifacts stay local.
+
+### Re-read a task board after every result
+
+From the supervisor checkout, run `python lab/hv_plan.py status "board.md"`, then `python lab/hv_plan.py run "board.md" --max-cards 2 --minutes 15`. The two sibling runner sessions above must already be open. The supervisor has no build, elevation or deployment step. Each completed worker triggers a fresh read; independent A/B cards may overlap, but never two on the same lane. The count and time limit apply to **admissions**; previously admitted finite batches may finish. A new or edited binding needs a new invocation. It exits when nothing eligible remains.
+
+Use top-level Markdown checkboxes (`- [ ] R01 My frozen regression`). In one `<!-- hv-plan` comment, put a JSON object on the following lines and close with `-->` on a separate line. Keys are board IDs; every automatic `Rnn` card needs `lane` (`a` or `b`), `profile`, lowercase SHA-256 `iso` (frozen media), and `screen` (reviewed RGB565 framebuffer). Optional `after` lists prerequisite IDs; `note` states a manual blocker. Omit all four pins for a manual task. Board order breaks ties. A checked manual prerequisite or matching `COMPLETE` receipt can release a dependent; a checked regression without a receipt cannot. The supervisor never edits checkboxes or runs instructions from Markdown.
+
+To fence a lane **without a board run ID**, use `python lab/hv_plan.py hold "board.md" --lane a --reason "Untracked session; owner has not confirmed shutdown"`. The supervisor will neither reserve nor submit work on A; independent work on B can still finish. `status` and the final `run` report list lane holds and their reasons even if there is no card on that lane. Removing a card, restarting the supervisor, or clearing a global stop does not remove a lane hold.
+
+Only after independently verifying the lane is clear, use `python lab/hv_plan.py unhold "board.md" --lane a --reason "Operator verified VM off and external session closed"`. Both `hold` and `unhold` need the same exclusive board lock as `run`: if the supervisor owns it, request `stop` and wait for the supervisor to exit first. These commands affect admissions from this board only; they do not stop an external session, clear a run receipt, or grant a PASS.
+
+`stop "board.md"` or Ctrl+C fences the whole board and forwards STOP to its active batches. An unexplained exit, `ATTENTION`, or uncertain `ACTIVE` reservation holds the recorded lane across restarts. Inspect the retained run ID, console and real session before recovery. After the worker is known stopped and the lane independently cleared, `release "board.md" --run-id ID --reason "evidence and decision"` removes only that run's hold; it neither changes the verdict nor replays the ID, and does not clear an external hold. `resume "board.md"` clears only the global stop. Prefix each action with `python lab/hv_plan.py`.
+
+State is in `.hv-plan/<board stem>/` beside the board. `external-holds.json` is a JSON array of operator decisions in order (`lane`, `action` = `hold` or `unhold`, UTC `time`, and `reason`); `receipts.json` records board attempts separately. Keep both local, on one machine; never edit, sync or delete them to clear a hold. The lock is per board: use one canonical board for the two dedicated lanes. Raw receipts do not replace reviewed journal entries.
