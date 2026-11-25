@@ -117,6 +117,15 @@ if /i "%~1"=="l2" (
   set "ASM_OBJ=build\l1_serial_handoff.obj"
   set "ASM_SRC=firmware\l1_handoff.asm"
   set "EXTRA_ASM=vcpu_gpr uart8250_guest"
+) else if /i "%~1"=="l1-pic-init" (
+  set "SRC=l1_handoff"
+  set "EFI=L1PICINIT"
+  set "ISO=hv-l1-pic-init"
+  set "CASE_FLAGS=/DHV_STANDALONE_L2 /DHV_PACKAGE /DHV_PIC_INIT"
+  set "ASM_OBJ=build\l1_pic_init_handoff.obj"
+  set "ASM_SRC=firmware\l1_handoff.asm"
+  set "EXTRA_ASM=vcpu_gpr"
+  set "EXTRA_ASM_FLAGS=/DHV_COUNT_ENTRIES"
 ) else if /i "%~1"=="l1-pit-irq0" (
   set "SRC=l1_handoff"
   set "EFI=L1PITIRQ0"

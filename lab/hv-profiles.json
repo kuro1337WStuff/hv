@@ -10,6 +10,7 @@
   {"profile":"l1-linux-inputs","stem":"hv-l1-linux-inputs","pass":"474d9f6d0b3c7bea8253ffbcec2625ab853ef7d93587064d211502934284dfee"},
   {"profile":"l1-cpu-contract","stem":"hv-l1-cpu-contract","pass":"59b41bb95ac02f49ed9514f3c1e1110a1d6cd18c78bd2e9b34c0b4c595aa32c8"},
   {"profile":"l1-serial-8250","stem":"hv-l1-serial-8250","pass":"9185f3c9128a3ea3e9ee97ba5887d3aeb3bd7835802ad144ddb9fe47df5973a2"},
+  {"profile":"l1-pic-init","stem":"hv-l1-pic-init","pass":null},
   {"profile":"l1-pit-irq0","stem":"hv-l1-pit-irq0","pass":"79734331bc020f614d514f1fdb94b7f5b772e5f39d7c41e909363d8e3a2cce9c"},
   {"profile":"l1-console-tx","stem":"hv-l1-console-tx","pass":"8a535b136498d03c06934db22ff61094b08ff9102cce34db443f7f744b77c6c1"},
   {"profile":"l1-power-s5","stem":"hv-l1-power-s5","pass":"4c6f55a0d3171e0fb3b7069ff2344c5c26a10e7f320bbf51bfec09253f5555d5"},

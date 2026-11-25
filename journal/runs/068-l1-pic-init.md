@@ -1,0 +1,3 @@
+# 068 · Guest probe and initialization of the legacy PIC pair
+
+**Preboot contract:** The fixed guest must read `FBh` back at the master data port during the probe, then program distinct master/slave ICWs (`11/30/04/01`, `11/38/02/01`) without one chip consuming the other's pending word. Require independent guest readback of distinguishable restored masks and a completion witness. A matched bad partial initialization must be refused with the peer intact, no IP advance or further entry, and no success cookie. No host port traffic, actual Linux probe, interrupt arbitration or interrupt delivery is inferred.
