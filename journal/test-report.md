@@ -473,3 +473,9 @@ Independent readback (`lab/linux/verify_media.py`) from the frozen 33,607,680-by
 ### 053 · Paired guest and nested page faults
 
 **Pre-boot contract (hex):** five fresh one-entry arms. A: owned RX fetch halts 78/1812E/50353038. G: guest NX returns intercepted #PF 4E/RIP 18123/error 11/raw GVA 18123; separate leaf walk GPA 8123. N: nested NX returns NPF 400/RIP 19123/final fetch/raw GPA page 9000; walk 9123. W: accepted store halts at 18137 with byte B6. R: denied write at 18134 returns final write-protection NPF/raw GPA A000 with byte 5A unchanged. Ignore only the NPF U/S bit, not the fault stage or address. Private guard and out-of-map witness remain unchanged; five total assembly-site entries. Fixed layout, not executable Linux RAM.
+
+**2026-11-25 · [053 capture](images/l1-page-pair-053.png), firmware PASS by review.** Profile `l1-page-pair`, source `47f99e5582`, batch `1cf395a53953466f8e02d72d2ff1000d`, ISO `A773C63DC7DDDEE5C16EB15E65E88E79F7344E47DB896F9E21A61FCF8B056068`, boot 18:02:48 UTC. Five arms/five VMRUNs. Allowed code halted at `1812E` with marker `50353038`. Guest NX: intercepted #PF `4E`, error `11`, raw guest linear `18123`, walked GPA `8123`. Nested NX: `400`, info `100000015`, raw `9000`, walk `9123`. Permitted write produced `B6`, HLT `18137`; the denied write stopped at `18134`, `400/100000007/A000`, byte remained `5A`. All addresses hex. First-capture ATTENTION, 052 checkpointed, no retry.
+
+### 054 · Regression of staged identity through the new handoff guard
+
+**Before boot:** rebuild `l1-linux-inputs` after the shared admission gate change. Retain 045's original fingerprint, not 051's. Each same-length kernel/initramfs/cmdline substitution must be refused before VMRUN; restored inputs must produce the original four NX-only entries including the three calibrated fetch controls. A fresh PASS from the unchanged 045 classifier, frozen ISO and independent readback are required. No boot of executable Linux.

@@ -2,6 +2,12 @@
 
 Development host: Ryzen 9 9950X. Firmware runs use the `HV-SVM-L1` Hyper-V VM; host-only checks are labeled separately. Neither qualifies the 9950X3D deployment target on bare metal.
 
+## 053 · 2026-11-25 · Which page table denied access?
+
+An L2 page-table execute denial reported guest linear address `18123h`; an NPT denial reported guest physical page `9000h`. Separate allowed fetch/write arms completed. The refused write left `5Ah` unchanged rather than applying the guest's `B6h`. [Five one-entry arms and fault bits](test-report.md#053--paired-guest-and-nested-page-faults).
+
+![Guest #PF and nested NPF with different address domains; permitted and rejected store witnesses](images/l1-page-pair-053.png)
+
 ## 052 · 2026-11-25 · A guest checks the advertised instruction floor
 
 L2 used compare-exchange, conditional moves and SSE2 across seven virtual CPUID requests. It observed both outcomes of the comparison and returned 42 from the SIMD calculation. L1 checked its own state eight times, then stopped on the unimplemented MSR read without forwarding it. [Measured operands and terminal](test-report.md#052--single-vcpu-feature-floor-across-exits).
