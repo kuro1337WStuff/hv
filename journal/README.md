@@ -2,6 +2,12 @@
 
 Development host: Ryzen 9 9950X. Firmware runs use the `HV-SVM-L1` Hyper-V VM; host-only checks are labeled separately. Neither qualifies the 9950X3D deployment target on bare metal.
 
+## 056 · 2026-11-25 · Returning from a refused control-register write
+
+The fixed guest received one general-protection fault with error code zero. The hardware frame named the refused instruction, not the next instruction. The handler checked the frame and returned to its continuation; the read-only control reached the same HLT without entering the handler. CR4 stayed unchanged. [Contract and observations](test-report.md#056--deliver-a-general-protection-fault-after-a-refused-cr4-write).
+
+![One handler and a stacked fault RIP, compared with the no-handler control](images/l1-cr4-gp-056.png)
+
 ## 055 · 2026-11-25 · Refusing a control-register write before it takes effect
 
 With the CR4 write intercept armed, the read-only guest reached HLT. The matched write arm requested `40020h` but stopped on the write itself: CR4 remained `20h`, and the following instruction never changed the witness byte. [Source, instruction offsets and both exit records](test-report.md#055--intercept-a-cr4-write-before-guest-state-changes).
