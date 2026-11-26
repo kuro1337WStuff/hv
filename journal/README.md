@@ -4,6 +4,8 @@ Development host: Ryzen 9 9950X. Firmware runs use the `HV-SVM-L1` Hyper-V VM; h
 
 **Start here:** [Current status, feature trials and integration order](status.md). The entries below describe the integrated baseline through 041. Later feature evidence is published on `main` independently of its implementation; see [how trials are published](project-workflow.md).
 
+**[140 · Guest PEI memory to DXE Core](trials/140.md):** in one cold bench A run, PEI reported verified guest-private page `0x07ff5000`, then DXE Core issued its marker at `0x07fd8365`. W02 passed on review; queue `ATTENTION` retained. Next: guest UEFI executes Windows Boot Manager.
+
 **[139 · L2 reset to OVMF SEC](trials/139.md):** on bench A, the cold reset fetch at `0xfffffff0` and the first fetch at the pinned SEC entry `0xfffd44d4` appeared in one run. W01 passed on review; the queue retained `ATTENTION` for the unpinned screen. Next: PEI to DXE, not Windows yet.
 
 **[138 · Bench A PIC recovery](trials/138.md):** one boot of the frozen 086 image showed the valid PIC initialization and the matched refusal, including all four missing refusal fields. The queue stopped at `ATTENTION` because the screen was unpinned. No Windows boot or firmware promotion.
