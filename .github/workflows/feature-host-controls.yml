@@ -58,6 +58,8 @@ jobs:
         run: python3 -B -m unittest -v lab.tests.winpe_storage_test
       - name: Distinguish the optical child from its controller and a disk
         run: python3 -B -m unittest -v lab.tests.winpe_optical_test
+      - name: Verify bounded optical sector witnesses
+        run: python3 -B -m unittest -v lab.tests.install_content_witness_test lab.tests.install_udf_extent_test
 
   master-pic:
     name: Shared master PIC arbitration
