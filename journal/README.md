@@ -4,6 +4,8 @@ Development host: Ryzen 9 9950X. Firmware runs use the `HV-SVM-L1` Hyper-V VM; h
 
 **Start here:** [Current status, feature trials and integration order](status.md). The entries below describe the integrated baseline through 041. Later feature evidence is published on `main` independently of its implementation; see [how trials are published](project-workflow.md).
 
+**[123 · Overlapping ELF segment copies](trials/123.md):** the two file-backed destinations matched their immutable sources. Copying memory size instead of file size damaged the tail even though the entry-page digest still matched. [122–123 figure](reports/serial-and-segments-123.svg) · [source](reports/serial-and-segments-123.json).
+
 **[122 · Bounded UART capture](trials/122.md):** one shared UART recorded 20 binary bytes, preserved IRQ4 service at capacity, and rejected new bytes after S5. The original 16-byte fixture stayed fixed.
 
 **[121 · Relocated BSS boundaries](trials/121.md):** the pinned clear covers 103,656 bytes. Rounding its start down erased file-backed data; rounding its end up erased a suffix guard.
