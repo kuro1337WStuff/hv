@@ -41,6 +41,10 @@ jobs:
         run: |
           gcc -std=c11 -O2 -Wall -Wextra -Werror lab/tests/guest_uefi_map_test.c -o "$RUNNER_TEMP/guest-map"
           "$RUNNER_TEMP/guest-map"
+      - name: Check the inert split-flash reset window
+        run: |
+          gcc -std=c11 -O2 -Wall -Wextra -Werror lab/tests/ovmf_flash_test.c -o "$RUNNER_TEMP/ovmf-flash"
+          "$RUNNER_TEMP/ovmf-flash"
 
   winpe-storage:
     name: Windows installer storage inventory
