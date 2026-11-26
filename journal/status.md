@@ -1,4 +1,4 @@
-# Project status · through 103
+# Project status · through 104
 
 **On `main`:** firmware baseline [041](README.md), plus CI-only [#2](https://github.com/kuro1337WStuff/hv/pull/2) at `735c8b56` after both hosted checks passed on `54bace3b`. **On `feature/l1-handoff` only:** [#4](https://github.com/kuro1337WStuff/hv/pull/4) merged at `95abe46c`; [#10](https://github.com/kuro1337WStuff/hv/pull/10) retargeted, then squashed at `44fb6247`. The resulting firmware trees matched the source trees used in 060 and 063 respectively. Revert #10 first if both must be undone; #4 is a merge commit. No ordinary Linux boot or bare-metal qualification.
 
@@ -15,7 +15,7 @@
 
 **Merge routing:** [Dated PR-by-PR audit](merge-audit-072.md) · [live open PRs](https://github.com/kuro1337WStuff/hv/pulls) · [workflow and rollback](project-workflow.md). #21's test merge did not promote #12. Check the actual base, scope and source revision before each integration.
 
-**Boot and platform work:** [102](trials/102.md) accounted for the entire linked kernel entry page. [103](trials/103.md) resolved the initramfs interpreter and console metadata. No kernel or guest userspace ran. Both tools are on `feature/l1-handoff` at `47dea17d`. Next host work: [#101 · validate published ACPI device fields](https://github.com/kuro1337WStuff/hv/issues/101) and [#102 · route serial and power I/O through one stopped-state boundary](https://github.com/kuro1337WStuff/hv/issues/102). E03/E06 and all existing bench holds remain open.
+**Boot and platform work:** [104](trials/104.md) verified the fixed ACPI register and shutdown contract against the published guest-RAM bytes, not just the table builder. [102](trials/102.md) accounted for the linked kernel entry page; [103](trials/103.md) resolved the initramfs interpreter. None ran Linux. [#102](https://github.com/kuro1337WStuff/hv/issues/102) covers serial and power I/O at shutdown. E03/E06 and both bench holds remain open.
 
 **Reporting:** [101](trials/101.md) publishes the [selected trial results](reports/feature-phase.svg) from source records. The project remains in feature qualification, not optimization. Windows 10 is a future offline guest in the nested lab; no Windows guest or physical boot has been qualified.
 
