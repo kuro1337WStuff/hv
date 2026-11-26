@@ -4,7 +4,7 @@ Development host: Ryzen 9 9950X. Firmware runs use the `HV-SVM-L1` Hyper-V VM; h
 
 **Start here:** [Current status, feature trials and integration order](status.md). The entries below describe the integrated baseline through 041. Later feature evidence is published on `main` independently of its implementation; see [how trials are published](project-workflow.md).
 
-**[146 · Boot Manager advanced 23 more instructions](trials/146.md).** One cold boot on A stopped at a transfer into measured DXE. The EFI service and Windows kernel were not identified. Includes the live terminal.
+**[146 · Boot Manager called the HandleProtocol entry](trials/146.md).** After 23 post-entry instructions A stopped before executing the firmware routine. A follow-up matched the register call and the exact DXE entry using the frozen inputs. Neither a service return nor a Windows kernel start was observed.
 
 **[145 · W04 loader diagnostic frozen; VM not run](trials/145.md).** The checkpoint inventory guard stopped A before power-off. Read-only inspection verified the saved 144 screen and its ancestry. No Windows progress claimed.
 
