@@ -49,6 +49,10 @@ jobs:
         run: |
           gcc -std=c11 -O2 -Wall -Wextra -Werror lab/tests/platform_s5_test.c -o "$RUNNER_TEMP/platform-s5"
           "$RUNNER_TEMP/platform-s5"
+      - name: Compile and run the shared platform clock control
+        run: |
+          gcc -std=c11 -O2 -Wall -Wextra -Werror lab/tests/platform_clock_test.c -o "$RUNNER_TEMP/platform-clock"
+          "$RUNNER_TEMP/platform-clock"
 
   cpu-state:
     name: Legacy CPU state host controls

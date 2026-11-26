@@ -15,15 +15,25 @@ static inline void pit_shared_init(PitShared *s)
     pit2_init(&s->ch2);
 }
 
-static inline int pit_shared_advance(PitShared *s, uint64_t tick)
+/* Common pulse domain, independent of which PIC owns the OUT0 edge. The
+ * caller transfers CH0's source latch to that controller after advancing. */
+static inline int pit_shared_advance_channels(PitPeriodic *ch0, PitChannel2 *ch2, uint64_t tick)
 {
     /* Reject before either cursor or the IRQ latch moves. For synchronized
      * cursors a forward tick satisfies both device advance preconditions. */
-    uint64_t previous = s->ch0.pit.tick;
-    if (s->ch2.tick != previous || tick < previous) return 0;
+    uint64_t previous = ch0->tick;
+    if (ch2->tick != previous || tick < previous) return 0;
     if (tick == previous) return 1;
-    pit_periodic_irq0_advance(&s->ch0, tick);
-    pit2_advance(&s->ch2, tick);
+    pit_periodic_advance(ch0, tick);
+    pit2_advance(ch2, tick);
+    return 1;
+}
+
+static inline int pit_shared_advance(PitShared *s, uint64_t tick)
+{
+    uint64_t previous = s->ch0.pit.tick;
+    if (!pit_shared_advance_channels(&s->ch0.pit, &s->ch2, tick)) return 0;
+    if (tick != previous) pit_periodic_irq0_transfer(&s->ch0);
     return 1;
 }
 
