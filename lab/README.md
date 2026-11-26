@@ -57,6 +57,18 @@ cl /nologo /std:c11 /W4 /WX /TC lab\tests\pit_fallback_test.c /Fo"%TEMP%\pit_fal
 
 At a fixed 2.5 GHz **virtual** rate, 10 µs polls observe 1,000 and 5,000 low samples for the 11,931 and 59,659 reloads. The sample at 10 or 50 ms is still low; the next port read is high and supplies no cycle sample. Both estimates should be 2,500,000 virtual kHz. A missing poll (999 lows) and a gap strictly over ten times the minimum should be Linux rejections. A frozen same-time sequence exhausts the harness budget with OUT2 still low: Linux's loop has **not** returned a failure or a rate. These are synthetic schedules, not measurements of a host or observations from an OS.
 
+### Host-only guest UEFI memory-map handoff (125)
+
+From the worktree root in an x64 MSVC Developer Command Prompt:
+
+```bat
+cl /nologo /std:c11 /W4 /WX /TC lab\tests\guest_uefi_map_test.c /Fo"%TEMP%\guest_uefi_map_test.obj" /Fe"%TEMP%\guest_uefi_map_test.exe" && "%TEMP%\guest_uefi_map_test.exe"
+```
+
+The [fixture](../firmware/guest_uefi_map.h) follows UEFI 2.10 [§7.2.3 GetMemoryMap](https://uefi.org/specs/UEFI/2.10/07_Services_Boot_Services.html#efi-boot-services-getmemorymap) and [§7.4.6 ExitBootServices](https://uefi.org/specs/UEFI/2.10/07_Services_Boot_Services.html#efi-boot-services-exitbootservices). The [test](tests/guest_uefi_map_test.c) checks the required byte count without a partial copy. Allocating guest page `0x101000` as loader data splits four conventional pages into one allocated and three conventional pages; the map grows from 96 to 144 bytes. The old key must fail with `EFI_INVALID_PARAMETER`. Retrying with the key from the new map must succeed once. After success, “unavailable” is a harness observation, **not** an EFI status.
+
+Only these five synthetic guest pages, one fixed allocation, one assumed valid loader, and the key handoff are modeled. The 48-byte descriptor stride and two key values belong to this fixture, not all firmware. A failed exit can partially shut down real boot services; the retry uses only `GetMemoryMap` and `ExitBootServices`, not console, protocols or devices. No system table, events, runtime services, outer firmware map, VM, or Windows boot is exercised.
+
 ### One launch for a supervised session
 
 From the checkout, run **once** and approve the Windows elevation prompt:
