@@ -1,0 +1,22 @@
+{
+  "title": "9950X cache sharing and WinPE storage",
+  "records": [
+    {
+      "label": "Windows L3 membership on 9950X",
+      "scope": "host",
+      "status": "passed",
+      "trial": "126",
+      "commit": "d7ccb9b50f8c",
+      "source": "journal/trials/126.md"
+    },
+    {
+      "label": "WinPE driver for proposed virtio-SCSI",
+      "scope": "host",
+      "status": "partial",
+      "trial": "127",
+      "commit": "a9016bcea6ed",
+      "source": "journal/trials/127.md"
+    }
+  ],
+  "comparisons": []
+}
