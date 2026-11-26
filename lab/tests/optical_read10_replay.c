@@ -96,8 +96,8 @@ int main(int argc, char **argv)
         return 1;
     }
     const OpticalMedium media = {MEDIA_BYTES / OPTICAL_BLOCK_BYTES, file_view, &file};
-    bool accepted = optical_media_command(&media, cdb, sizeof(cdb), response, sizeof(response));
-    if (file_close(file.fd) != 0 || !accepted) {
+    const OpticalReply result = optical_media_command(&media, cdb, sizeof(cdb), response, sizeof(response));
+    if (file_close(file.fd) != 0 || !result.accepted || result.transferred != sizeof response) {
         fputs("fixed READ(10) refused\n", stderr);
         return 1;
     }

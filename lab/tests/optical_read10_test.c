@@ -41,7 +41,8 @@ static bool rejected(const uint8_t *cdb, size_t length, uint64_t blocks, size_t 
 {
     Probe p = {0, 0, 0, pair};
     memset(guarded, untouched, sizeof guarded);
-    return !optical_read10(cdb, length, blocks, lookup, &p, guarded + guard, capacity) &&
+    const OpticalReply result = optical_read10(cdb, length, blocks, lookup, &p, guarded + guard, capacity);
+    return !result.accepted && result.transferred == 0 &&
            p.calls == 0 && clean(0, sizeof guarded);
 }
 
@@ -62,7 +63,8 @@ int main(void)
     uint8_t *out = guarded + guard;
     Probe p = {0, 0, 0, pair};
     memset(guarded, untouched, sizeof guarded);
-    CHECK(optical_read10(read_pair, 10, (uint64_t)base + 2, lookup, &p, out, pair));
+    OpticalReply result = optical_read10(read_pair, 10, (uint64_t)base + 2, lookup, &p, out, pair);
+    CHECK(result.accepted && result.transferred == pair);
     CHECK(p.calls == 1 && p.lba == base && p.bytes == pair);
     CHECK(!memcmp(out, consecutive, pair));
     CHECK(!memcmp(out + sector - 16, boundary, sizeof boundary));
@@ -71,7 +73,8 @@ int main(void)
 
     memset(guarded, untouched, sizeof guarded);
     p.calls = 0;
-    CHECK(optical_read10(read_last, 10, edge_blocks, lookup, &p, out, pair));
+    result = optical_read10(read_last, 10, edge_blocks, lookup, &p, out, pair);
+    CHECK(result.accepted && result.transferred == sector);
     CHECK(p.calls == 1 && p.lba == UINT32_MAX && p.bytes == sector);
     CHECK(!memcmp(out, last, sector));
     CHECK(clean(0, guard) && clean(guard + sector, sizeof guarded));
@@ -103,19 +106,25 @@ int main(void)
     }
 
     p.calls = 0;
-    CHECK(optical_read10(cmd, 10, 0, lookup, &p, out, 0));
+    result = optical_read10(cmd, 10, 0, lookup, &p, out, 0);
+    CHECK(result.accepted && result.transferred == 0);
     CHECK(p.calls == 0 && clean(0, sizeof guarded));
-    CHECK(optical_read10(cmd, 10, 0, NULL, NULL, NULL, 0));
-    CHECK(!optical_read10(read_pair, 10, edge_blocks, lookup, &p, NULL, pair));
-    CHECK(!optical_read10(read_pair, 10, edge_blocks, NULL, &p, out, pair));
+    result = optical_read10(cmd, 10, 0, NULL, NULL, NULL, 0);
+    CHECK(result.accepted && result.transferred == 0);
+    result = optical_read10(read_pair, 10, edge_blocks, lookup, &p, NULL, pair);
+    CHECK(!result.accepted && result.transferred == 0);
+    result = optical_read10(read_pair, 10, edge_blocks, NULL, &p, out, pair);
+    CHECK(!result.accepted && result.transferred == 0);
     CHECK(p.calls == 0 && clean(0, sizeof guarded));
 
     p.available = pair - 1; /* No partial copy of a short backing. */
-    CHECK(!optical_read10(read_pair, 10, edge_blocks, lookup, &p, out, pair));
+    result = optical_read10(read_pair, 10, edge_blocks, lookup, &p, out, pair);
+    CHECK(!result.accepted && result.transferred == 0);
     CHECK(p.calls == 1 && p.lba == base && p.bytes == pair && clean(0, sizeof guarded));
     cmd[5] = 0xee; cmd[8] = 1; /* In-media but unmapped. */
     p.calls = 0;
-    CHECK(!optical_read10(cmd, 10, edge_blocks, lookup, &p, out, pair));
+    result = optical_read10(cmd, 10, edge_blocks, lookup, &p, out, pair);
+    CHECK(!result.accepted && result.transferred == 0);
     CHECK(p.calls == 1 && p.lba == base - 1 && p.bytes == sector && clean(0, sizeof guarded));
     puts("Optical READ(10): exact sector order, 16+48 boundary, bounds and refusal checks passed.");
     return 0;

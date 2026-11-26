@@ -261,3 +261,9 @@ Use the [published trial 134 receipt](https://github.com/kuro1337WStuff/hv/blob/
 ### Check optical geometry without an image
 
 Build `lab/tests/optical_capacity_test.c` as C11. Run without arguments for the authored-medium checks. Run `optical-capacity --media-bytes 3839819776` for the size in trial 134's receipt. It takes a byte count, not a filename. The two big-endian words in the reply are **last addressable block** and **bytes per block**; the block count is one greater than the last address. Empty media are not reportable. A last address of `0xffffffff` or greater is reported as the `0xffffffff` sentinel; capacity discovery beyond it requires READ CAPACITY(16), which is not implemented.
+
+### Discover the drive independently of its disc
+
+Compile and run `lab/tests/optical_discovery_test.c` as C11. It uses authored memory only. A null target is absent; an attached target with zero blocks is an empty drive, so it can identify itself but cannot serve sector data. Standard INQUIRY returns up to 36 identity bytes, limited by its allocation length. A caller buffer smaller than that reply is rejected, not silently overrun. TEST UNIT READY can succeed with zero transferred bytes; check the acceptance flag separately from the byte count.
+
+This is the plain six-byte discovery profile used by the pinned firmware, not a controller or full SCSI implementation. It does not implement vital product data pages, target status or sense records, or show that a guest loaded an optical driver.
