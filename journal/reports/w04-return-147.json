@@ -1,0 +1,14 @@
+{
+  "title": "W04 HandleProtocol return witness",
+  "records": [
+    {
+      "label": "UEFI HandleProtocol return witness",
+      "scope": "nested",
+      "status": "not-run",
+      "trial": "147",
+      "commit": "1bc01ea0d225",
+      "source": "journal/trials/147.md"
+    }
+  ],
+  "comparisons": []
+}
