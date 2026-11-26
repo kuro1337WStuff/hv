@@ -9,6 +9,16 @@ python -m unittest discover -s lab/measurement -p "test_*.py"
 
 The output directory must exist. The renderer reads the report and any explicitly named local cohort files. It does not collect timings, boot a VM, inspect the host, fetch sources or read trial notes. The same inputs give the same SVG bytes. The image contains a title, description and visible outcome labels; when embedding it, provide alt text and link the source report so readers can inspect the records without the image.
 
+## History and benchmarking
+
+From the repository root, run `python -B lab/measurement/journal_analytics.py journal/reports/analytics.json --output-dir journal/reports`. This regenerates `functional-outcomes.svg` and `benchmark-ledger.svg` together from local inputs. Keep the manifest, referenced records and SVGs in version control. Review the images and cite the trial; a plot is not a substitute for the underlying receipt.
+
+`reports` lists up to 32 single-trial report files relative to the manifest. The matrix groups by execution scope, labels each build by revision and cites the trial for every recorded cell. `NOT RECORDED` means no claim at that build; `NOT-RUN` is an explicit journal result. Neither is a pass.
+
+`benchmarks` lists up to 16 objects with `label`, `kind`, `baseline`, and `candidate`. Each arm uses the same `{id, commit, file}` cohort format described below. Use `build` for two distinct runtime builds in the same mode, or `native` for a native baseline versus a physical guest on the same machine. Do not compare a nested guest to native, cross machines, or reuse boot receipts. Each row reports elapsed **candidate minus baseline** in ns (negative = faster), independent boot counts, boot-median ranges, and source identities. These are descriptive comparisons, not statistical significance. An empty array renders `UNMEASURED`. Keep non-completing runs in the functional journal, never in a successful timing cohort.
+
+For **disabled versus enabled** on the same guest binary, use `kind: "feature"` and a `gate` object with `feature` (ASCII identifier) and `common_controls_sha256` (digest of all other controls). Baseline is off; candidate is on. At capture, after confirming the requested state, record `controls_sha256 = SHA256(ASCII("hv-feature-v1\n" + common_controls_sha256 + "\n" + feature + "\n" + state + "\n"))` in each boot condition, with lowercase `off` or `on` and literal LF separators. Retain the control file and state confirmation with the boot receipt. A label alone cannot qualify the comparison. Same mode, source revision, runtime bytes, workload and independent boots are required. To measure **compiled out versus built but disabled**, use the distinct-build comparison instead.
+
 ## Evidence records
 
 The UTF-8 JSON object has exactly `title` (display text), `records` (1–64 rows, in reading order) and `comparisons` (0–16 pairs). Use **`"comparisons": []`** until matched, observed timings exist. Missing or rejected timing inputs do not produce a chart of zeros. Every evidence row has exactly these fields:
