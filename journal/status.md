@@ -6,6 +6,10 @@
 
 ## Where to resume
 
+**Next milestone: [Windows 10 boots as L2 under our standalone AMD SVM/NPT L1](https://github.com/kuro1337WStuff/hv/issues/203). BLOCKED; no new trial.** First missing guest observation: one cold-run trace from the pinned L2 firmware reset vector into SEC ([111](trials/111.md)). A direct Hyper-V Windows boot does not count. Neither does WinPE/Setup alone: the final observation is an installed Windows 10 user-mode process reporting its build and system volume in that L2.
+
+Do not reserve work until a bench is released. **A:** separate recovery approval for failed [068](trials/068.md), preserving its evidence, and a distinct reservation with the missing refusal witnesses. **B:** identify the original session, witness teardown and independently establish release of both its handle and the board lease ([094](trials/094.md)). Each future task must name a boot gate, its diagram and the observation that would advance it. [#201](https://github.com/kuro1337WStuff/hv/issues/201) and new optical fixtures are paused unless a guest trace shows the first blocking storage request. The versioned diagnostic hypercall ABI remains a separate release criterion, not something a successful boot can establish.
+
 | Work item | State | Next decision |
 | --- | --- | --- |
 | [PIC evidence #14](https://github.com/kuro1337WStuff/hv/issues/14) | [086](trials/086.md): #49 landed the shared formatter on the PIC topic only. All 15 host rows fit; the 17-character label and row 25 were refused. The corrected ISO (`0463d202…5a66`) is frozen off-runner. | #12 stays draft. A remains held; [068 FAIL](trials/068.md) still lacks four guest receipts. No replay, new screen approval or firmware promotion. |
