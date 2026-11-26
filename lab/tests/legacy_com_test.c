@@ -55,7 +55,6 @@ static void replay(Uart16450 *u, uint16_t base, int present)
     CHECK(zero == (present ? 0u : 0x0fu) && ones == 0x0fu);
     int detected = zero == 0 && ones == 0x0f;
     CHECK(detected == present);
-    CHECK(read8(u, ier) == saved);
     printf("base=%03x saved=%02x masked=%x/%x %s\n", (unsigned)base,
         (unsigned)saved, (unsigned)zero, (unsigned)ones, detected ? "present" : "absent");
 }
@@ -70,6 +69,7 @@ static void probe_and_isolate(void)
     CHECK(read8(&u, 0x3fd) == 0 && u.base.polls_busy == 1);
     CHECK(read8(&u, 0x3fa) == 2 && !uart16450_irq4(&u)); /* acknowledge THRE */
     replay(&u, bases[0], 1);
+    CHECK(read8(&u, 0x3f9) == 6);
     /* The register was restored, not the old cause: enabling THRE again
      * while empty rearmed the model even though it was clear at probe entry. */
     CHECK(u.base.ier == 6 && u.thre_pending && uart16450_irq4(&u));
@@ -80,6 +80,7 @@ static void probe_and_isolate(void)
     memcpy(before, &u, sizeof before);
     for (size_t i = 1; i < COUNT(bases); ++i) {
         replay(&u, bases[i], 0);
+        CHECK(read8(&u, (uint16_t)(bases[i] + 1)) == 0xff);
         for (unsigned reg = 0; reg < 8; ++reg) {
             uint16_t port = (uint16_t)(bases[i] + reg);
             write8(&u, port, 0xa5);
@@ -87,6 +88,70 @@ static void probe_and_isolate(void)
             CHECK(memcmp(before, &u, sizeof before) == 0 && uart16450_irq4(&u));
         }
     }
+}
+
+/* Negative control only: a present COM1 with read-only SCR. Only SCR writes
+ * are dropped; every read (including both pattern readbacks) uses the model. */
+static void write_scratch(Uart16450 *u, int writable, uint32_t byte)
+{
+    if (writable) write8(u, 0x3ff, byte);
+}
+
+/* Linux v6.18.60 drivers/tty/serial/8250/8250_port.c: replay autoconfig()
+ * through LCR restoration, including its non-FIFO branch autoconfig_8250().
+ * Standard x86 COM1 has UPF_SKIP_TEST: skip modem loopback, not the IER test.
+ * The replay excludes RSA, the later port reset/IER clear, and IRQ discovery. */
+static void classify_com1(int writable, uint32_t initial_scr)
+{
+    Uart16450 u = {0};
+    write8(&u, 0x3fb, 0x83); /* DLAB: seed both divisor bytes without TX */
+    write8(&u, 0x3f8, 0x34);
+    write8(&u, 0x3f9, 0x12);
+    write8(&u, 0x3fb, 3);
+    write8(&u, 0x3fc, 8);
+    write8(&u, 0x3f9, 6);
+    write8(&u, 0x3ff, initial_scr); /* initialize before applying the control */
+    replay(&u, bases[0], 1);
+
+    uint32_t mcr = read8(&u, 0x3fc);
+    uint32_t lcr = read8(&u, 0x3fb);
+    write8(&u, 0x3fb, 0xbf);
+    write8(&u, 0x3fa, 0); /* EFR address in mode B; no EFR on this part */
+    CHECK(u.base.lcr == 0xbf);
+    write8(&u, 0x3fb, 0);
+    write8(&u, 0x3fa, 1); /* FCR: request FIFO enable */
+    CHECK(u.base.lcr == 0 && uart16450_irq4(&u));
+    uint32_t iir = read8(&u, 0x3fa);
+    CHECK((iir & 0xc0) == 0); /* only this branch probes SCR */
+    CHECK(iir == 2 && !uart16450_irq4(&u)); /* IIR acknowledged active THRE */
+
+    uint32_t saved = read8(&u, 0x3ff);
+    write_scratch(&u, writable, 0xa5);
+    uint32_t first = read8(&u, 0x3ff);
+    write_scratch(&u, writable, 0x5a);
+    uint32_t second = read8(&u, 0x3ff);
+    write_scratch(&u, writable, saved);
+    int is_16450 = first == 0xa5 && second == 0x5a;
+    write8(&u, 0x3fb, lcr);
+
+    /* End of replay. Read back before changing banks to inspect the divisor. */
+    uint32_t scr_after = read8(&u, 0x3ff), lcr_after = read8(&u, 0x3fb);
+    uint32_t mcr_after = read8(&u, 0x3fc), ier_after = read8(&u, 0x3f9);
+    CHECK(saved == initial_scr && scr_after == saved);
+    CHECK(lcr == 3 && lcr_after == lcr && mcr == 8 && mcr_after == mcr && ier_after == 6);
+    CHECK(first == (writable ? 0xa5u : initial_scr));
+    CHECK(second == (writable ? 0x5au : initial_scr));
+    CHECK(is_16450 == writable);
+    write8(&u, 0x3fb, lcr_after | 0x80);
+    uint32_t dll = read8(&u, 0x3f8), dlm = read8(&u, 0x3f9);
+    write8(&u, 0x3fb, lcr_after);
+    CHECK(dll == 0x34 && dlm == 0x12 && u.base.count == 0 && !u.base.busy);
+    printf("COM1 %s SCR: IIR=%02x FIFO=%02x SCR(saved/a5/5a/restored)=%02x/%02x/%02x/%02x "
+        "type=%s LCR=%02x MCR=%02x IER=%02x divisor=%02x%02x TX=%u\n",
+        writable ? "writable" : "read-only", (unsigned)iir, (unsigned)(iir & 0xc0),
+        (unsigned)saved, (unsigned)first, (unsigned)second, (unsigned)scr_after,
+        is_16450 ? "16450" : "8250", (unsigned)lcr_after, (unsigned)mcr_after,
+        (unsigned)ier_after, (unsigned)dlm, (unsigned)dll, u.base.count);
 }
 
 static void transaction_controls(void)
@@ -135,6 +200,9 @@ int main(void)
 {
     probe_and_isolate();
     transaction_controls();
+    classify_com1(1, 0x37); /* restore a value different from either pattern */
+    classify_com1(0, 0xa5); /* first match alone must not classify as 16450 */
+    classify_com1(0, 0x5a); /* nor may the second match alone */
     puts("PASS: COM1 IER restored, THRE rearmed; COM2-4 isolated; fixed 047 COM2 refused");
     return 0;
 }
