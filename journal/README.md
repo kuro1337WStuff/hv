@@ -4,6 +4,8 @@ Development host: Ryzen 9 9950X. Firmware runs use the `HV-SVM-L1` Hyper-V VM; h
 
 **Start here:** [Current status, feature trials and integration order](status.md). The entries below describe the integrated baseline through 041. Later feature evidence is published on `main` independently of its implementation; see [how trials are published](project-workflow.md).
 
+**[142 · DXE write fault repaired](trials/142.md):** bench A reached load-ready and transferred to the signed Windows Boot Manager entry. The entry verifier rejected the REX prefix before executing the first instruction. W03 remains open; screenshot and exact next check in the trial.
+
 **[141 · Windows Boot Manager handoff](trials/141.md):** bench A reached DXE, then faulted writing its own sealed `.text`. The Windows load-ready marker and retired entry count were both zero. W03 remains open.
 
 **[140 · Guest PEI memory to DXE Core](trials/140.md):** in one cold bench A run, PEI reported verified guest-private page `0x07ff5000`, then DXE Core issued its marker at `0x07fd8365`. W02 passed on review; queue `ATTENTION` retained. Next: guest UEFI executes Windows Boot Manager.
