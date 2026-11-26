@@ -2,7 +2,11 @@
 #define HV_STANDALONE_L2_H
 #include "fixed_vmcb.h"
 
-#ifdef HV_W01
+#if defined(HV_W02)
+static void pkg_observe(const char *label, UINT64 value);
+static void w02_progress(const char *phase, UINT64 pc, UINT64 entries);
+#include "w02.h"
+#elif defined(HV_W01)
 static void pkg_observe(const char *label, UINT64 value);
 #include "w01.h"
 #else
@@ -218,5 +222,5 @@ static const char *run_standalone_l2(void *reservation, StandaloneSample *sample
 #endif
 #endif /* !HV_RANGE_AUDIT */
 }
-#endif /* !HV_W01 */
+#endif /* firmware trace profiles or fixed guest */
 #endif
