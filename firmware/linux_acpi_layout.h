@@ -40,10 +40,44 @@ static inline int linux_acpi_publish(uint8_t *ram, size_t bytes)
     return 1;
 }
 
+/* System I/O GAS, zero bit offset, unspecified access size. The event block
+ * is split into status and enable words; the control block is one word. */
+static inline int linux_acpi_pm_gas(const uint8_t *p, unsigned bits, unsigned port)
+{
+    return p[0] == 1 && p[1] == bits && !p[2] && !p[3] && linux_le64(p + 4) == port;
+}
+
+static inline int linux_acpi_zero(const uint8_t *p, unsigned n)
+{
+    for (unsigned i = 0; i < n; ++i) if (p[i]) return 0;
+    return 1;
+}
+
+static inline int linux_acpi_power_fields(const uint8_t *f, const uint8_t *d)
+{
+    /* IRQ9 via the guest PIC, always in ACPI mode. Hardware-full PM1a only;
+     * do not advertise PM1b, PM2, a PM timer, GPEs, reset or sleep GAS. */
+    if (linux_le16(f+46) != 9 || !linux_acpi_zero(f+48, 8) ||
+        linux_le32(f+56) != PowerPm1aEvent || linux_le32(f+60) ||
+        linux_le32(f+64) != PowerPm1aControl || !linux_acpi_zero(f+68, 20) ||
+        f[88] != 4 || f[89] != 2 || !linux_acpi_zero(f+90, 6) ||
+        linux_le16(f+109) != 1 || linux_le32(f+112) != ((1u<<4) | (1u<<5) | (1u<<6)) ||
+        !linux_acpi_zero(f+116, 13) || !linux_acpi_pm_gas(f+148, 32, PowerPm1aEvent) ||
+        !linux_acpi_zero(f+160, 12) || !linux_acpi_pm_gas(f+172, 16, PowerPm1aControl) ||
+        !linux_acpi_zero(f+184, 84)) return 0;
+
+    /* Entire AML payload of this image: Name (_S5_, Package (4) {5,5,0,0}).
+     * This is an image contract, not an AML parser. */
+    static const uint8_t aml[] = {0x08, '_', 'S', '5', '_', 0x12, 8, 4,
+        0x0a, PowerS5Type, 0x0a, PowerS5Type, 0, 0};
+    for (unsigned i = 0; i < sizeof aml; ++i) if (d[36+i] != aml[i]) return 0;
+    return 1;
+}
+
 /** Read-only check of the exact fixed e820 profile and ACPI 6.5 table graph.
  * All reads use fixed GPA offsets: malformed pointers and lengths are compared,
  * never followed. Checks signatures, both RSDP checksums and every SDT checksum;
- * FACS uses the ACPI non-SDT format. Does not interpret AML or execute Linux. */
+ * FACS is writable NVS: check its header, not its mutable state. */
 static inline int linux_acpi_valid(const uint8_t *ram, size_t bytes)
 {
     if (!ram || bytes != LinuxRamBytes) return 0;
@@ -59,6 +93,8 @@ static inline int linux_acpi_valid(const uint8_t *ram, size_t bytes)
     for (unsigned i = 0; i < 4; ++i)
         if (x[i] != "XSDT"[i] || f[i] != "FACP"[i] || d[i] != "DSDT"[i] || n[i] != "FACS"[i]) return 0;
     if (linux_le32(x+4) != 44 || linux_le32(f+4) != PowerFadtLength || linux_le32(d+4) != 50) return 0;
+    if (x[8] != 1 || f[8] != 6 || f[131] != 5 || d[8] != 2 || n[32] != 2 ||
+        !linux_acpi_power_fields(f, d)) return 0;
     const uint8_t *tables[] = {r, r, x, f, d};
     const unsigned lengths[] = {20, 36, 44, PowerFadtLength, 50};
     for (unsigned i = 0; i < 5; ++i) {
