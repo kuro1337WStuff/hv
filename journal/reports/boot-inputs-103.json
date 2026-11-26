@@ -1,0 +1,22 @@
+{
+  "title": "Pinned Linux boot inputs: offline checks",
+  "records": [
+    {
+      "label": "Uncompressed ELF entry page",
+      "scope": "host",
+      "status": "passed",
+      "trial": "102",
+      "commit": "0159be127500",
+      "source": "journal/trials/102.md"
+    },
+    {
+      "label": "Initramfs interpreter and device metadata",
+      "scope": "host",
+      "status": "passed",
+      "trial": "103",
+      "commit": "47dea17dc9e7",
+      "source": "journal/trials/103.md"
+    }
+  ],
+  "comparisons": []
+}
