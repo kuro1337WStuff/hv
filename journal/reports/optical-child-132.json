@@ -1,0 +1,8 @@
+{
+  "title": "Windows Setup optical child",
+  "records": [
+    {"label":"Static optical model and disk control","scope":"host","status":"passed","trial":"132","commit":"c0885c099b19","source":"journal/trials/132.md"},
+    {"label":"Windows Setup optical access on Q35 AHCI","scope":"nested","status":"not-run","trial":"132","commit":"c0885c099b19","source":"journal/trials/132.md"}
+  ],
+  "comparisons": []
+}
