@@ -42,6 +42,9 @@ static const char *w02_io(UINT8 *vmcb, UINT64 *g, W02State *s, W02Insn d, const 
         (info&~0x1f80ull)!=(((UINT64)port<<16)|(width<<4)|in)) return "IO RECEIPT";
     ++s->io;
     if (port==0x505 && !in && width==4 && d.op==0xef && d.n==1) {
+#ifdef HV_W03
+        if (s->phase==3) return w03_ready(vmcb,g,s,pc,ax);
+#endif
         if (!w02_marker(vmcb,g,s,pc,ax)) return "WITNESS ORIGIN";
     } else if (port==0xcf8 && width==4) {
         if (in) val=s->pci; else s->pci=ax;

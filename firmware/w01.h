@@ -13,7 +13,16 @@ typedef struct {
 
 static void w01_reset(UINT8 *vmcb)
 {
+#ifdef HV_W03
+    /* Only original admitted file bytes survive reset, not descriptor/slack. */
+    UINT8 *ram=w01_page(vmcb,W02Ram), *file=ram+W03FileGpa;
+    __stosb(vmcb,0,(UINTN)(file-vmcb));
+    __stosb(file+W03_FILE_SIZE,0,W02RamBytes-W03FileGpa-W03_FILE_SIZE);
+    ((UINT32 *)(ram+W03DescriptorGpa))[0]=W03DescriptorTag;
+    ((UINT32 *)(ram+W03DescriptorGpa))[1]=W03_FILE_SIZE;
+#else
     __stosb(vmcb,0,W01Flash*W01Page); /* retained flash is above this region */
+#endif
     __stosb(w01_page(vmcb,Iopm),0xff,5*W01Page); /* complete IOPM and MSRPM */
     w01_memory(vmcb);
     fixed_vmcb_defaults(vmcb,(UINTN)vmcb);
@@ -135,6 +144,11 @@ static const char *run_standalone_l2(void *reservation)
     UINT8 *vmcb=(UINT8 *)reservation, *flash=w01_page(vmcb,W01Flash);
     if (!w01_digest(flash+W01VarsBytes,W01CodeBytes,code_pin)) return "CODE HASH";
     if (!w01_digest(flash,W01VarsBytes,vars_pin)) return "VARS HASH";
+#ifdef HV_W03
+    static const UINT8 file_pin[]=W03_FILE_SHA256;
+    _Static_assert(sizeof(file_pin)==32,"WinBoot digest length");
+    if (!w01_digest(w01_page(vmcb,W02Ram)+W03FileGpa,W03_FILE_SIZE,file_pin)) return "BOOT FILE HASH";
+#endif
     pkg_observe("SEC PIN ",W01_SEC_GPA);
     int r[4];
     __cpuid(r,0);
@@ -191,12 +205,18 @@ static const char *run_standalone_l2(void *reservation)
     pkg_observe("RESET EXIT ",ev.reset_exit); pkg_observe("RESET INFO ",ev.reset_info);
     pkg_observe("RESET RAW ",ev.reset_raw); pkg_observe("RESET PC ",ev.reset_pc);
     pkg_observe("PM32 RIP ",ev.reached32); pkg_observe("LONG RIP ",ev.reached64);
+#ifndef HV_W03
     pkg_observe("CPUID COUNT ",ev.cpuid); pkg_observe("EFER COUNT ",ev.efer_io);
+#endif
     pkg_observe("ENTRIES ",ev.entries); pkg_observe("STEPS ",ev.steps);
     pkg_observe("BEFORE PC ",ev.before); pkg_observe("BYTES LE ",ev.bytes);
     pkg_observe("EXIT ",FIELD(UINT64,ExitCode)); pkg_observe("INFO1 ",FIELD(UINT64,Info1));
+#ifndef HV_W03
     pkg_observe("RAW GPA ",FIELD(UINT64,Info2)); pkg_observe("CS BASE ",FIELD(UINT64,Cs+8));
     pkg_observe("CS ",FIELD(UINT16,Cs)); pkg_observe("RIP ",FIELD(UINT64,Rip));
+#else
+    pkg_observe("RAW GPA ",FIELD(UINT64,Info2)); pkg_observe("RIP ",FIELD(UINT64,Rip));
+#endif
     pkg_observe("CR0 ",FIELD(UINT64,Cr0)); pkg_observe("CR3 ",FIELD(UINT64,Cr3));
     pkg_observe("CR4 ",FIELD(UINT64,Cr4)); pkg_observe("RAX ",FIELD(UINT64,Rax));
     pkg_observe("RCX ",gpr[1]); pkg_observe("DR6 ",FIELD(UINT64,Dr6));
@@ -207,6 +227,13 @@ static const char *run_standalone_l2(void *reservation)
     pkg_observe("W02 OPS ",w02.ops);
     pkg_observe("IO COUNT ",w02.io); pkg_observe("RDX ",gpr[2]); pkg_observe("RSP ",FIELD(UINT64,Rsp));
     pkg_observe("ELAPSED100NS",__readmsr(0x40000020)-w02.start);
+#ifdef HV_W03
+    pkg_observe("READY PC ",w02.ready_pc); pkg_observe("IMAGE BASE ",w02.boot_base);
+    pkg_observe("ENTRY RVA ",W03_ENTRY_RVA); pkg_observe("ENTRY PC ",w02.boot_pc);
+    pkg_observe("ENTRY NEXT ",w02.boot_next); pkg_observe("EFI HANDLE ",w02.boot_handle);
+    pkg_observe("EFI TABLE ",w02.boot_table); pkg_observe("ENTRY RSP ",w02.boot_rsp);
+    pkg_observe("ENTRY STEPS ",w02.boot_steps);
+#endif
 #endif
     return reason;
 }
