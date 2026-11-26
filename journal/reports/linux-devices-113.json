@@ -1,0 +1,22 @@
+{
+  "title": "Linux serial identification and PIT calibration",
+  "records": [
+    {
+      "label": "Non-FIFO COM1 type identification",
+      "scope": "host",
+      "status": "passed",
+      "trial": "112",
+      "commit": "c191070449ee",
+      "source": "journal/trials/112.md"
+    },
+    {
+      "label": "Fast PIT calibration on virtual time",
+      "scope": "host",
+      "status": "passed",
+      "trial": "113",
+      "commit": "a2d0c0b02b29",
+      "source": "journal/trials/113.md"
+    }
+  ],
+  "comparisons": []
+}
