@@ -1,0 +1,22 @@
+{
+  "title": "Serial capture and Linux segment placement",
+  "records": [
+    {
+      "label": "Bounded shared UART capture",
+      "scope": "host",
+      "status": "passed",
+      "trial": "122",
+      "commit": "4cb670333182",
+      "source": "journal/trials/122.md"
+    },
+    {
+      "label": "Overlapping ELF file moves",
+      "scope": "host",
+      "status": "passed",
+      "trial": "123",
+      "commit": "bc1407c13c68",
+      "source": "journal/trials/123.md"
+    }
+  ],
+  "comparisons": []
+}
