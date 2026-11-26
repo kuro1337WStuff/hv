@@ -4,6 +4,8 @@ Development host: Ryzen 9 9950X. Firmware runs use the `HV-SVM-L1` Hyper-V VM; h
 
 **Start here:** [Current status, feature trials and integration order](status.md). The entries below describe the integrated baseline through 041. Later feature evidence is published on `main` independently of its implementation; see [how trials are published](project-workflow.md).
 
+**[104 · Published ACPI register contract](trials/104.md):** the guest-RAM validator refused wrong SCI, PM1 and `_S5_` fields even after checksums were repaired. The writable FACS lock remained valid. Host test only.
+
 **[103 · Pinned initramfs interpreter chain](trials/103.md):** `/init` names `/bin/sh`, which resolves to BusyBox and its musl interpreter. The [boot-input figure](reports/boot-inputs-103.svg) and [source records](reports/boot-inputs-103.json) cover two offline checks, not a guest boot.
 
 **[102 · Linked kernel entry page](trials/102.md):** two independent file-offset calculations agreed on all 4,096 bytes. The page belongs to `.init.text` inside a writable, non-executable load segment. Linux stayed NX.
