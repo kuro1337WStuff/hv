@@ -12,7 +12,7 @@ enum LinuxEntryFault {
     LinuxEntryFlags, LinuxEntryDebugTrap, LinuxEntryTLB, LinuxEntryGDTR,
     LinuxEntryCS, LinuxEntryDS, LinuxEntryES, LinuxEntrySS, LinuxEntrySegments,
     LinuxEntryGDT, LinuxEntryBootParams, LinuxEntryWork, LinuxEntryInitrd,
-    LinuxEntryCmdline, LinuxEntryE820, LinuxEntryPaging, LinuxEntryFetch
+    LinuxEntryCmdline, LinuxEntryE820, LinuxEntryPaging, LinuxEntryFetch, LinuxEntryColdAdjunct
 };
 
 /* Artifact geometry from the pinned 6.18.60-0-virt image, not a layout return
@@ -35,7 +35,9 @@ enum {
     EntryFsOff=0x440, EntryGsOff=0x450, EntryGdtrOff=0x460, EntryLdtrOff=0x470,
     EntryIdtrOff=0x480, EntryTrOff=0x490, EntryCplOff=0x4cb, EntryEferOff=0x4d0,
     EntryCr4Off=0x548, EntryCr3Off=0x550, EntryCr0Off=0x558, EntryFlagsOff=0x570,
-    EntryRipOff=0x578, EntryRspOff=0x5d8
+    EntryRipOff=0x578, EntryRspOff=0x5d8,
+    EntryStarOff=0x600, EntryLstarOff=0x608, EntryCstarOff=0x610, EntrySfmaskOff=0x618,
+    EntryKernelGsBaseOff=0x620, EntrySysenterCsOff=0x628, EntrySysenterEspOff=0x630, EntrySysenterEipOff=0x638
 };
 #ifdef HV_FIXED_VMCB_H
 #define ENTRY_OFFSET_MATCH(a,b) ((unsigned)(a)==(unsigned)(b))
@@ -156,6 +158,14 @@ static inline enum LinuxEntryFault linux_entry_guard(const uint8_t *vmcb, size_t
     uint64_t walked;
     if (!fetch_walk(ram,ram_bytes,cr3,rip,&walked) || walked!=EntryIP || ram[EntryIP]!=0xfc)
         return LinuxEntryFetch;
+    /* Check the cold VMCB image, not live MSRs or the GS segment descriptor.
+     * These eight qwords are zero for this denied fetch. Check them last so
+     * an existing entry fault keeps its diagnostic ID and precedence. */
+    if (linux_le64(vmcb+EntryStarOff) || linux_le64(vmcb+EntryLstarOff) ||
+        linux_le64(vmcb+EntryCstarOff) || linux_le64(vmcb+EntrySfmaskOff) ||
+        linux_le64(vmcb+EntryKernelGsBaseOff) || linux_le64(vmcb+EntrySysenterCsOff) ||
+        linux_le64(vmcb+EntrySysenterEspOff) || linux_le64(vmcb+EntrySysenterEipOff))
+        return LinuxEntryColdAdjunct;
     return LinuxEntryOK;
 }
 #endif

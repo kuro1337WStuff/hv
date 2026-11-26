@@ -77,7 +77,12 @@ int main(int argc, char **argv)
         {0x008,2,LinuxEntryDebugTrap}, {0x05c,1,LinuxEntryTLB}, {0x0c0,1,LinuxEntryTLB},
         {0x464,1,LinuxEntryGDTR}, {0x46f,0x80,LinuxEntryGDTR},
         {0x410,8,LinuxEntryCS}, {0x41f,0x80,LinuxEntryCS}, {0x433,4,LinuxEntryDS},
-        {0x400,8,LinuxEntryES}, {0x424,1,LinuxEntrySS}, {0x44f,1,LinuxEntrySegments}
+        {0x400,8,LinuxEntryES}, {0x424,1,LinuxEntrySS}, {0x44f,1,LinuxEntrySegments},
+        /* Bit 63 in each stored qword catches partial-width checks, even for SYSENTER_CS. */
+        {0x600+7,0x80,LinuxEntryColdAdjunct}, {0x608+7,0x80,LinuxEntryColdAdjunct},
+        {0x610+7,0x80,LinuxEntryColdAdjunct}, {0x618+7,0x80,LinuxEntryColdAdjunct},
+        {0x620+7,0x80,LinuxEntryColdAdjunct}, {0x628+7,0x80,LinuxEntryColdAdjunct},
+        {0x630+7,0x80,LinuxEntryColdAdjunct}, {0x638+7,0x80,LinuxEntryColdAdjunct}
     };
     CHECK(poisons(vmcb,state,sizeof state/sizeof state[0]));
     static const Poison guest[]={
