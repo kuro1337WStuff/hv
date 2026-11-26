@@ -30,6 +30,21 @@ static inline PlatformS5 platform_s5_new(void)
     return s;
 }
 
+/* Construct in fresh caller-owned space; not a reset operation. Storage is
+ * exclusive and writable for the lifetime of this instance; never alias it
+ * with machine/operand cells or run copies sharing it. Count starts at zero
+ * (irq.edge.tx_count); unused bytes are untouched. A zero-capacity buffer
+ * rejects every THR. Missing storage fails before writing the machine, never
+ * silently selecting the 16-byte fixture. No sticky overflow flag. */
+static inline int platform_s5_init_tx(PlatformS5 *s, uint8_t *storage, size_t capacity)
+{
+    if (!s || !storage) return 0;
+    *s = platform_s5_new();
+    s->irq.edge.tx_bytes = storage;
+    s->irq.edge.tx_capacity = capacity;
+    return 1;
+}
+
 static inline int platform_s5_running(const PlatformS5 *s)
 {
     return s && s->control.lifecycle == PowerRunning;
