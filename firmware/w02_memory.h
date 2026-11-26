@@ -20,6 +20,11 @@ typedef struct {
 #ifdef HV_W04
     UINT32 w04_steps, w04_pc, w04_target, w04_service;
     UINT32 w04_bs; UINT8 w04_bs_digest[32]; /* measured DXE's ready-time table */
+#ifdef HV_W04_RETURN
+    UINT32 w04_pre_rsp, w04_callee, w04_pushed_pc; /**< Observed guest addresses retained after the fixed CALL, including on later stops. */
+    UINT64 w04_efi_status; /**< Full UEFI return value, valid only when w04_returned is set. */
+    BOOLEAN w04_returned;  /**< The fixed HandleProtocol invocation consumed its original return slot. */
+#endif
 #endif
 #endif
 } W02State;

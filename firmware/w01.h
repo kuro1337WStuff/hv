@@ -205,6 +205,15 @@ static const char *run_standalone_l2(void *reservation)
     pkg_observe("IMAGE BASE ",w02.boot_base); pkg_observe("ENTRY PC ",w02.boot_pc);
     pkg_observe("ENTRY NEXT ",w02.boot_next); pkg_observe("ENTRY STEPS ",w02.boot_steps);
     pkg_observe("EFI TABLE ",w02.boot_table); pkg_observe("PHASE ",w02.phase);
+#ifdef HV_W04_RETURN
+    pkg_observe("BOOT SVCS ",w02.w04_bs);
+    if (w02.w04_service) {
+        pkg_observe("CALL TARGET ",w02.w04_callee); pkg_observe("PRECALL RSP ",w02.w04_pre_rsp);
+        pkg_observe("PUSHED PC ",w02.w04_pushed_pc);
+    }
+    pkg_observe("RETURNED ",w02.w04_returned);
+    if (w02.w04_returned) pkg_observe("EFI STATUS ",w02.w04_efi_status);
+#endif
     pkg_observe("POST STEPS ",w02.w04_steps); pkg_observe("POST PC ",w02.w04_pc);
     pkg_observe("NEXT TARGET ",w02.w04_target); pkg_observe("SERVICE OFF ",w02.w04_service);
     pkg_observe("RIP ",FIELD(UINT64,Rip)); pkg_observe("RSP ",FIELD(UINT64,Rsp));

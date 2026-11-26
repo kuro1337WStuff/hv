@@ -19,6 +19,8 @@ if /i "%~1"=="l1-linux-inputs" set "LINUX_MEDIA=1"
 if /i "%~1"=="l1-entry-guard" set "LINUX_MEDIA=1"
 if /i "%~1"=="l1-acpi-map" set "LINUX_MEDIA=1"
 if /i "%~1"=="l1-range-audit" set "LINUX_MEDIA=1"
+set "SELECTED=%~1"
+if /i "%~1"=="l1-w04-return" set "SELECTED=l1-w04-loader"
 if /i "%~1"=="l2" (
   set "SRC=l2_smoke"
   set "EFI=L2SMOKE"
@@ -66,7 +68,7 @@ if /i "%~1"=="l2" (
   set "ASM_SRC=firmware\l1_handoff.asm"
   set "EXTRA_ASM=vcpu_gpr w01_switch"
   if not exist build\w03_pin.h (echo Missing prepared W03 pin. & exit /b 1)
-) else if /i "%~1"=="l1-w04-loader" (
+) else if /i "%SELECTED%"=="l1-w04-loader" (
   rem W04 changes the L1 observation only. Reuse the exact W03 guest inputs.
   set "SRC=l1_handoff"
   set "EFI=L1W04"
@@ -77,6 +79,11 @@ if /i "%~1"=="l2" (
   set "ASM_SRC=firmware\l1_handoff.asm"
   set "EXTRA_ASM=vcpu_gpr w01_switch"
   if not exist build\w03_pin.h (echo Missing prepared W03 pin. & exit /b 1)
+  if /i "%~1"=="l1-w04-return" (
+    set "EFI=L1W04RET"
+    set "ISO=hv-l1-w04-return"
+    set "CASE_FLAGS=/DHV_STANDALONE_L2 /DHV_W02 /DHV_W03 /DHV_W04 /DHV_W04_RETURN"
+  )
 ) else if /i "%~1"=="l1-cpuid" (
   set "SRC=l1_handoff"
   set "EFI=L1CPUID"

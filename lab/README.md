@@ -309,3 +309,17 @@ For the host integrity control, use `pefile`'s `get_memory_mapped_image(ImageBas
 Use the W03 inputs and pin above. `firmware\build.cmd l1-w04-loader` changes only the standalone L1; it does not add a Windows volume to L2. Use a new A-only reservation and preserve the prior terminal before changing media. Never substitute the W03 ISO.
 
 Read `ENTRY STEPS` first: `1` means the W03 entry check succeeded in this boot. `POST STEPS` counts subsequent retired instructions. Read `POST PC`, `NEXT TARGET`, the exit and the stop reason together. A nonzero `SERVICE OFF` identifies a verified EFI Boot Services table slot, not a return from that service. An unclassified transfer or unsupported instruction identifies where to investigate; neither proves a storage blocker. This profile stops without a kernel verdict. W04 requires the Windows loader followed by a build-identified event from the L2 kernel in one boot.
+
+### W04: did the observed HandleProtocol call return?
+
+Build `firmware\build.cmd l1-w04-return` with the same pinned W03 guest inputs. This is a separate L1 image, not a replay of [trial 146](https://github.com/kuro1337WStuff/hv/blob/6368927a80d042cf7f6d4e7f9a8fd056b825ced2/journal/trials/146.md). It tests one BSP and one call in that exact Windows/DXE pair. A matching return address alone is not sufficient. `RETURNED=1` requires the guest return instruction to pop the original frame and restore the caller's stack; `EFI STATUS` is the full-width value before Windows executes its next instruction. When the edge was not observed the status is omitted, not reported as zero. An EFI error still witnesses a return; neither a return nor an unsupported stop proves a kernel start or measures latency.
+
+`BOOT SVCS` identifies the table checked against its ready-time digest. Once the call frame is verified, `CALL TARGET`, `PRECALL RSP` and `PUSHED PC` are retained even if DXE stops before the return. Compare `PUSHED PC` with `IMAGE BASE + 0x31245`, and, on a witnessed return, `RSP` with `PRECALL RSP`.
+
+Host control, from an x64 MSVC Developer Command Prompt:
+
+```bat
+cl /nologo /TC /std:c11 /W4 /WX lab\tests\w04_handle_return_test.c /Fobuild\w04_handle_return_test.obj /Febuild\w04_handle_return_test.exe && build\w04_handle_return_test.exe
+```
+
+The control checks the return decision, including an unrelated transfer with the same final register values. It does not run firmware. Before booting, [#224](https://github.com/kuro1337WStuff/hv/issues/224) requires pinned source and media, preservation of the live 146 terminal and its checkpoint lineage, and a fresh bench A reservation. No automatic PASS or retry.
