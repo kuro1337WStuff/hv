@@ -10,6 +10,18 @@
 
 enum LegacyComForm { LegacyComOther, LegacyComScalarIn, LegacyComScalarOut };
 
+static inline int legacy_com_absent_port(uint16_t port)
+{
+    switch (port & ~7u) {
+    case 0x2f8: /* COM2 */
+    case 0x3e8: /* COM3 */
+    case 0x2e8: /* COM4 */
+        return 1;
+    default:
+        return 0;
+    }
+}
+
 /** Apply one classified transaction at a virtual 16-bit I/O port. The caller
  * owns the initialized COM1 model and a separate value cell. Classify string,
  * REP and unrecognized forms as Other; bytes is the operand width in bytes.
@@ -25,21 +37,15 @@ static inline BOOLEAN legacy_com_io(Uart16450 *com1, enum LegacyComForm form,
         (form != LegacyComScalarIn && form != LegacyComScalarOut)) return FALSE;
     if (form == LegacyComScalarOut && *value > UINT8_MAX) return FALSE;
 
-    switch (port & ~7u) { /* Each named base is aligned to its eight-byte window. */
-    case Uart8250Base: {
+    if (legacy_com_absent_port(port)) {
+        if (form == LegacyComScalarIn) *value = UINT8_MAX;
+        return TRUE;
+    } else {
         BOOLEAN input = (form == LegacyComScalarIn);
         UINT8 byte = input ? 0 : (UINT8)*value;
         if (!uart16450_access(com1, port, input, &byte)) return FALSE;
         if (input) *value = byte;
         return TRUE;
-    }
-    case 0x2f8: /* COM2 */
-    case 0x3e8: /* COM3 */
-    case 0x2e8: /* COM4 */
-        if (form == LegacyComScalarIn) *value = UINT8_MAX;
-        return TRUE;
-    default:
-        return FALSE;
     }
 }
 #endif
