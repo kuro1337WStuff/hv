@@ -1,0 +1,22 @@
+{
+  "title": "Linux entry page and guest firmware readiness",
+  "records": [
+    {
+      "label": "Linux entry-page alternatives inventory",
+      "scope": "host",
+      "status": "passed",
+      "trial": "110",
+      "commit": "78121a558d76",
+      "source": "journal/trials/110.md"
+    },
+    {
+      "label": "OVMF boot on the current L2 platform",
+      "scope": "nested",
+      "status": "not-run",
+      "trial": "111",
+      "commit": "fcc197ec92d8",
+      "source": "journal/trials/111.md"
+    }
+  ],
+  "comparisons": []
+}

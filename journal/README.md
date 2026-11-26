@@ -4,6 +4,8 @@ Development host: Ryzen 9 9950X. Firmware runs use the `HV-SVM-L1` Hyper-V VM; h
 
 **Start here:** [Current status, feature trials and integration order](status.md). The entries below describe the integrated baseline through 041. Later feature evidence is published on `main` independently of its implementation; see [how trials are published](project-workflow.md).
 
+**[111 · OVMF needs a guest platform, not just an ISO](trials/111.md):** the current L2 does not provide the high reset fetch required by the reviewed firmware, and its synthetic optical reader is not a storage controller. Windows is deferred; no firmware or installer ran. [Readiness figure](reports/entry-readiness-111.svg) · [source records](reports/entry-readiness-111.json).
+
 **[110 · Potential writes to the linked Linux entry page](trials/110.md):** five alternative-instruction records name three distinct sites covering 18 bytes. An on-disk page hash is not proof that the page remains immutable. Linux stayed non-executable; no guest ran.
 
 **[109 · BusyBox's declared library](trials/109.md):** the pinned archive supplies BusyBox's sole named dependency via a relative link to musl. The loader's own SONAME matches; it names no further libraries. Metadata only, not a PID 1 receipt. [Paired host results](reports/boot-media-109.svg) · [source records](reports/boot-media-109.json).
