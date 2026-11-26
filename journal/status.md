@@ -1,4 +1,4 @@
-# Project status · through 121
+# Project status · through 122
 
 **On `main`:** firmware baseline [041](README.md), plus CI-only [#2](https://github.com/kuro1337WStuff/hv/pull/2) at `735c8b56` after both hosted checks passed on `54bace3b`. **On `feature/l1-handoff` only:** [#4](https://github.com/kuro1337WStuff/hv/pull/4) merged at `95abe46c`; [#10](https://github.com/kuro1337WStuff/hv/pull/10) retargeted, then squashed at `44fb6247`. The resulting firmware trees matched the source trees used in 060 and 063 respectively. Revert #10 first if both must be undone; #4 is a merge commit. No ordinary Linux boot or bare-metal qualification.
 
@@ -15,7 +15,7 @@
 
 **Merge routing:** [Dated PR-by-PR audit](merge-audit-072.md) · [live open PRs](https://github.com/kuro1337WStuff/hv/pulls) · [workflow and rollback](project-workflow.md). #21's test merge did not promote #12. Check the actual base, scope and source revision before each integration.
 
-**Boot and platform work:** [120](trials/120.md) put both timer channels on the shared PIC platform's clock; [121](trials/121.md) checked the pinned relocated BSS boundaries offline. Next host work: [#153 · serial capture beyond 16 bytes with IRQ4 preserved](https://github.com/kuro1337WStuff/hv/issues/153) and [#154 · overlapping ELF segment placement](https://github.com/kuro1337WStuff/hv/issues/154). Still [0 of 2 qualifying Linux boots](trials/106.md); CPU ownership, [page permissions](trials/110.md) and [bench B teardown](https://github.com/kuro1337WStuff/hv/issues/69) remain open. [Windows is deferred](trials/111.md).
+**Boot and platform work:** [122](trials/122.md) captured more than 16 UART bytes without changing interrupt behavior. [#154 · ELF segment placement](https://github.com/kuro1337WStuff/hv/issues/154) is the parallel offline loader trial. The release target is [Windows 10 on a physical 9950X3D or 9950X, all cores](../README.md); neither is qualified. Linux remains a test gate with [0 of 2 qualifying boots](trials/106.md). [Bench B teardown](https://github.com/kuro1337WStuff/hv/issues/69) is still required before admission.
 
 **Reporting:** [101](trials/101.md) publishes the [selected trial results](reports/feature-phase.svg) from source records. The project remains in feature qualification, not optimization. Windows 10 is a future offline guest in the nested lab; no Windows guest or physical boot has been qualified.
 

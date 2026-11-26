@@ -4,6 +4,8 @@ Development host: Ryzen 9 9950X. Firmware runs use the `HV-SVM-L1` Hyper-V VM; h
 
 **Start here:** [Current status, feature trials and integration order](status.md). The entries below describe the integrated baseline through 041. Later feature evidence is published on `main` independently of its implementation; see [how trials are published](project-workflow.md).
 
+**[122 · Bounded UART capture](trials/122.md):** one shared UART recorded 20 binary bytes, preserved IRQ4 service at capacity, and rejected new bytes after S5. The original 16-byte fixture stayed fixed.
+
 **[121 · Relocated BSS boundaries](trials/121.md):** the pinned clear covers 103,656 bytes. Rounding its start down erased file-backed data; rounding its end up erased a suffix guard.
 
 **[120 · One clock for both PIT channels](trials/120.md):** at 8,401 virtual ns, bulk and partitioned advances both produced 10 pulses and the same IRQ0 regrant. Only the running S5 control advanced beyond that point. [120–121 figure](reports/shared-clock-and-loader-121.svg) · [source data](reports/shared-clock-and-loader-121.json).
