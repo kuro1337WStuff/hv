@@ -41,3 +41,7 @@ jobs:
         run: |
           gcc -std=c11 -O2 -Wall -Wextra -Werror lab/tests/pit_uart_pic_test.c -o "$RUNNER_TEMP/pit-uart-pic"
           "$RUNNER_TEMP/pit-uart-pic"
+      - name: Compile and run the shared SCI arbitration control
+        run: |
+          gcc -std=c11 -O2 -Wall -Wextra -Werror lab/tests/shared_sci_pic_test.c -o "$RUNNER_TEMP/shared-sci"
+          "$RUNNER_TEMP/shared-sci"

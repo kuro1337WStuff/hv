@@ -100,23 +100,37 @@ static inline int pit_uart_pic_io(PitUartPic *s, enum PitUartPicIo form,
     return 1;
 }
 
+/* Fixed priority: only bits strictly below the lowest numbered service
+ * bit can preempt it. With no service, (0 - 1) admits all eight bits.
+ * pending may also include a sampled cascade on a shared master. */
+static inline uint8_t pit_uart_pic_eligible(const PitUartPic *s, uint8_t pending)
+{
+    unsigned service = s->isr;
+    unsigned higher = (service & (0u - service)) - 1u;
+    return (uint8_t)(pending & ~s->pic.master.imr & higher);
+}
+
 /* Acknowledge at most one unmasked pending edge strictly above every active
  * priority. Never resample pins here or during EOI. Acceptance is not guest
  * entry, handler execution, or acknowledgment of a device's source cause. */
-static inline int pit_uart_pic_take(PitUartPic *s, uint8_t *vector)
+static inline int pit_uart_pic_take_edge(PitUartPic *s, uint8_t eligible, uint8_t *vector)
 {
-    if (!s || !vector || s->pic.master.phase != PIC8259_READY) return 0;
-    uint8_t eligible = (uint8_t)(s->irr & ~s->pic.master.imr);
     uint8_t bit;
-    if ((eligible & PitUartIrq0) && !(s->isr & PitUartIrq0)) {
+    if (eligible & PitUartIrq0) {
         bit = PitUartIrq0;
         *vector = PIC8259_MASTER_BASE;
-    } else if ((eligible & PitUartIrq4) && !s->isr) {
+    } else if (eligible & PitUartIrq4) {
         bit = PitUartIrq4;
         *vector = PIC8259_MASTER_BASE + 4;
     } else return 0;
     s->irr &= (uint8_t)~bit;
     s->isr |= bit;
     return 1;
+}
+
+static inline int pit_uart_pic_take(PitUartPic *s, uint8_t *vector)
+{
+    if (!s || !vector || s->pic.master.phase != PIC8259_READY) return 0;
+    return pit_uart_pic_take_edge(s, pit_uart_pic_eligible(s, s->irr), vector);
 }
 #endif
