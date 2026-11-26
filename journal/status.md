@@ -1,4 +1,4 @@
-# Project status · through 113
+# Project status · through 114
 
 **On `main`:** firmware baseline [041](README.md), plus CI-only [#2](https://github.com/kuro1337WStuff/hv/pull/2) at `735c8b56` after both hosted checks passed on `54bace3b`. **On `feature/l1-handoff` only:** [#4](https://github.com/kuro1337WStuff/hv/pull/4) merged at `95abe46c`; [#10](https://github.com/kuro1337WStuff/hv/pull/10) retargeted, then squashed at `44fb6247`. The resulting firmware trees matched the source trees used in 060 and 063 respectively. Revert #10 first if both must be undone; #4 is a merge commit. No ordinary Linux boot or bare-metal qualification.
 
@@ -15,7 +15,7 @@
 
 **Merge routing:** [Dated PR-by-PR audit](merge-audit-072.md) · [live open PRs](https://github.com/kuro1337WStuff/hv/pulls) · [workflow and rollback](project-workflow.md). #21's test merge did not promote #12. Check the actual base, scope and source revision before each integration.
 
-**Boot and platform work:** [112](trials/112.md) distinguished the 16450 from a present 8250; [113](trials/113.md) checked quick PIT calibration on virtual time. The controls are on `feature/l1-handoff` at `a2d0c0b0`, not guest execution on `main`. Next: [#127 · service timer and serial IRQs on one master PIC](https://github.com/kuro1337WStuff/hv/issues/127) and [#128 · execute the two controls on feature PRs](https://github.com/kuro1337WStuff/hv/issues/128). Still [0 of 2 qualifying Linux boots](trials/106.md); CPU ownership, [page permissions](trials/110.md) and [bench B teardown](https://github.com/kuro1337WStuff/hv/issues/69) remain open. [Windows stays deferred](trials/111.md).
+**Boot and platform work:** [114](trials/114.md) put the [COM classification](trials/112.md) and [quick PIT calibration](trials/113.md) controls on GitHub-hosted Ubuntu for PRs to `feature/l1-handoff`. Next: [#127 · service IRQ0 and IRQ4 on one master PIC](https://github.com/kuro1337WStuff/hv/issues/127). The host check is not a guest receipt: [0 of 2 qualifying Linux boots](trials/106.md). CPU ownership, [page permissions](trials/110.md) and [bench B teardown](https://github.com/kuro1337WStuff/hv/issues/69) remain open. [Windows is deferred](trials/111.md).
 
 **Reporting:** [101](trials/101.md) publishes the [selected trial results](reports/feature-phase.svg) from source records. The project remains in feature qualification, not optimization. Windows 10 is a future offline guest in the nested lab; no Windows guest or physical boot has been qualified.
 
