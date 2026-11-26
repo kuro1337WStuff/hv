@@ -1,4 +1,4 @@
-# Project status · through 136
+# Project status · through 137
 
 **On `main`:** firmware baseline [041](README.md), plus CI-only [#2](https://github.com/kuro1337WStuff/hv/pull/2) at `735c8b56` after both hosted checks passed on `54bace3b`. **On `feature/l1-handoff` only:** [#4](https://github.com/kuro1337WStuff/hv/pull/4) merged at `95abe46c`; [#10](https://github.com/kuro1337WStuff/hv/pull/10) retargeted, then squashed at `44fb6247`. The resulting firmware trees matched the source trees used in 060 and 063 respectively. Revert #10 first if both must be undone; #4 is a merge commit. No ordinary Linux boot or bare-metal qualification.
 
@@ -17,7 +17,7 @@
 
 **Ordinary guest:** [128](trials/128.md) rejected stale values in each of eight stored CPU fields. [129](trials/129.md) verified every file-backed byte of the loaded compressed kernel before a denied fetch. Both were host tests. [#15](https://github.com/kuro1337WStuff/hv/issues/15) remains open: establish effective CPU-state ownership and host restoration (E03), and who can write each original or relocated page before it becomes executable (E06). Neither check grants execution. No feature code was promoted to `main`.
 
-**Windows target:** [131](trials/131.md) selected Q35/ICH9 AHCI and one read-only ATAPI CD-ROM. [127](trials/127.md) and [132](trials/132.md) identify candidate Setup drivers. The [host optical read](trials/135.md) returned [known installation bytes](trials/134.md); the [capacity test](trials/136.md) verified that its advertised last sector agrees with its read boundary on an authored medium. No guest-visible controller, Windows driver binding or post-firmware guest read was tested. Linux remains at [0 of 2 qualifying boots](trials/106.md); [bench B](https://github.com/kuro1337WStuff/hv/issues/69) remains held.
+**Windows target:** [131](trials/131.md) selected Q35/ICH9 AHCI and one read-only ATAPI CD-ROM. [127](trials/127.md) and [132](trials/132.md) identify candidate Setup drivers. On the host, [137](trials/137.md) joined drive discovery to the [read](trials/135.md) and [capacity](trials/136.md) paths. An empty drive kept its identity but refused readiness and data; an absent target refused inquiry too. No guest-visible controller, Windows driver binding or post-firmware guest read was tested. Linux remains at [0 of 2 qualifying boots](trials/106.md); [bench B](https://github.com/kuro1337WStuff/hv/issues/69) remains held.
 
 **Reporting:** the [functional matrix](reports/functional-outcomes.svg) shows check outcomes and their journal sources by build and execution scope. The [benchmark ledger](reports/benchmark-ledger.svg) remains **unmeasured**; see the [regeneration trial](trials/133.md). Neither Windows boot nor full-core physical operation has been qualified on either Ryzen.
 

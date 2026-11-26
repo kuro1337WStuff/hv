@@ -4,6 +4,8 @@ Development host: Ryzen 9 9950X. Firmware runs use the `HV-SVM-L1` Hyper-V VM; h
 
 **Start here:** [Current status, feature trials and integration order](status.md). The entries below describe the integrated baseline through 041. Later feature evidence is published on `main` independently of its implementation; see [how trials are published](project-workflow.md).
 
+**[137 · Drive identity versus disc readiness](trials/137.md):** the same host target returned its 36-byte identity with and without media. Only the ready medium returned capacity and a known sector. An absent target returned neither identity nor data. No ISO or VM.
+
 **[136 · Optical capacity and last readable sector](trials/136.md):** the final sector on an authored medium was readable; a straddle and the first out-of-range address were refused without a backing read. The candidate ISO's recorded size was checked without opening it.
 
 **[135 · Two-sector optical READ(10)](trials/135.md):** the host command returned all 4,096 expected bytes and matched [134](trials/134.md) across the sector boundary. Invalid requests left the output unchanged without a backing read. No AHCI controller or guest ran.

@@ -1,0 +1,22 @@
+{
+  "title": "Optical discovery by media state",
+  "records": [
+    {
+      "label": "Optical inquiry and readiness by media state",
+      "scope": "host",
+      "status": "passed",
+      "trial": "137",
+      "commit": "c5c7e2b3089d",
+      "source": "journal/trials/137.md"
+    },
+    {
+      "label": "Windows Setup optical access on Q35 AHCI",
+      "scope": "nested",
+      "status": "not-run",
+      "trial": "137",
+      "commit": "c5c7e2b3089d",
+      "source": "journal/trials/137.md"
+    }
+  ],
+  "comparisons": []
+}
