@@ -88,6 +88,26 @@ def render(manifest, directory):
         section([pair['label'], 'OBSERVED  /  ' + comparison,
                  f'Elapsed change (candidate − baseline): {delta:+} ns; lower is better.'],
                 '#164d51', '#ffffff', bold=True)
+        # Share one zero-based scale within a workload; never compare widths across workloads.
+        maximum = max(summary['boot_median_range_ns'][1] for summary in summaries)
+        def x(ns):
+            return str(round(200 + 680 * ns / maximum, 2))
+
+        section([f'Relative elapsed change: {100 * delta / base["median_of_boot_medians_ns"]:+.2f}%.',
+                 f'Scale: 0 to {maximum} ns. Dot: median of boot medians. Line: observed range.'],
+                '#dfe8ed', '#142938')
+        for label, summary, color in zip(('Baseline', 'Candidate'), summaries, ('#345d85', '#006759')):
+            low, high = summary['boot_median_range_ns']
+            row = str(y + 16)
+            ET.SubElement(svg, 'text', x='42', y=str(y + 21), fill='#142938',
+                          attrib={'font-family': 'monospace', 'font-size': '15'}).text = label
+            ET.SubElement(svg, 'line', x1=x(0), x2=x(maximum), y1=row, y2=row,
+                          stroke='#a8b9c1', attrib={'stroke-width': '2'})
+            ET.SubElement(svg, 'line', x1=x(low), x2=x(high), y1=row, y2=row,
+                          stroke=color, attrib={'stroke-width': '5'})
+            ET.SubElement(svg, 'circle', cx=x(summary['median_of_boot_medians_ns']), cy=row,
+                          r='6', fill=color, stroke='#ffffff')
+            y += 32
         for side, arm, summary in zip(('Baseline', 'Candidate'), arms, summaries):
             path = (directory / arm['file']).resolve()
             cohort.require(arm['id'] not in ids and path not in paths, 'reused cohort ID or source')
