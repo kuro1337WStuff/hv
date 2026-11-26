@@ -1,4 +1,4 @@
-# Project status · through 105
+# Project status · through 106
 
 **On `main`:** firmware baseline [041](README.md), plus CI-only [#2](https://github.com/kuro1337WStuff/hv/pull/2) at `735c8b56` after both hosted checks passed on `54bace3b`. **On `feature/l1-handoff` only:** [#4](https://github.com/kuro1337WStuff/hv/pull/4) merged at `95abe46c`; [#10](https://github.com/kuro1337WStuff/hv/pull/10) retargeted, then squashed at `44fb6247`. The resulting firmware trees matched the source trees used in 060 and 063 respectively. Revert #10 first if both must be undone; #4 is a merge commit. No ordinary Linux boot or bare-metal qualification.
 
@@ -15,7 +15,7 @@
 
 **Merge routing:** [Dated PR-by-PR audit](merge-audit-072.md) · [live open PRs](https://github.com/kuro1337WStuff/hv/pulls) · [workflow and rollback](project-workflow.md). #21's test merge did not promote #12. Check the actual base, scope and source revision before each integration.
 
-**Boot and platform work:** [104](trials/104.md) checked published ACPI device fields; [105](trials/105.md) verified that virtual S5 stops all subsequent modeled serial and power I/O. Both are host results on `feature/l1-handoff` at `b551ebb3`, not guest execution. Next: [#107 · compare independently witnessed Linux boots](https://github.com/kuro1337WStuff/hv/issues/107) and [#108 · map Windows Setup's L2 firmware and storage requirements](https://github.com/kuro1337WStuff/hv/issues/108). E03/E06 and the existing VM holds remain open; no ordinary Linux or Windows boot is qualified.
+**Boot and platform work:** [106](trials/106.md) verified how to compare independent Linux boots; there are no qualifying ordinary boots to compare yet. The implementation is on `feature/l1-handoff` at `2936af7f`. [104](trials/104.md) and [105](trials/105.md) remain host device results. [#108](https://github.com/kuro1337WStuff/hv/issues/108) maps Windows PE's separate firmware and storage requirements. E03/E06 and the existing VM holds remain open.
 
 **Reporting:** [101](trials/101.md) publishes the [selected trial results](reports/feature-phase.svg) from source records. The project remains in feature qualification, not optimization. Windows 10 is a future offline guest in the nested lab; no Windows guest or physical boot has been qualified.
 
