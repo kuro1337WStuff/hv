@@ -45,6 +45,10 @@ jobs:
         run: |
           gcc -std=c11 -O2 -Wall -Wextra -Werror lab/tests/shared_sci_pic_test.c -o "$RUNNER_TEMP/shared-sci"
           "$RUNNER_TEMP/shared-sci"
+      - name: Compile and run the terminal device shutdown control
+        run: |
+          gcc -std=c11 -O2 -Wall -Wextra -Werror lab/tests/platform_s5_test.c -o "$RUNNER_TEMP/platform-s5"
+          "$RUNNER_TEMP/platform-s5"
 
   cpu-state:
     name: Legacy CPU state host controls
