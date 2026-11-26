@@ -1,0 +1,22 @@
+{
+  "title": "Shared platform time and Linux loader boundaries",
+  "records": [
+    {
+      "label": "Clock shared by PIT channels 0 and 2",
+      "scope": "host",
+      "status": "passed",
+      "trial": "120",
+      "commit": "c93758cb28d4",
+      "source": "journal/trials/120.md"
+    },
+    {
+      "label": "Pinned relocated BSS byte boundaries",
+      "scope": "host",
+      "status": "passed",
+      "trial": "121",
+      "commit": "3d42590ecf36",
+      "source": "journal/trials/121.md"
+    }
+  ],
+  "comparisons": []
+}
