@@ -4,6 +4,8 @@ Development host: Ryzen 9 9950X. Firmware runs use the `HV-SVM-L1` Hyper-V VM; h
 
 **Start here:** [Current status, feature trials and integration order](status.md). The entries below describe the integrated baseline through 041. Later feature evidence is published on `main` independently of its implementation; see [how trials are published](project-workflow.md).
 
+**[114 · Hosted checks for feature PRs](trials/114.md):** Ubuntu reproduced the Windows COM classification and quick PIT results, including the frozen-clock controls. No guest boot.
+
 **[113 · Fast PIT calibration](trials/113.md):** the pinned algorithm recovered 610,909 kHz from a prescribed virtual clock at iteration 33. A missed final verification returned zero even with the same candidate frequency. [Paired host results](reports/linux-devices-113.svg) · [source records](reports/linux-devices-113.json).
 
 **[112 · Linux COM1 type identification](trials/112.md):** both scratch patterns read back on the modeled 16450. Each read-only scratch control matched only one pattern and was classified as an 8250, not an absent port. Host-only; no tty or IRQ delivery.
