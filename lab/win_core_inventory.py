@@ -194,8 +194,9 @@ def collect(*, include_l3=False):
         model = None  # Missing descriptive metadata does not invalidate topology.
     report = inventory(cores, active, model, cache_data=caches)
     if include_l3:
-        report['windows'] = {'release': platform.win32_ver()[0],
-                             'version': '.'.join(map(str, sys.getwindowsversion().platform_version))}
+        # platform_version can describe kernel32.dll (26100 even on OS build 26200).
+        release, version, _, _ = platform.win32_ver()
+        report['windows'] = {'release': release, 'version': version}
     return report
 
 
