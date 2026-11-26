@@ -2,6 +2,7 @@
 from contextlib import redirect_stdout
 import hashlib
 from io import StringIO
+import struct
 import unittest
 from unittest.mock import patch
 
@@ -47,6 +48,45 @@ class LinkedPageTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'unreviewed kernel'):
                 layout.inspect(bytes(12649472))
             inflate.assert_not_called()
+
+
+class AlternativesTest(unittest.TestCase):
+    names = b'\0.altinstructions\0'
+
+    def report(self, base, page, sites, tail=b'', **overrides):
+        data = bytearray(b'prefix')
+        for i, (start, length) in enumerate(sites):
+            data.extend(struct.pack('<iiIBB', start - (base + 14*i), -19, 0xaabbccdd, length, 51))
+        data.extend(tail)
+        section = (1, overrides.get('kind', 1), 2, base, 6,
+                   overrides.get('size', len(data)-6), 0, 0, 1, overrides.get('entsize', 0))
+        out = StringIO()
+        with redirect_stdout(out):
+            layout._report_alternatives(data, [section], self.names, page)
+        return out.getvalue()
+
+    def test_clipped_union_and_empty_spans(self):
+        sites = [(0xffe, 5), (0xffe, 5), (0x1002, 3), (0x1003, 0),
+                 (0x1ffe, 4), (0xfff, 1), (0x2000, 1)]
+        text = self.report(0x3000, 0x1000, sites)
+        self.assertIn('records=7 intersecting=4 unique_original_starts=3 unique_page_bytes=7', text)
+        self.assertIn('record=1 original VA=[0xffe,0x1003) intersection VA=[0x1000,0x1003)', text)
+        self.assertIn('intersection VA=[0x1ffe,0x2000)', text)
+
+    def test_unsigned_limits(self):
+        limit = 1 << 64
+        page = limit - 4096
+        self.assertIn('unique_page_bytes=1', self.report(page, page, [(limit-1, 1)]))
+        for base, target, length in [(page, limit-1, 2), (page, limit, 0), (0, -1, 1)]:
+            with self.subTest(target=target), self.assertRaisesRegex(ValueError, 'original VA'):
+                self.report(base, page, [(target, length)])
+
+    def test_malformed_tables(self):
+        for kwargs in [dict(tail=b'x'), dict(size=28), dict(entsize=16), dict(kind=8)]:
+            with self.subTest(kwargs=kwargs), self.assertRaisesRegex(ValueError, 'invalid .altinstructions'):
+                self.report(0x3000, 0x1000, [(0, 0)], **kwargs)
+        with self.assertRaisesRegex(ValueError, 'invalid .altinstructions'):
+            self.report((1 << 64)-1, 0, [((1 << 64)-1, 0)])
 
 
 if __name__ == '__main__':
