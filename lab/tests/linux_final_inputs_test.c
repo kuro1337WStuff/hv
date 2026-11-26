@@ -1,4 +1,4 @@
-/* Trial 117, host only. From the repo root:
+/* Trials 117/129, host only. From the repo root:
  * cc -std=c11 -O2 -Wall -Wextra -Werror lab/tests/linux_final_inputs_test.c -o /tmp/final_inputs
  * or (x64 VS prompt): cl /nologo /std:c11 /O2 /W4 /WX lab\tests\linux_final_inputs_test.c
  * Run the executable with vmlinuz-virt initramfs.cpio cmdline.bin, in that order.
@@ -18,6 +18,7 @@ enum {
     LinuxCmdOff = LinuxRdOff + LinuxRdLen, LinuxCmdLen = 123
 };
 #include "../../firmware/linux_input_gate.h"
+#include "../../firmware/linux_payload_copy.h"
 
 static uint8_t stage[LinuxCmdOff + LinuxCmdLen], ram[LinuxRamBytes];
 enum { ExpectedRd = (LinuxRamBytes - LinuxRdLen) & ~(LinuxPage - 1) };
@@ -132,17 +133,62 @@ static int controls(void)
         expect("restored", sizeof ram, Exact);
 }
 
+static int expect_payload(const char *label, const LinuxLayout *layout, size_t image_bytes,
+                          size_t ram_bytes, enum LinuxPayloadCopy want)
+{
+    enum LinuxPayloadCopy got = linux_payload_copy(layout, stage + LinuxImageOff, image_bytes,
+                                                 ram, ram_bytes);
+    static const char *const names[] = {"exact", "invalid extent", "changed destination"};
+    if (got != want) {
+        fprintf(stderr, "%s: expected %s, got %s\n", label, names[want], names[got]);
+        return 0;
+    }
+    printf("%s: %s\n", label, names[got]);
+    return 1;
+}
+
+static int payload_controls(LinuxLayout layout)
+{
+    enum { End = EntryKernel + EntryKernelBytes };
+    if (!expect_payload("payload exact endpoints", &layout, LinuxImageLen, End, LinuxPayloadExact)) return 0;
+    ram[End - 1] ^= 1; /* Off entry, at the last file-backed byte, not in zero-fill. */
+    if (!expect_payload("payload final byte", &layout, LinuxImageLen, End, LinuxPayloadChanged) ||
+        !expect_payload("payload short source", &layout, LinuxImageLen - 1, End, LinuxPayloadExtent) ||
+        !expect_payload("payload short RAM", &layout, LinuxImageLen, End - 1, LinuxPayloadExtent)) return 0;
+    ram[End - 1] ^= 1;
+    ++layout.setup_bytes;
+    if (!expect_payload("payload shifted setup", &layout, LinuxImageLen, sizeof ram, LinuxPayloadExtent)) return 0;
+    --layout.setup_bytes;
+    ++layout.kernel;
+    if (!expect_payload("payload shifted GPA", &layout, LinuxImageLen, sizeof ram, LinuxPayloadExtent)) return 0;
+    --layout.kernel;
+    --layout.kernel_bytes;
+    if (!expect_payload("payload shortened copy", &layout, LinuxImageLen, sizeof ram, LinuxPayloadExtent)) return 0;
+    ++layout.kernel_bytes;
+    return expect_payload("payload restored", &layout, LinuxImageLen, sizeof ram, LinuxPayloadExact);
+}
+
 int main(int argc, char **argv)
 {
     if (argc != 4) { fputs("usage: linux_final_inputs_test vmlinuz-virt initramfs.cpio cmdline.bin\n", stderr); return 2; }
     if (!load_exact(argv[1], stage + LinuxImageOff, LinuxImageLen) ||
         !load_exact(argv[2], stage + LinuxRdOff, LinuxRdLen) ||
         !load_exact(argv[3], stage + LinuxCmdOff, LinuxCmdLen) || !authentic()) return 1;
+    /* Source refusal precedes materialization. Restore and authenticate again
+     * before using the unmodified builder; destination controls never edit staging. */
+    stage[LinuxImageOff + LinuxImageLen - 1] ^= 1;
+    if (linux_bad_input(stage) != LinuxInputKernel) {
+        fputs("changed source escaped kernel SHA-256 gate\n", stderr);
+        return 1;
+    }
+    puts("changed vmlinuz source: refused by kernel SHA-256 gate");
+    stage[LinuxImageOff + LinuxImageLen - 1] ^= 1;
+    if (!authentic()) return 1;
     LinuxLayout layout;
     const char *err = build_linux_layout(ram, sizeof ram, stage + LinuxImageOff, LinuxImageLen,
         stage + LinuxRdOff, LinuxRdLen, stage + LinuxCmdOff, LinuxCmdLen, &layout);
     if (err) { fprintf(stderr, "layout rejected: %s\n", err); return 1; }
-    if (!controls() || !authentic()) return 1;
+    if (!controls() || !payload_controls(layout) || !authentic()) return 1;
     puts("PASS: source pins unchanged; final-copy controls passed (host RAM snapshot only).");
     return 0;
 }

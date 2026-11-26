@@ -134,6 +134,7 @@ static void linux_fetch_vmcb(UINT8 *vmcb, UINT64 entry)
 }
 
 #include "fetch_fixture.h"
+#include "linux_payload_copy.h"
 
 #if defined(HV_INPUT_TEST) || defined(HV_ENTRY_TEST) || defined(HV_ACPI_MAP)
 extern volatile unsigned linux_vmrun_count; /* assembly increments just before VMRUN */
@@ -169,6 +170,10 @@ static const char *linux_verified_admit(UINT8 *base, enum LinuxInput *bad)
 #ifdef HV_ACPI_MAP
     if (!linux_acpi_publish(ram,LinuxRamBytes)) return "ACPI PUBLICATION";
 #endif
+    enum LinuxPayloadCopy copy=linux_payload_copy(&layout,media+LinuxImageOff,LinuxImageLen,
+                                                 ram,LinuxRamBytes);
+    if (copy==LinuxPayloadExtent) return "ADMIT PAYLOAD EXTENT";
+    if (copy!=LinuxPayloadExact) return "ADMIT PAYLOAD BYTES";
     linux_fetch_vmcb(vmcb,layout.entry);
     uint64_t walked;
     if (!fetch_walk(ram,LinuxRamBytes,FIELD(UINT64,Cr3),layout.entry,&walked) ||
