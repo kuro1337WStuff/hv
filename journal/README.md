@@ -4,6 +4,8 @@ Development host: Ryzen 9 9950X. Firmware runs use the `HV-SVM-L1` Hyper-V VM; h
 
 **Start here:** [Current status, feature trials and integration order](status.md). The entries below describe the integrated baseline through 041. Later feature evidence is published on `main` independently of its implementation; see [how trials are published](project-workflow.md).
 
+**[145 · W04 loader diagnostic frozen; VM not run](trials/145.md).** The checkpoint inventory guard stopped A before power-off. Read-only inspection verified the saved 144 screen and its ancestry. No Windows progress claimed.
+
 **[144 · First Windows Boot Manager instruction retired](trials/144.md): W03 PASS on bench A.** One cold boot of the frozen 143 image advanced RIP by four bytes and reduced RSP by 40. The queue retained `ATTENTION` for the unapproved screen. Windows kernel start remains unverified.
 
 **[143 · Windows entry prefix corrected; VM not run](trials/143.md):** the host rejected 1,020 altered entry encodings. Read-only follow-up established that the saved checkpoint displayed the exact 142 STOP with darker text. No boot occurred in trial 143.
