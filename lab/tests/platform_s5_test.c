@@ -59,7 +59,7 @@ static void prepare(PlatformS5 *s)
     uint8_t vector = 0xad;
     CHECK(platform_s5_take(s, &vector) && vector == 0x39);
     out(s, PowerPm1aEvent, 2, PowerEventGlobal, PowerIoHandled);
-    CHECK(platform_s5_advance(s, 8));
+    CHECK(platform_s5_advance_ns(s, 6705)); /* 8 completed PIT pulses */
     CHECK(s->irq.edge.pit.tick == 8 && !pit_periodic_out(&s->irq.edge.pit));
     CHECK(s->irq.edge.uart.base.busy && !s->irq.edge.uart.base.polls_busy);
     CHECK(s->irq.edge.irr == 0x11 && s->irq.edge.isr == 4 && s->irq.slave_isr == 2);
@@ -132,8 +132,8 @@ int main(void)
     grant(&p, 0x30); /* independently eligible even if no inputs advance */
     const PitUartPic *edge = &p.running.irq.edge;
     CHECK(edge->irr == 0x10 && edge->isr == 5);
-    CHECK(!platform_s5_advance(&p.stopped, 9)); frozen(&p);
-    CHECK(platform_s5_advance(&p.running, 9));
+    CHECK(!platform_s5_advance_ns(&p.stopped, 7543)); frozen(&p);
+    CHECK(platform_s5_advance_ns(&p.running, 7543)); /* pulse 9 */
     CHECK(edge->pit.tick == 9 && pit_periodic_out(&edge->pit) && edge->irr == 0x11);
     read_both(&p, 0x3fd, 1, 0); /* LSR busy poll drains TX and rearms THRE */
     CHECK(!edge->uart.base.busy && edge->uart.base.polls_busy == 1 && uart16450_irq4(&edge->uart));
