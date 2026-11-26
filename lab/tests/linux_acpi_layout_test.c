@@ -11,6 +11,24 @@
 static uint8_t ram[LinuxRamBytes], before[LinuxRamBytes];
 #define CHECK(e) do { if (!(e)) { fprintf(stderr,"line %d: %s\n",__LINE__,#e); return 1; } } while (0)
 
+/* Starting from a valid published SDT, offset a single changed field with
+ * the opposite checksum delta. Undo only those two fixture writes; the final
+ * RAM comparison also catches writes elsewhere by the validator. */
+static int rejects_field(unsigned gpa, unsigned field, uint8_t mask)
+{
+    uint8_t *t = ram + gpa;
+    const uint8_t *original = before + gpa;
+    uint8_t changed = (uint8_t)(original[field] ^ mask);
+    uint8_t checksum = (uint8_t)(original[9] + original[field] - changed);
+    t[field] = changed;
+    t[9] = checksum;
+    int refused = !linux_acpi_valid(ram, sizeof ram) && t[field] == changed && t[9] == checksum;
+    if (!refused) fprintf(stderr, "guest SDT %#x field %u mask %#x\n", gpa, field, (unsigned)mask);
+    t[field] = original[field];
+    t[9] = original[9];
+    return refused;
+}
+
 /** Exercise the real pinned placement code with a small protocol-compatible byte
  * fixture (not a bootable kernel). Check rejection atomicity against the entire
  * image, including poisoned backing for the nonpresent PC hole. */
@@ -54,6 +72,27 @@ int main(void)
     for (unsigned i=0; i<sizeof corrupt/sizeof corrupt[0]; ++i) {
         ram[corrupt[i]] ^= 1; CHECK(!linux_acpi_valid(ram,sizeof ram)); ram[corrupt[i]] ^= 1;
     }
-    puts("PASS: host ACPI publication, exact e820 split, unchanged hole and corruption controls");
+    /* Mutate the already-published guest bytes independently. Include both
+     * low and upper address bits: a truncated port/GAS match is not enough. */
+    const unsigned fadt_fields[] = {
+        8, 131, 46, 47, 48, 51, 52, 53,     /* revision, SCI, SMI/enable/disable */
+        56, 59, 60, 64, 67, 68, 72, 76, 80, 84, /* legacy PM/GPE addresses */
+        88, 89, 90, 91, 92, 93, 94, 109, 116, 128,
+        148, 149, 150, 151, 152, 159,       /* event GAS and full address */
+        160, 171, 172, 173, 174, 175, 176, 183, /* PM1b event, control GAS */
+        184, 195, 196, 208, 220, 232, 244, 256 /* absent optional GAS */
+    };
+    for (unsigned i=0; i<sizeof fadt_fields/sizeof fadt_fields[0]; ++i)
+        CHECK(rejects_field(0x90080, fadt_fields[i], 1));
+    CHECK(rejects_field(0x90080, 114, 0x10)); /* HW_REDUCED_ACPI */
+    CHECK(rejects_field(0x90040, 8, 1)); /* XSDT revision */
+    CHECK(rejects_field(0x90200, 8, 1)); /* DSDT revision */
+    for (unsigned offset=36; offset<50; ++offset)
+        CHECK(rejects_field(0x90200, offset, 1)); /* each fixed AML byte */
+    ram[PowerFacsGpa+16] = 1; /* global lock is guest-writable, not sealed */
+    CHECK(linux_acpi_valid(ram,sizeof ram));
+    ram[PowerFacsGpa+16] = 0;
+    CHECK(!memcmp(before,ram,sizeof ram));
+    puts("PASS: host ACPI publication, fixed power fields and S5 AML, writable FACS, unchanged backing");
     return 0;
 }
