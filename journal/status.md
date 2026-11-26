@@ -1,4 +1,4 @@
-# Project status · through 139
+# Project status · through 140
 
 **On `main`:** firmware baseline [041](README.md), plus CI-only [#2](https://github.com/kuro1337WStuff/hv/pull/2) at `735c8b56` after both hosted checks passed on `54bace3b`. **On `feature/l1-handoff` only:** [#4](https://github.com/kuro1337WStuff/hv/pull/4) merged at `95abe46c`; [#10](https://github.com/kuro1337WStuff/hv/pull/10) retargeted, then squashed at `44fb6247`. The resulting firmware trees matched the source trees used in 060 and 063 respectively. Revert #10 first if both must be undone; #4 is a merge commit. No ordinary Linux boot or bare-metal qualification.
 
@@ -6,9 +6,9 @@
 
 ## Where to resume
 
-**Next milestone: [Windows 10 boots as L2 under our standalone AMD SVM/NPT L1](https://github.com/kuro1337WStuff/hv/issues/203). W01 passed; W02 is the first unverified gate.** [139](trials/139.md) tied cold reset at `0xfffffff0` to the first fetch at the pinned OVMF SEC entry `0xfffd44d4` in one L2 run. The SEC page stayed non-executable. Next proof: PEI using guest-private memory followed by an L2-originated DXE marker in the same run. A direct Hyper-V Windows boot does not count. Neither does WinPE/Setup alone: the final observation is an installed Windows 10 user-mode process reporting its build and system volume in that L2.
+**Next milestone: [Windows 10 boots as L2 under our standalone AMD SVM/NPT L1](https://github.com/kuro1337WStuff/hv/issues/203). W01 and W02 passed; W03 is the first unverified gate.** [139](trials/139.md) established the cold reset-to-SEC fetch. In [140](trials/140.md), guest PEI used private permanent memory and executing DXE Core emitted the later marker in the same run. This fixed firmware has no Windows boot path. W03 needs the pinned Windows Boot Manager executing in L2 after guest UEFI handoff. The final milestone still requires an installed Windows 10 user-mode process reporting its build and system volume; WinPE/Setup alone does not qualify.
 
-**A:** held at [139](trials/139.md). Preserve its console and pre-139 checkpoint. Review the W02 image and its PEI-to-DXE witness, reserve a fresh trial in #13 and approve the transition before any boot. No replay of [138](trials/138.md) or 139. **B:** identify the original session, witness teardown and independently establish release of both its handle and the board lease ([094](trials/094.md)). Each future task must name its boot gate, diagram and proving observation. [#201](https://github.com/kuro1337WStuff/hv/issues/201) and new optical fixtures are paused unless a guest trace shows the first blocking storage request. The versioned diagnostic hypercall ABI remains a separate release criterion.
+**A:** held at [140](trials/140.md). Preserve the live console and pre-140 checkpoint. Before the next boot, review W03 media and an independent Windows EFI execution witness, reserve a fresh trial in #13 and approve the transition from 140. No replay. **B:** identify the original session, witness teardown and independently establish release of both its handle and the board lease ([094](trials/094.md)). Each future task must name its boot gate, diagram and proving observation. [#201](https://github.com/kuro1337WStuff/hv/issues/201) and new optical fixtures are paused unless a guest trace shows the first blocking storage request. The versioned diagnostic hypercall ABI remains a separate release criterion.
 
 | Work item | State | Next decision |
 | --- | --- | --- |
