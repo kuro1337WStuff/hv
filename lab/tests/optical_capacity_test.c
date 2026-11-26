@@ -58,7 +58,8 @@ static bool rejected(const OpticalMedium *media, const uint8_t *cdb, size_t leng
     const Backing *b = media->context;
     const unsigned before = b->calls;
     memset(out, canary, sizeof out);
-    return !optical_media_command(media, cdb, length, out + guard, capacity) &&
+    const OpticalReply result = optical_media_command(media, cdb, length, out + guard, capacity);
+    return !result.accepted && result.transferred == 0 &&
            before == b->calls && untouched(out, sizeof out);
 }
 
@@ -72,7 +73,8 @@ static int authored_controls(void)
     static const uint8_t expected[8] = {0, 0, 0, 2, 0, 0, 8, 0};
     uint8_t reply[guard + 8 + guard];
     memset(reply, canary, sizeof reply);
-    CHECK(optical_media_command(&media, capacity_cdb, sizeof capacity_cdb, reply + guard, sizeof reply - guard));
+    OpticalReply result = optical_media_command(&media, capacity_cdb, sizeof capacity_cdb, reply + guard, sizeof reply - guard);
+    CHECK(result.accepted && result.transferred == sizeof expected);
     CHECK(backing.calls == 0);
     CHECK(memcmp(reply + guard, expected, sizeof expected) == 0);
     CHECK(untouched(reply, guard) && untouched(reply + guard + 8, guard));
@@ -84,7 +86,8 @@ static int authored_controls(void)
     uint8_t out[guard + sector + guard];
     memset(out, canary, sizeof out);
     read10_lba(cdb, last);
-    CHECK(optical_media_command(&media, cdb, sizeof cdb, out + guard, block_bytes));
+    result = optical_media_command(&media, cdb, sizeof cdb, out + guard, block_bytes);
+    CHECK(result.accepted && result.transferred == block_bytes);
     CHECK(backing.calls == 1 && backing.last_lba == last && backing.last_bytes == block_bytes);
     CHECK(memcmp(out + guard, backing.data + (sectors - 1) * sector, sector) == 0);
     CHECK(untouched(out, guard) && untouched(out + guard + sector, guard));
@@ -111,7 +114,8 @@ static int authored_controls(void)
     const uint8_t rc16[16] = {0x9e, 0x10};
     CHECK(rejected(&media, rc16, sizeof rc16, 32));
     for (size_t n = 0; n < 8; ++n) CHECK(rejected(&media, capacity_cdb, sizeof capacity_cdb, n));
-    CHECK(!optical_media_command(&media, capacity_cdb, sizeof capacity_cdb, NULL, 8));
+    result = optical_media_command(&media, capacity_cdb, sizeof capacity_cdb, NULL, 8);
+    CHECK(!result.accepted && result.transferred == 0);
     CHECK(backing.calls == 1);
     const OpticalMedium empty = {0, view, &backing};
     CHECK(rejected(&empty, capacity_cdb, sizeof capacity_cdb, 8));
@@ -127,7 +131,8 @@ static int authored_controls(void)
     for (size_t i = 0; i < sizeof cases / sizeof cases[0]; ++i) {
         const OpticalMedium geometry = {cases[i].blocks, view, &backing};
         memset(reply, canary, sizeof reply);
-        CHECK(optical_media_command(&geometry, capacity_cdb, sizeof capacity_cdb, reply + guard, 8));
+        result = optical_media_command(&geometry, capacity_cdb, sizeof capacity_cdb, reply + guard, 8);
+        CHECK(result.accepted && result.transferred == 8);
         CHECK(memcmp(reply + guard, cases[i].wire, 8) == 0);
         CHECK(untouched(reply, guard) && untouched(reply + guard + 8, guard));
         CHECK(backing.calls == 1);
@@ -147,7 +152,8 @@ static int emit_capacity(const char *text)
     if (bytes == 0 || bytes % sector != 0) return 1;
     const OpticalMedium media = {bytes / sector, NULL, NULL};
     uint8_t reply[8];
-    if (!optical_media_command(&media, capacity_cdb, sizeof capacity_cdb, reply, sizeof reply)) return 1;
+    const OpticalReply result = optical_media_command(&media, capacity_cdb, sizeof capacity_cdb, reply, sizeof reply);
+    if (!result.accepted || result.transferred != sizeof reply) return 1;
 
     static const char hex[] = "0123456789abcdef";
     char line[17];

@@ -71,6 +71,10 @@ jobs:
           gcc -std=c11 -O2 -Wall -Wextra -Werror lab/tests/optical_capacity_test.c -o "$RUNNER_TEMP/optical-capacity"
           "$RUNNER_TEMP/optical-capacity"
           test "$("$RUNNER_TEMP/optical-capacity" --media-bytes 3839819776)" = "001c9bdf00000800"
+      - name: Check optical discovery with and without a disc
+        run: |
+          gcc -std=c11 -O2 -Wall -Wextra -Werror lab/tests/optical_discovery_test.c -o "$RUNNER_TEMP/optical-discovery"
+          "$RUNNER_TEMP/optical-discovery"
 
   master-pic:
     name: Shared master PIC arbitration
