@@ -45,3 +45,16 @@ jobs:
         run: |
           gcc -std=c11 -O2 -Wall -Wextra -Werror lab/tests/shared_sci_pic_test.c -o "$RUNNER_TEMP/shared-sci"
           "$RUNNER_TEMP/shared-sci"
+
+  cpu-state:
+    name: Legacy CPU state host controls
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Compile and run the cold floating-point image control
+        run: |
+          gcc -std=c11 -O2 -Wall -Wextra -Werror lab/tests/fp_cold_test.c -o "$RUNNER_TEMP/fp-cold"
+          "$RUNNER_TEMP/fp-cold"

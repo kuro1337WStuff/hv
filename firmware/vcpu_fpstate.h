@@ -1,31 +1,16 @@
 #ifndef HV_VCPU_FPSTATE_H
 #define HV_VCPU_FPSTATE_H
 
-#include <stddef.h>
+#include "vcpu_fp_image.h"
 
 extern const UINT8 FpStart[];
 extern const struct { UINT32 size, call, resume, pass, fail; } FpLayout;
 
-typedef struct { UINT64 sig; UINT16 se; UINT8 reserved[6]; } FpSt;
-typedef struct {
-    UINT16 cw, sw;
-    UINT8 tw, reserved1;
-    UINT16 op;
-    UINT64 ip, dp;
-    UINT32 mx, mask;
-    FpSt st[8];                    /* Logical ST(i); FTW instead uses physical Rn. */
-    UINT64 xmm[32];                /* Two QWORDs per XMM, low first. */
-    UINT8 reserved2[96];
-} FpImage;
-typedef struct __declspec(align(16)) { FpImage fx; UINT64 gpr[14]; } FpBank;
 /* Primitive ABI. The guest bank is in/out and includes no test metadata. */
 extern void RunLegacyVcpu(UINTN vmcb_pa, FpBank *guest);
 typedef struct { FpBank guest, seed, live, before, after; } FpWorkspace;
 extern void ObserveLegacyRun(UINTN vmcb_pa, FpWorkspace *work);
-_Static_assert(sizeof(FpImage)==512 && offsetof(FpImage,tw)==4 && offsetof(FpImage,mx)==24 &&
-               offsetof(FpImage,st)==32 && offsetof(FpImage,xmm)==160 && sizeof(FpSt)==16 &&
-               offsetof(FpBank,gpr)==512 && sizeof(FpBank)==0x270 && __alignof(FpBank)==16 &&
-               sizeof(FpWorkspace)==5*0x270 && sizeof(FpWorkspace)<=EFI_PAGE_SIZE,
+_Static_assert(sizeof(FpWorkspace)==5*0x270 && sizeof(FpWorkspace)<=EFI_PAGE_SIZE,
                "legacy state assembly ABI mismatch");
 _Static_assert(sizeof(FpLayout)==20 && LongStackGpa==0x7000 &&
                LongStackGpa+sizeof(FpBank)+2*sizeof(UINT32)<LongInitialRsp,
