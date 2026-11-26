@@ -10,6 +10,21 @@ python lab/hv_queue.py run
 
 The default order is `l2`, `cpuid`, `npt-write`, `npt-remap`, `npt-cross`. To rebuild and run just two profiles: `python lab/hv_queue.py run --rebuild npt-write npt-remap`. Without `--rebuild`, the runner uses the already-built ISOs in `build/`. It freezes the ordered profiles and SHA-256 digests for this batch before asking Windows to launch the visible Hyper-V worker. Building and staging use the caller's existing privileges. No change to UAC, no service and no per-test approval. An operator must still authorize elevation when Windows requires it.
 
+### Windows-visible core and SMT inventory (host only)
+
+From the project root, use an ordinary local x64 Windows shell with x64 Python 3.11+. The first command runs synthetic binary fixtures only; the second inventories the current host. Neither needs Hyper-V, elevation, affinity changes, a driver, or firmware access.
+
+```powershell
+python -m unittest -v lab.tests.win_core_inventory_test
+python lab/win_core_inventory.py
+```
+
+Read `os_visible.cores` as one active physical core per row. Its `logical_processors` are the members of that core (SMT siblings when more than one). `G:N` means Windows processor group `G`, bit `N` of its 64-bit affinity mask; `core-G:N` uses the lowest member as a deterministic label, not a persistent hardware/APIC ID. Identical topology produces identical labels regardless of record order. `independent_active_processors` comes from [`GetActiveProcessorCount(ALL_PROCESSOR_GROUPS)`](https://learn.microsoft.com/windows/win32/api/winbase/nf-winbase-getactiveprocessorcount). Exit zero means valid inventory and agreeing counts, **not** a target pass. Malformed data or a failed query exits nonzero with a diagnostic; if the two snapshots disagree, the JSON preserves both counts and exits nonzero. Recollect before drawing conclusions.
+
+`target.observed_shape_matches` compares only the observed sibling sets to 16 cores with two threads each (32 total). SMT disabled can legitimately show 16 single-member rows. `cpu_model_registry` is the separate local Windows CPU 0 brand string, or `null` if unavailable. Neither a matching name nor matching counts qualifies a board, shows disabled cores, tests another SKU, or demonstrates that a hypervisor launched any core.
+
+ABI: [`GetLogicalProcessorInformationEx(RelationProcessorCore)`](https://learn.microsoft.com/windows/win32/api/sysinfoapi/nf-sysinfoapi-getlogicalprocessorinformationex) returns one variable-sized [EX record](https://learn.microsoft.com/windows/win32/api/winnt/ns-winnt-system_logical_processor_information_ex) per active core across all groups. On x64 each [`PROCESSOR_RELATIONSHIP`](https://learn.microsoft.com/windows/win32/api/winnt/ns-winnt-processor_relationship) for a core has `GroupCount == 1`; the first [`GROUP_AFFINITY`](https://learn.microsoft.com/windows/win32/api/winnt/ns-winnt-group_affinity) begins at byte 32 of the EX record. The next record starts at the current record's declared `Size`, not a fixed stride.
+
 ### Host-only legacy PIC discovery and IRQ0 regression
 
 Use the root of the **combined source tree** in an ordinary x64 MSVC Developer Command Prompt. Build and run both controls there; each compile and each program must exit zero. These commands need no firmware build, queue session, VM or port I/O.

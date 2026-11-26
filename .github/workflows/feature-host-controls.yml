@@ -70,3 +70,5 @@ jobs:
         run: |
           gcc -std=c11 -O2 -Wall -Wextra -Werror lab/tests/fp_cold_test.c -o "$RUNNER_TEMP/fp-cold"
           "$RUNNER_TEMP/fp-cold"
+      - name: Verify Windows topology record fixtures without querying a host
+        run: python3 -B -m unittest -v lab.tests.win_core_inventory_test
