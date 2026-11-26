@@ -1,0 +1,11 @@
+{
+  "title": "AMD hypervisor qualification",
+  "reports": [
+    "feature-phase.json",
+    "cache-and-storage-127.json",
+    "linux-admission-129.json",
+    "windows-rehearsal-131.json",
+    "optical-child-132.json"
+  ],
+  "benchmarks": []
+}
