@@ -4,6 +4,8 @@ Development host: Ryzen 9 9950X. Firmware runs use the `HV-SVM-L1` Hyper-V VM; h
 
 **Start here:** [Current status, feature trials and integration order](status.md). The entries below describe the integrated baseline through 041. Later feature evidence is published on `main` independently of its implementation; see [how trials are published](project-workflow.md).
 
+**[126 · Windows L3 sharing](trials/126.md):** the 9950X had two OS-visible 32 MiB unified L3 caches, each shared by eight complete SMT cores. The observed masks cover all 32 logical processors exactly once. No 9950X3D was measured.
+
 **[125 · Guest UEFI memory-map key](trials/125.md):** allocating one page invalidated the previous key. The stale exit failed, the fresh exit succeeded, and boot-only operations became unavailable. [124–125 figure](reports/windows-prerequisites-125.svg) · [source](reports/windows-prerequisites-125.json).
 
 **[124 · Windows-visible cores and SMT siblings](trials/124.md):** the 9950X development host reported 16 two-thread cores; an independent Windows call counted the same 32 active logical processors. This does not qualify the 9950X3D or show that the hypervisor started any of those processors.
