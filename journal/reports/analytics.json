@@ -6,7 +6,8 @@
     "linux-admission-129.json",
     "windows-rehearsal-131.json",
     "optical-child-132.json",
-    "install-content-134.json"
+    "install-content-134.json",
+    "optical-read10-135.json"
   ],
   "benchmarks": []
 }
