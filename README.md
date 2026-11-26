@@ -7,7 +7,7 @@ The target is a **bare-metal x86-64 hypervisor that starts before Windows Boot M
 | Evidence | Result and limit |
 |---|---|
 | **`main` firmware through [041][runtime]** | A standalone L1 took control after UEFI boot services ended, ran fixed L2 guests, and checked their registers, memory and exits. |
-| **Host checks and design reviews through [127](journal/trials/127.md)** | [126–127: 9950X cache sharing and Windows Setup storage](journal/reports/cache-and-storage-127.svg). The development CPU had two 32 MiB L3 caches. Setup media contained an AHCI driver; it did not demonstrate a working virtio-SCSI path. [Earlier feature trials][features] ran fixed guests, not Windows. |
+| **Host checks and reviews through [129](journal/trials/129.md)** | [128–129: Linux entry checks](journal/reports/linux-admission-129.svg) rejected stale CPU-state fields and a changed last byte in the loaded kernel. No guest ran. [126–127](journal/reports/cache-and-storage-127.svg) cover 9950X cache sharing and the Windows Setup storage inventory. |
 | **Not qualified** | No ordinary Linux or Windows guest boot; no physical boot from removable media. The physical targets are **9950X first, then 9950X3D**; each requires separate qualification. There is no five-year AMD compatibility promise; Intel VMX/EPT is out of scope. |
 
 ## Target architecture
