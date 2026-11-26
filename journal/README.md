@@ -4,6 +4,8 @@ Development host: Ryzen 9 9950X. Firmware runs use the `HV-SVM-L1` Hyper-V VM; h
 
 **Start here:** [Current status, feature trials and integration order](status.md). The entries below describe the integrated baseline through 041. Later feature evidence is published on `main` independently of its implementation; see [how trials are published](project-workflow.md).
 
+**[130 · Firmware reset address](trials/130.md):** one read at `0xfffffff0` returned the final 16 bytes of an inert CODE buffer. Removing its last page produced no backing reads and no output change. No firmware instructions ran.
+
 **[129 · Loaded kernel identity](trials/129.md):** the post-load check matched the full authenticated payload and caught a changed last byte. It does not establish that the pages stay unchanged. [128–129 figure](reports/linux-admission-129.svg) · [source](reports/linux-admission-129.json).
 
 **[128 · Cold syscall state](trials/128.md):** the stored entry image passed clean and failed with each of eight stale fields. Host test only; effective CPU-state transfer is still open.
