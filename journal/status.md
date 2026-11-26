@@ -1,4 +1,4 @@
-# Project status · through 123
+# Project status · through 124
 
 **On `main`:** firmware baseline [041](README.md), plus CI-only [#2](https://github.com/kuro1337WStuff/hv/pull/2) at `735c8b56` after both hosted checks passed on `54bace3b`. **On `feature/l1-handoff` only:** [#4](https://github.com/kuro1337WStuff/hv/pull/4) merged at `95abe46c`; [#10](https://github.com/kuro1337WStuff/hv/pull/10) retargeted, then squashed at `44fb6247`. The resulting firmware trees matched the source trees used in 060 and 063 respectively. Revert #10 first if both must be undone; #4 is a merge commit. No ordinary Linux boot or bare-metal qualification.
 
@@ -15,7 +15,7 @@
 
 **Merge routing:** [Dated PR-by-PR audit](merge-audit-072.md) · [live open PRs](https://github.com/kuro1337WStuff/hv/pulls) · [workflow and rollback](project-workflow.md). #21's test merge did not promote #12. Check the actual base, scope and source revision before each integration.
 
-**Boot and platform work:** [122](trials/122.md) tested the bounded shared UART; [123](trials/123.md) verified two overlapping file copies in the pinned Linux bring-up image. Next host checks for the [full-core Windows 10 target](../README.md): [#160 · inventory Windows-visible cores and SMT siblings](https://github.com/kuro1337WStuff/hv/issues/160) and [#161 · guest UEFI memory-map key and handoff](https://github.com/kuro1337WStuff/hv/issues/161). Linux remains a test gate with [0 of 2 qualifying boots](trials/106.md). [Bench B teardown](https://github.com/kuro1337WStuff/hv/issues/69) is still required before admission.
+**Windows target:** [124](trials/124.md) found 16 physical cores and 32 active logical processors on the 9950X development host. All 16 cores had two OS-visible SMT siblings. This was a Windows 11 inventory, not a Windows 10 guest boot or an all-core hypervisor launch. The 9950X3D was not measured. [#161 · guest UEFI map-key handoff](https://github.com/kuro1337WStuff/hv/issues/161) is a separate host model. Linux remains at [0 of 2 qualifying boots](trials/106.md); [bench B](https://github.com/kuro1337WStuff/hv/issues/69) remains held.
 
 **Reporting:** the project is qualifying features, not comparing speed. The [reporting guide](../lab/measurement/README.md) separates host, nested and physical evidence. Neither Windows boot nor full-core physical operation has been qualified on either Ryzen.
 

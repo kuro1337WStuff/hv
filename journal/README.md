@@ -4,6 +4,8 @@ Development host: Ryzen 9 9950X. Firmware runs use the `HV-SVM-L1` Hyper-V VM; h
 
 **Start here:** [Current status, feature trials and integration order](status.md). The entries below describe the integrated baseline through 041. Later feature evidence is published on `main` independently of its implementation; see [how trials are published](project-workflow.md).
 
+**[124 · Windows-visible cores and SMT siblings](trials/124.md):** the 9950X development host reported 16 two-thread cores; an independent Windows call counted the same 32 active logical processors. This does not qualify the 9950X3D or show that the hypervisor started any of those processors.
+
 **[123 · Overlapping ELF segment copies](trials/123.md):** the two file-backed destinations matched their immutable sources. Copying memory size instead of file size damaged the tail even though the entry-page digest still matched. [122–123 figure](reports/serial-and-segments-123.svg) · [source](reports/serial-and-segments-123.json).
 
 **[122 · Bounded UART capture](trials/122.md):** one shared UART recorded 20 binary bytes, preserved IRQ4 service at capacity, and rejected new bytes after S5. The original 16-byte fixture stayed fixed.
