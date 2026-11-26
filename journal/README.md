@@ -4,6 +4,8 @@ Development host: Ryzen 9 9950X. Firmware runs use the `HV-SVM-L1` Hyper-V VM; h
 
 **Start here:** [Current status, feature trials and integration order](status.md). The entries below describe the integrated baseline through 041. Later feature evidence is published on `main` independently of its implementation; see [how trials are published](project-workflow.md).
 
+**[141 · Windows Boot Manager handoff](trials/141.md):** bench A reached DXE, then faulted writing its own sealed `.text`. The Windows load-ready marker and retired entry count were both zero. W03 remains open.
+
 **[140 · Guest PEI memory to DXE Core](trials/140.md):** in one cold bench A run, PEI reported verified guest-private page `0x07ff5000`, then DXE Core issued its marker at `0x07fd8365`. W02 passed on review; queue `ATTENTION` retained. Next: guest UEFI executes Windows Boot Manager.
 
 **[139 · L2 reset to OVMF SEC](trials/139.md):** on bench A, the cold reset fetch at `0xfffffff0` and the first fetch at the pinned SEC entry `0xfffd44d4` appeared in one run. W01 passed on review; the queue retained `ATTENTION` for the unpinned screen. Next: PEI to DXE, not Windows yet.
