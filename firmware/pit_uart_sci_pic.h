@@ -66,7 +66,7 @@ static inline int pit_uart_sci_pic_take(PitUartSciPic *s, uint8_t *vector)
 {
     if (!s || !vector) return 0;
     uint8_t eligible = pit_uart_sci_pic_eligible(s);
-    if ((eligible & (PitUartIrq0 | PowerSciCascadeBit)) == PowerSciCascadeBit) {
+    if (!(eligible & PitUartIrq0) && (eligible & PowerSciCascadeBit)) {
         s->edge.isr |= PowerSciCascadeBit;
         s->slave_isr |= PowerSciSlaveBit;
         *vector = PIC8259_SLAVE_BASE + 1;
