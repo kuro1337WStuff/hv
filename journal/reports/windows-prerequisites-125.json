@@ -1,0 +1,22 @@
+{
+  "title": "Windows topology and boot-services handoff",
+  "records": [
+    {
+      "label": "9950X Windows core and SMT inventory",
+      "scope": "host",
+      "status": "passed",
+      "trial": "124",
+      "commit": "59453dab548d",
+      "source": "journal/trials/124.md"
+    },
+    {
+      "label": "Guest UEFI map-key handoff model",
+      "scope": "host",
+      "status": "passed",
+      "trial": "125",
+      "commit": "3f5f9f055bd7",
+      "source": "journal/trials/125.md"
+    }
+  ],
+  "comparisons": []
+}

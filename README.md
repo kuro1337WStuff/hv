@@ -7,7 +7,7 @@ The target is a **bare-metal x86-64 hypervisor that starts before Windows Boot M
 | Evidence | Result and limit |
 |---|---|
 | **`main` firmware through [041][runtime]** | A standalone L1 took control after UEFI boot services ended, ran fixed L2 guests, and checked their registers, memory and exits. |
-| **Host checks and design reviews through [123](journal/trials/123.md)** | [122–123: bounded serial capture and Linux segment placement](journal/reports/serial-and-segments-123.svg). Earlier reports cover [shared timer and loader boundaries](journal/reports/shared-clock-and-loader-121.svg) and [cold vCPU state and shutdown](journal/reports/cold-state-and-shutdown-119.svg). [Earlier feature trials][features] ran fixed guests; no ordinary OS has booted. |
+| **Host checks and design reviews through [125](journal/trials/125.md)** | [124–125: Windows topology and boot-services handoff](journal/reports/windows-prerequisites-125.svg). Windows saw 16 two-thread cores on the 9950X development host; a separate host model rejected a stale UEFI map key. Neither is a Windows guest boot. [Earlier feature trials][features] ran fixed guests. |
 | **Not qualified** | No ordinary Linux or Windows guest boot; no physical boot from removable media. The physical targets are **9950X first, then 9950X3D**; each requires separate qualification. There is no five-year AMD compatibility promise; Intel VMX/EPT is out of scope. |
 
 ## Target architecture
