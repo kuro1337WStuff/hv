@@ -1,0 +1,8 @@
+{
+  "title": "Windows optical installation content",
+  "records": [
+    {"label":"Outer installation range matches raw sectors","scope":"host","status":"passed","trial":"134","commit":"467d05479b8a","source":"journal/trials/134.md"},
+    {"label":"Windows Setup optical access on Q35 AHCI","scope":"nested","status":"not-run","trial":"134","commit":"467d05479b8a","source":"journal/trials/134.md"}
+  ],
+  "comparisons": []
+}

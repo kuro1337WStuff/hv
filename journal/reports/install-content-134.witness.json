@@ -1,0 +1,20 @@
+{
+  "scope": "host-only",
+  "media_size": 3839819776,
+  "media_sha256": "a11116c0645d892d6a5a7c585ecc1fa13aa66f8c7cc6b03bf1f27bd16860cc35",
+  "filesystem": "UDF",
+  "member": "sources/install.esd",
+  "file_size": 3135611742,
+  "file_sha256": "42d234f69a8cacb657ac67b24b72b40a3c3ce8844ec0d947c9e2ca862e819cfb",
+  "file_offset": 65520,
+  "length": 64,
+  "logical_block_size": 2048,
+  "first_lba": 247061,
+  "sector_offset": 2032,
+  "last_lba": 247062,
+  "raw_byte_offset": 505982960,
+  "range_sha256": "8d0dd15b53bcd7a6448f5fc564381655a87356b3f19909b3123143b55f0d9461",
+  "one_block_shift_sha256": "72776bd9740844b75785fdf3792a1368b29a09dbbdfc7c209d6eef0fe419457f",
+  "one_sector_short_outcome": "refused: image size does not match measured media size",
+  "guest_read": "not-run"
+}

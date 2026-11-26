@@ -7,7 +7,7 @@ The target is a **bare-metal x86-64 hypervisor that starts before Windows Boot M
 | Evidence | Result and limit |
 |---|---|
 | **`main` firmware through [041][runtime]** | A standalone L1 took control after UEFI boot services ended, ran fixed L2 guests, and checked their registers, memory and exits. |
-| **Host checks and reviews through [132](journal/trials/132.md)** | The selected Windows Setup image contains a candidate CD-ROM driver for the [virtual AHCI rehearsal](journal/trials/131.md); Windows has not read the disc. [128–129](journal/reports/linux-admission-129.svg) cover Linux entry checks. |
+| **Host checks through [134](journal/trials/134.md)** | Independent file and sector reads agree on a known range of the Windows installation payload. The [selected Setup index](journal/trials/132.md) names an optical driver candidate; Windows has not read the disc. [128–129](journal/reports/linux-admission-129.svg) cover Linux entry checks. |
 | **Not qualified** | No ordinary Linux or Windows guest boot; no physical boot from removable media. The physical targets are **9950X first, then 9950X3D**; each requires separate qualification. There is no five-year AMD compatibility promise; Intel VMX/EPT is out of scope. |
 
 ## Target architecture
