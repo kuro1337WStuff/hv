@@ -1,0 +1,33 @@
+## W02 fixed, single-BSP, cold-only lab board. Not a PC chipset driver.
+[Defines]
+  INF_VERSION = 0x00010005
+  BASE_NAME = W02BoardPei
+  FILE_GUID = 05af1e9c-81fa-49bd-87ed-f39ff34962b8
+  MODULE_TYPE = PEIM
+  VERSION_STRING = 1.0
+  ENTRY_POINT = BoardPei
+
+[Sources]
+  BoardPei.c
+
+[Packages]
+  MdePkg/MdePkg.dec
+  OvmfPkg/OvmfPkg.dec
+
+[LibraryClasses]
+  PeimEntryPoint
+  PeiServicesLib
+  HobLib
+  PcdLib
+
+[Ppis]
+  gEfiPeiMasterBootModePpiGuid
+
+[Pcd]
+  gUefiOvmfPkgTokenSpaceGuid.PcdOvmfDxeMemFvBase
+  gUefiOvmfPkgTokenSpaceGuid.PcdOvmfDxeMemFvSize
+  gUefiOvmfPkgTokenSpaceGuid.PcdOvmfPeiMemFvBase
+  gUefiOvmfPkgTokenSpaceGuid.PcdOvmfPeiMemFvSize
+
+[Depex]
+  TRUE
