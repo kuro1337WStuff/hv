@@ -1,0 +1,38 @@
+{
+  "title": "Guest readiness: evidence and missing boots",
+  "records": [
+    {
+      "label": "Linux cold-boot evidence comparator",
+      "scope": "host",
+      "status": "passed",
+      "trial": "106",
+      "commit": "2936af7fe9e2",
+      "source": "journal/trials/106.md"
+    },
+    {
+      "label": "Windows optical image and BCD identification",
+      "scope": "host",
+      "status": "passed",
+      "trial": "107",
+      "commit": "b551ebb3df41",
+      "source": "journal/trials/107.md"
+    },
+    {
+      "label": "Two qualifying Linux cold boots",
+      "scope": "nested",
+      "status": "not-run",
+      "trial": "106",
+      "commit": "2936af7fe9e2",
+      "source": "journal/trials/106.md"
+    },
+    {
+      "label": "Windows Setup startup",
+      "scope": "nested",
+      "status": "not-run",
+      "trial": "107",
+      "commit": "b551ebb3df41",
+      "source": "journal/trials/107.md"
+    }
+  ],
+  "comparisons": []
+}

@@ -4,6 +4,8 @@ Development host: Ryzen 9 9950X. Firmware runs use the `HV-SVM-L1` Hyper-V VM; h
 
 **Start here:** [Current status, feature trials and integration order](status.md). The entries below describe the integrated baseline through 041. Later feature evidence is published on `main` independently of its implementation; see [how trials are published](project-workflow.md).
 
+**[107 · Windows optical boot path](trials/107.md):** the catalog selects a different EFI application than the same-named file in the outer filesystem. The EFI BCD points to Windows Setup. L2 has no demonstrated optical boot service; no installer ran. [Readiness figure](reports/guest-readiness-107.svg) · [source records](reports/guest-readiness-107.json).
+
 **[106 · Two independent cold-boot records](trials/106.md):** the host comparator rejected reused starts, resumes and overlapping terminal captures. Matching output from separate synthetic boots was accepted without changing either disposition. No qualifying Linux boots yet.
 
 **[105 · No device I/O after virtual S5](trials/105.md):** serial and ACPI traffic shared one running-state check. The capture stayed `AB` after shutdown; subsequent I/O left device state and operands untouched. [Paired host results](reports/fixed-platform-105.svg) · [source records](reports/fixed-platform-105.json).
