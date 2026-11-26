@@ -1,4 +1,4 @@
-# Project status · through 126
+# Project status · through 127
 
 **On `main`:** firmware baseline [041](README.md), plus CI-only [#2](https://github.com/kuro1337WStuff/hv/pull/2) at `735c8b56` after both hosted checks passed on `54bace3b`. **On `feature/l1-handoff` only:** [#4](https://github.com/kuro1337WStuff/hv/pull/4) merged at `95abe46c`; [#10](https://github.com/kuro1337WStuff/hv/pull/10) retargeted, then squashed at `44fb6247`. The resulting firmware trees matched the source trees used in 060 and 063 respectively. Revert #10 first if both must be undone; #4 is a merge commit. No ordinary Linux boot or bare-metal qualification.
 
@@ -15,7 +15,7 @@
 
 **Merge routing:** [Dated PR-by-PR audit](merge-audit-072.md) · [live open PRs](https://github.com/kuro1337WStuff/hv/pulls) · [workflow and rollback](project-workflow.md). #21's test merge did not promote #12. Check the actual base, scope and source revision before each integration.
 
-**Windows target:** [126](trials/126.md) found two 32 MiB unified L3 caches on the development 9950X, with no missing logical processors or split SMT siblings. [125](trials/125.md) exercised a guest firmware map-key model. [#164](https://github.com/kuro1337WStuff/hv/issues/164) checks the proposed WinPE storage driver offline. Neither Windows 10 nor the 9950X3D has been qualified. Linux remains at [0 of 2 qualifying boots](trials/106.md); [bench B](https://github.com/kuro1337WStuff/hv/issues/69) remains held.
+**Windows target:** [126](trials/126.md) found two 32 MiB L3 sharing groups on the development 9950X. [127](trials/127.md) traced an AHCI model to an AMD64 binary in the selected Setup image; the proposed virtio-SCSI route still lacks a demonstrated binding. Next: [#169 · check the OVMF reset-window address](https://github.com/kuro1337WStuff/hv/issues/169) and [#170 · choose the nested storage route](https://github.com/kuro1337WStuff/hv/issues/170). No Windows guest or physical boot. Linux remains at [0 of 2 qualifying boots](trials/106.md); [bench B](https://github.com/kuro1337WStuff/hv/issues/69) remains held.
 
 **Reporting:** the project is qualifying features, not comparing speed. The [reporting guide](../lab/measurement/README.md) separates host, nested and physical evidence. Neither Windows boot nor full-core physical operation has been qualified on either Ryzen.
 
