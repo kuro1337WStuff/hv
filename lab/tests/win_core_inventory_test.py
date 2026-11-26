@@ -15,6 +15,14 @@ def record(group, mask, *, group_count=1, tail=b'', flags=None, relation=0, size
     return struct.pack('<II', relation, 8 + len(processor) if size is None else size) + processor
 
 
+def cache(*group_masks, mib=32, level=3, kind=0, count=None, tail=b''):
+    prefix = struct.pack('<BBHII18xH', level, 0xff, 64, mib << 20, kind,
+                         len(group_masks) if count is None else count)
+    masks = b''.join(struct.pack('<QH6x', mask, group) for group, mask in group_masks)
+    payload = prefix + masks + tail
+    return struct.pack('<II', 2, 8 + len(payload)) + payload
+
+
 class WinCoreInventoryTest(unittest.TestCase):
     def test_sparse_groups_and_variable_strides(self):
         first = record(0, (1 << 63) | (1 << 4), tail=b'\xcc' * 16)
@@ -63,6 +71,64 @@ class WinCoreInventoryTest(unittest.TestCase):
         for blob, message in cases:
             with self.subTest(blob=blob, message=message), self.assertRaisesRegex(ValueError, message):
                 core_members(blob)
+
+
+class WinL3InventoryTest(unittest.TestCase):
+    cores = b''.join(record(0, 3 << bit) for bit in range(0, 32, 2))
+
+    def test_symmetric_and_asymmetric_same_core_shape(self):
+        low = cache((0, 0xffff), count=0, tail=b'\xcc' * 16)  # Legacy GroupMask.
+        for high_mib in (32, 96):
+            with self.subTest(high_mib=high_mib):
+                high = cache((0, 0xffff0000), mib=high_mib)
+                report = inventory(self.cores, 32, 'fixture', cache_data=high + low)
+                l3 = report['unified_l3']
+                self.assertTrue(report['target']['core_shape_with_exact_l3_coverage'])
+                self.assertEqual(l3['coverage'], 'exact')
+                self.assertEqual(l3['caches'], [
+                    {'size_bytes': size << 20, 'logical_processors': [f'0:{i}' for i in range(n, n+16)],
+                     'intersecting_core_ids': [f'core-0:{i}' for i in range(n, n+16, 2)]}
+                    for n, size in [(0, 32), (16, high_mib)]])
+                self.assertEqual(report, inventory(self.cores, 32, 'fixture', cache_data=low + high))
+
+    def test_one_cache_spans_groups(self):
+        cores = record(2, 1 << 63) + record(0, 1 << 63)
+        data = cache((2, 1 << 63), (0, 1 << 63))
+        l3 = inventory(cores, 2, None, cache_data=data)['unified_l3']
+        self.assertEqual(l3['coverage'], 'exact')
+        self.assertEqual(l3['caches'], [{'size_bytes': 32 << 20, 'logical_processors': ['0:63', '2:63'],
+                                         'intersecting_core_ids': ['core-0:63', 'core-2:63']}])
+
+    def test_reject_bad_membership_despite_matching_active_and_core_counts(self):
+        for first, second, field, expected in [
+                (0xffff, 0xffff0001, 'overlapping_lps', ['0:0']),
+                (0xfffc, 0xffff0000, 'missing_lps', ['0:0', '0:1']),
+                (0xffff, 0x1ffff0000, 'unknown_lps', ['0:32']),
+                (0x7fff, 0xffff8000, 'split_sibling_core_ids', ['core-0:14'])]:
+            with self.subTest(field=field):
+                data = cache((0, first)) + cache((0, second))
+                report = inventory(self.cores, 32, None, cache_data=data)
+                self.assertTrue(report['counts_agree'])
+                self.assertTrue(report['target']['observed_shape_matches'])
+                self.assertFalse(report['target']['core_shape_with_exact_l3_coverage'])
+                self.assertEqual(report['unified_l3']['coverage'], 'inconsistent')
+                self.assertEqual(report['unified_l3'][field], expected)
+
+    def test_no_unified_l3(self):
+        for data in (b'', cache((0, 1), level=2) + cache((0, 1), kind=2)):
+            report = inventory(record(0, 1), 1, None, cache_data=data)
+            self.assertEqual(report['unified_l3']['coverage'], 'absent')
+            self.assertEqual(report['unified_l3']['caches'], [])
+
+    def test_malformed_not_absent(self):
+        good = cache((0, 1))
+        for data, error in [(good[:-1], 'record size'), (good + good[:7], 'truncated'),
+                            (cache(count=0), 'record size'), (record(0, 1), 'relationship'),
+                            (cache((0, 1), count=2, level=2) + good, 'GroupCount'),
+                            (cache((0, 0)), 'affinity'), (cache((65535, 1)), 'affinity'),
+                            (cache((2, 1), (2, 2)), 'duplicate group'), (cache((0, 1), mib=0), 'size')]:
+            with self.subTest(error=error, data=data), self.assertRaisesRegex(ValueError, error):
+                inventory(record(0, 1), 1, None, cache_data=data)
 
 
 if __name__ == '__main__':
