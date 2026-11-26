@@ -1,0 +1,22 @@
+{
+  "title": "Linux cold state and loaded kernel identity",
+  "records": [
+    {
+      "label": "Eight stored adjunct fields",
+      "scope": "host",
+      "status": "passed",
+      "trial": "128",
+      "commit": "cfafc3ece2fe",
+      "source": "journal/trials/128.md"
+    },
+    {
+      "label": "Complete loaded kernel payload",
+      "scope": "host",
+      "status": "passed",
+      "trial": "129",
+      "commit": "1a057bcc38c9",
+      "source": "journal/trials/129.md"
+    }
+  ],
+  "comparisons": []
+}
