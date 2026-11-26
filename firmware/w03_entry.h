@@ -82,11 +82,9 @@ static const char *w03_entry(UINT8 *vmcb, UINT64 *g, W01Evidence *e, W02State *s
     if (!w03_loaded_text(vmcb,s->boot_base)) return "RELOCATED BOOT TEXT";
     /* Admit just the independently identified register-only SUB RSP, imm8
      * prologue. No control-transfer instruction or generic Windows decoder. */
-    const UINT8 *p=w02_back(vmcb,pc,15);
+    const UINT8 *p=w02_back(vmcb,pc,4);
     if (!p) return "ENTRY RANGE";
-    W02Insn d=w02_decode(p,4);
-    if (d.k!=W02Native || d.n!=4 || d.rex!=8 || d.op!=0x83 || d.modrm!=0xec || p[3]!=40)
-        return "ENTRY INSTRUCTION";
+    if (!w03_entry_prologue(p)) return "ENTRY INSTRUCTION";
     UINT64 *leaf=w02_leaf(vmcb,pc);
     if ((*leaf&(W01_NX|7))!=(W01_NX|7)) return "ENTRY PAGE STATE";
     if (__readmsr(0x40000020)-s->start>=440000000ull) return "W03 TIME BUDGET";

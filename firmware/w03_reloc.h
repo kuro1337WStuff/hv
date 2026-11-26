@@ -13,6 +13,12 @@ static BOOLEAN w03_equal(const UINT8 *a, const UINT8 *b, UINT32 n)
     while (n--) if (*a++!=*b++) return FALSE;
     return TRUE;
 }
+/* No relocation may overlap these four entry bytes. Admit exactly
+ * SUB RSP, 40: REX.W is the byte 0x48, not the flag mask 0x08. */
+static BOOLEAN w03_entry_prologue(const UINT8 *p)
+{
+    return p[0]==0x48 && p[1]==0x83 && p[2]==0xec && p[3]==40;
+}
 static BOOLEAN w03_text_matches(const UINT8 *file, const UINT8 *loaded, UINT32 base)
 {
     static const UINT32 relocs[]=W03_TEXT_RELOCS;
