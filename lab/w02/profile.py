@@ -43,6 +43,16 @@ INF MdeModulePkg/Core/DxeIplPeim/DxeIpl.inf
 
 ''')
     text = between(text, 'APRIORI DXE {', '[FV.FVMAIN_COMPACT]', 'INF MdeModulePkg/Core/Dxe/DxeMain.inf\n\n')
+    # GenFds regenerates directly visible child FVs using their *flash*
+    # addresses. They execute after copying, so specify the final RAM base.
+    # Fix the block count even when the child is built outside [FD.MEMFD].
+    for vol, base in (('PEIFV', 0x830000), ('DXEFV', 0x900000)):
+        header = f'[FV.{vol}]\n'
+        text = once(text, header, header + f'FvBaseAddress = 0x{base:x}\n')
+    block = 'BlockSize          = 0x10000\n'
+    if text.count(block) != 2:
+        raise ValueError('unexpected nested FV block definitions')
+    text = text.replace(block, block + 'NumBlocks          = 4\n')
     return between(text, 'FILE FV_IMAGE =', '!include OvmfPkg/Include/Fdf/FvmainCompactScratchEnd.fdf.inc', '''FILE FV_IMAGE = 9E21FD93-9C72-4c15-8C4B-E77F1DB2D792 {
   SECTION FV_IMAGE = PEIFV
   SECTION FV_IMAGE = DXEFV
@@ -76,6 +86,10 @@ install('UefiCpuPkg/Library/CpuExceptionHandlerLib/DxeCpuExceptionHandlerLib.inf
 
 
 def sec(text):
+    # Child FVs now occur verbatim in flash. A page-aligned child header is
+    # not FVMAIN: the outer volume must abut the boot SECFV, by FDF design.
+    text = once(text, 'if ((UINTN)Fv->FvLength > Distance)',
+                'if (Fv->FvLength != Distance - (*BootFv)->FvLength)')
     text = between(text, '/**\n  Locates the compressed main firmware volume', '/**\n  Locates the PEI Core entry point address\n\n  @param[in]  Fv ', (HERE / 'ColdFv.c.inc').read_text() + '\n')
     # Cold-only. Never accept a CMOS resume request or trust stale RAM FVs.
     text = between(text, '/**\n  Reads 8-bits of CMOS data.', '/**\n  Find core image base.', '''VOID
