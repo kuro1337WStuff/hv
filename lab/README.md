@@ -246,3 +246,14 @@ Run these **host-only** steps in a Python 3.10+ virtual environment. Do not moun
 1. `python -B lab/install_file_reference.py IMAGE --seven-zip PATH_TO_7Z` streams the outer `sources/install.esd` by name. Retain the file size, full file digest, and digest at byte 65520 for 64 bytes. This does not use the proposed sector address or unpack Windows to disk.
 2. `python -m pip install --only-binary=:all: --no-deps --require-hashes -r lab/install-udf-requirements.txt` installs the optional UDF parser; use `--no-index --find-links WHEELHOUSE` with the pinned wheel offline. `python -B lab/install_udf_extent.py IMAGE` derives the file size and absolute sector containing byte 65520 from UDF metadata. Require the size to agree with step 1.
 3. `python -B lab/install_content_witness.py IMAGE --media-size MEDIA_BYTES --file-size FILE_BYTES --file-offset 65520 --length 64 --first-lba ABSOLUTE_SECTOR --expected-sha256 RANGE_DIGEST` opens the raw image read-only. The expected digest must come from step 1, not from the address under test. The range uses the last 16 bytes of one 2048-byte sector and the first 48 of its successor. A matching digest establishes the expected host bytes, not a Windows guest read.
+
+### Replay the two-sector optical command on the host
+
+`lab/optical_read10.h` is a host fixture, not an AHCI controller. The replay sends `28 00 00 03 c5 15 00 00 02 00` to that fixture, never to a device. Build `lab/tests/optical_read10_replay.c` with a C11 host compiler. For example:
+
+```
+cc -std=c11 -O2 lab/tests/optical_read10_replay.c -o optical-replay
+python -B lab/replay_optical_read10.py IMAGE TRIAL_134_WITNESS_JSON ./optical-replay
+```
+
+Use the [published trial 134 receipt](https://github.com/kuro1337WStuff/hv/blob/1e12ac6ad4229c237f6252f57bd6416d9cdee50c/journal/reports/install-content-134.witness.json). The wrapper checks the ISO identity and compares the returned payload with that independent reference. Run the wrapper, not the reader executable directly: its binary stdout belongs to the wrapper, not a terminal or journal. CI uses authored bytes; it needs no installation media.
