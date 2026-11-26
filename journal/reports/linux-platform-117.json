@@ -1,0 +1,22 @@
+{
+  "title": "Shared IRQ priority and final Linux boot inputs",
+  "records": [
+    {
+      "label": "Timer, SCI and UART priority",
+      "scope": "host",
+      "status": "passed",
+      "trial": "116",
+      "commit": "a8563a8c55cd",
+      "source": "journal/trials/116.md"
+    },
+    {
+      "label": "Authenticated final boot-input copies",
+      "scope": "host",
+      "status": "passed",
+      "trial": "117",
+      "commit": "094d50b06294",
+      "source": "journal/trials/117.md"
+    }
+  ],
+  "comparisons": []
+}
