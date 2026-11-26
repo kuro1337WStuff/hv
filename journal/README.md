@@ -4,6 +4,8 @@ Development host: Ryzen 9 9950X. Firmware runs use the `HV-SVM-L1` Hyper-V VM; h
 
 **Start here:** [Current status, feature trials and integration order](status.md). The entries below describe the integrated baseline through 041. Later feature evidence is published on `main` independently of its implementation; see [how trials are published](project-workflow.md).
 
+**[112 · Linux COM1 type identification](trials/112.md):** both scratch patterns read back on the modeled 16450. Each read-only scratch control matched only one pattern and was classified as an 8250, not an absent port. Host-only; no tty or IRQ delivery.
+
 **[111 · OVMF needs a guest platform, not just an ISO](trials/111.md):** the current L2 does not provide the high reset fetch required by the reviewed firmware, and its synthetic optical reader is not a storage controller. Windows is deferred; no firmware or installer ran. [Readiness figure](reports/entry-readiness-111.svg) · [source records](reports/entry-readiness-111.json).
 
 **[110 · Potential writes to the linked Linux entry page](trials/110.md):** five alternative-instruction records name three distinct sites covering 18 bytes. An on-disk page hash is not proof that the page remains immutable. Linux stayed non-executable; no guest ran.
