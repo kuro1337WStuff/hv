@@ -9,7 +9,8 @@
     "install-content-134.json",
     "optical-read10-135.json",
     "optical-capacity-136.json",
-    "optical-discovery-137.json"
+    "optical-discovery-137.json",
+    "w04-loader-146.json"
   ],
   "benchmarks": []
 }

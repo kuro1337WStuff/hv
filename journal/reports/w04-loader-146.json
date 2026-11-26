@@ -1,0 +1,30 @@
+{
+  "title": "W04 Windows loader at the firmware boundary",
+  "records": [
+    {
+      "label": "Boot Manager call reached the DXE entry",
+      "scope": "nested",
+      "status": "passed",
+      "trial": "146",
+      "commit": "4123adb2d8c4",
+      "source": "journal/trials/146.md"
+    },
+    {
+      "label": "UEFI HandleProtocol return witness",
+      "scope": "nested",
+      "status": "not-run",
+      "trial": "146",
+      "commit": "4123adb2d8c4",
+      "source": "journal/trials/146.md"
+    },
+    {
+      "label": "W04 boot progression toward kernel start",
+      "scope": "nested",
+      "status": "partial",
+      "trial": "146",
+      "commit": "4123adb2d8c4",
+      "source": "journal/trials/146.md"
+    }
+  ],
+  "comparisons": []
+}
