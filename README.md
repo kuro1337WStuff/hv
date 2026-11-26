@@ -5,7 +5,7 @@ An x86-64 lab for **AMD Secure Virtual Machine (SVM) and Nested Page Tables (NPT
 | Evidence | Result and limit |
 |---|---|
 | **`main` firmware through [041][runtime]** | A standalone L1 took control after UEFI boot services ended, ran fixed L2 guests, and checked their registers, memory and exits. |
-| **Feature branches through host trial [103](journal/trials/103.md)** | Earlier [feature trials][features] ran fixed guests. Recent host checks cover [serial discovery][com], [ACPI event registers][pm1] and [pinned Linux boot inputs](journal/reports/boot-inputs-103.svg). These checks did not boot Linux or advance `main` firmware. |
+| **Feature branches through host trial [105](journal/trials/105.md)** | Earlier [feature trials][features] ran fixed guests. Recent host checks cover [pinned Linux boot inputs](journal/reports/boot-inputs-103.svg) and [the virtual platform before and after shutdown](journal/reports/fixed-platform-105.svg). These checks did not boot an OS or advance `main` firmware. |
 | **Not qualified** | No ordinary Linux or Windows guest boot; no physical boot from removable media. The physical targets are **9950X first, then 9950X3D**; each requires separate qualification. There is no five-year AMD compatibility promise; Intel VMX/EPT is out of scope. |
 
 ## What the nested lab proves
@@ -25,7 +25,7 @@ The middle column is [integrated, nested evidence][ledger]. In the right column 
 | Register state | [Integer registers, XMM0–15 and x87 stack/control][runtime]; [MXCSR rounding and status][mxcsr] | These are legacy FP/SSE checks, not AVX/XSAVE or vCPU migration. |
 | Address translation | [Write revocation][protect]; [frame remap][remap]; [private-page boundary][runtime]; [two-processor local flushes][cross]; [Hyper-V GPA flush][flush] | **Nested:** [page-fault attribution][faults], [owned page from writable to executable][seal], [fetch-fault address][fetch]. **Host:** [four-level NPT layout][layout]. |
 | Interrupts & time | [Wake after HLT][wake]; [defer past STI][sti]; [priority masking][priority] | **Nested:** [one-shot PIT IRQ0][pit]. **Host:** [dual PIC setup][pic], [virtual-clock calibration][calibration], [IRQ9 controller acceptance][sci] (not CPU delivery). |
-| Console & power | [Fixed guest serial transmit][runtime] | **Nested:** [polled 8250 output][uart], [UART IRQ4][irq4], [virtual ACPI S5 request][s5]. **Host:** [COM1 presence/absent ports][com], [PM1a status and enable bytes][pm1]. |
+| Console & power | [Fixed guest serial transmit][runtime] | **Nested:** [polled 8250 output][uart], [UART IRQ4][irq4], [virtual ACPI S5 request][s5]. **Host:** [serial discovery][com], [PM1a event registers][pm1], [published ACPI fields](journal/trials/104.md), [no serial or power I/O after S5](journal/trials/105.md). |
 
 **Linux boot inputs:** [102](journal/trials/102.md) accounted for the whole linked entry page: it lies in `.init.text`, inside a writable, non-executable load segment. [103](journal/trials/103.md) found the shell and musl interpreter selected by `/init` in the pinned archive. The Linux pages remain non-executable in the lab; CPU-state ownership and safe page transitions are still open. Neither result is a PID 1 receipt.
 

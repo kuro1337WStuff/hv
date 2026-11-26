@@ -1,0 +1,22 @@
+{
+  "title": "Fixed platform: publication and shutdown",
+  "records": [
+    {
+      "label": "Published ACPI power fields",
+      "scope": "host",
+      "status": "passed",
+      "trial": "104",
+      "commit": "fc7e9da1f4f9",
+      "source": "journal/trials/104.md"
+    },
+    {
+      "label": "Serial and power I/O after shutdown",
+      "scope": "host",
+      "status": "passed",
+      "trial": "105",
+      "commit": "b551ebb3df41",
+      "source": "journal/trials/105.md"
+    }
+  ],
+  "comparisons": []
+}
