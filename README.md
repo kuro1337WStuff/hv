@@ -1,12 +1,23 @@
-# AMD SVM hypervisor lab
+# AMD Type‑1 hypervisor for Windows 10
 
-An x86-64 lab for **AMD Secure Virtual Machine (SVM) and Nested Page Tables (NPT)**. The goal is a type-1 hypervisor that boots directly from removable media and runs a single-vCPU Linux guest. Today, Windows Hyper-V on a **Ryzen 9 9950X** hosts the experiment. The guests that passed are short, fixed instruction sequences, not ordinary operating systems.
+The target is a **bare-metal x86-64 hypervisor that starts before Windows Boot Manager and runs beneath Windows 10**. It uses AMD Secure Virtual Machine (SVM) and Nested Page Tables (NPT) on the **Ryzen 9 9950X3D or 9950X**, with **all 16 physical cores and all 32 logical processors when SMT is enabled**. Windows 10 is the primary OS, not a host dependency. The CPU, memory and interrupt interfaces are intended to serve other x86-64 operating systems too; each OS and CPU model needs its own qualification.
+
+**Today is the test phase.** Hyper-V on a 9950X hosts the nested lab so failures stay off the physical Windows system. Fixed guests test individual mechanisms; a single-vCPU Linux boot is a bring-up milestone, not the product or its core-count limit. Neither a full-core physical deployment nor a Windows boot under this hypervisor has been demonstrated.
 
 | Evidence | Result and limit |
 |---|---|
 | **`main` firmware through [041][runtime]** | A standalone L1 took control after UEFI boot services ended, ran fixed L2 guests, and checked their registers, memory and exits. |
 | **Host checks and design reviews through [121](journal/trials/121.md)** | [120–121: shared timer clock and Linux loader boundaries](journal/reports/shared-clock-and-loader-121.svg). Previous reports cover [cold vCPU state and shutdown](journal/reports/cold-state-and-shutdown-119.svg) and [interrupt priority and boot inputs](journal/reports/linux-platform-117.svg). [Earlier feature trials][features] ran fixed guests; no ordinary OS has booted. |
 | **Not qualified** | No ordinary Linux or Windows guest boot; no physical boot from removable media. The physical targets are **9950X first, then 9950X3D**; each requires separate qualification. There is no five-year AMD compatibility promise; Intel VMX/EPT is out of scope. |
+
+## Target architecture
+
+| Design area | Intended behavior on the physical machine |
+|---|---|
+| Boot and recovery | UEFI starts the hypervisor, then hands off to Windows Boot Manager and the Windows loader. Starting the runtime is not proof Windows booted: require a Windows-side health acknowledgement and a tested recovery path. |
+| All-core AMD runtime | Bring up the bootstrap processor and every enabled logical processor. Each owns its SVM execution state; NPT mapping changes must take effect on every affected processor. A [two-processor flush test][cross] is not a 32-processor result. |
+| Guest hypercalls | Provide a versioned diagnostic interface for a Windows client and other guest clients: capability discovery and ping, bounded log and exit-counter queries, and explicit success or refusal. The diagram’s **CPUID-based diagnostic wire** uses scoped sessions; stale, unsupported or out-of-scope requests must be rejected. Keep guest buffers separate from hypervisor-private memory. |
+| Hyper-V interoperability | Microsoft TLFS hypercalls are a separate interface, not that diagnostic wire. The [outer Hyper-V flush][flush] and [fixed AMD `VMMCALL` checkpoints][runtime] have run in the lab. Neither demonstrates a Windows client using the planned hypercall API or Windows running nested Hyper-V. |
 
 ## What the nested lab proves
 
@@ -31,11 +42,11 @@ The middle column is [integrated, nested evidence][ledger]. In the right column 
 
 ## Qualification roadmap
 
-![Two independent decisions follow repeatable nested Linux evidence: an optional offline Windows 10 L2 installer and guest trial, or an operator-led removable-media trial. Neither lane has started.](docs/images/qualification-gates.svg)
+![Qualification sequence: pinned Linux exercises the platform in the lab. Windows 10 is the primary OS target; full-core physical testing on either Ryzen requires a separate recovery decision.](docs/images/qualification-gates.svg)
 
-1. **First, pinned Linux under Hyper-V.** Require serial output from PID 1, advancing timer ticks and an independently witnessed orderly shutdown on **two fresh boots** of the same pinned inputs. The [two-boot evidence check](journal/trials/106.md) does not itself supply either boot. A resumed snapshot is not a second boot.
-2. **Windows 10, VM first; deferred.** [111](journal/trials/111.md) found the first mismatch before any ISO read: the fixed L2 starts at `0x1000`, not at the PC's high firmware reset vector. [107](journal/trials/107.md) traced the installer offline; [108](journal/trials/108.md) selected a file on synthetic media. Neither supplies guest firmware or a storage controller. After Linux qualifies and a compatible platform exists, test WinPE startup, disk discovery, installed boot and shutdown separately on a disposable virtual disk. Preserve failed disks and logs before rollback.
-3. **Separate physical decision.** Stable, repeated nested evidence is a prerequisite, not permission to deploy. An operator would need independent recovery media, a verified recovery procedure and **no primary disk attached** before considering removable media on a 9950X, then a separate qualification on a 9950X3D. A Windows VM result would not qualify either machine.
+1. **Bring-up in the nested lab.** Require serial output from PID 1, advancing timer ticks and an independently witnessed shutdown on [two fresh pinned Linux boots](journal/trials/106.md). This checks the platform without risking a physical installation.
+2. **Windows 10 rehearsal, still in a VM.** [111](journal/trials/111.md) identified the missing guest firmware entry path. [107](journal/trials/107.md) traced the installer offline; [108](journal/trials/108.md) selected a file on synthetic media. Next Windows milestones are Boot Manager handoff, WinPE disk discovery, installed boot, a diagnostic hypercall round trip, and clean shutdown on a disposable virtual disk. None has passed.
+3. **Windows 10 on physical hardware — deployment target.** Boot the hypervisor and Windows on the same machine without an outer Hyper-V host. Require operator-controlled recovery media and an isolated test disk before the first trial. Qualify the 9950X and 9950X3D separately: account for every enabled processor, exercise cross-core state and NPT invalidation, and verify Windows startup, diagnostics, shutdown and recovery. A nested pass does not qualify either processor.
 
 **Correctness before speed.** The [feature report](journal/reports/feature-phase.svg) comes from [eight retained trial records](journal/reports/feature-phase.json); [trial 101](journal/trials/101.md) records its scope. Use the [reporting guide](lab/measurement/README.md) to regenerate it or add a workload. Start comparing speed only after the feature baseline and repeatable workloads are stable: match platform, workload, clock and controls across independent cold boots and require correctness on both builds. No matched performance runs exist in this report.
 
