@@ -1,4 +1,4 @@
-# Project status · through 108
+# Project status · through 109
 
 **On `main`:** firmware baseline [041](README.md), plus CI-only [#2](https://github.com/kuro1337WStuff/hv/pull/2) at `735c8b56` after both hosted checks passed on `54bace3b`. **On `feature/l1-handoff` only:** [#4](https://github.com/kuro1337WStuff/hv/pull/4) merged at `95abe46c`; [#10](https://github.com/kuro1337WStuff/hv/pull/10) retargeted, then squashed at `44fb6247`. The resulting firmware trees matched the source trees used in 060 and 063 respectively. Revert #10 first if both must be undone; #4 is a merge commit. No ordinary Linux boot or bare-metal qualification.
 
@@ -15,7 +15,7 @@
 
 **Merge routing:** [Dated PR-by-PR audit](merge-audit-072.md) · [live open PRs](https://github.com/kuro1337WStuff/hv/pulls) · [workflow and rollback](project-workflow.md). #21's test merge did not promote #12. Check the actual base, scope and source revision before each integration.
 
-**Boot and platform work:** [108](trials/108.md) qualified the fixed EFI file selector on synthetic optical media. [107](trials/107.md) separately mapped the real candidate installer without launching it. [106](trials/106.md) qualified the cold-boot comparator, not a guest: 0 of 2 qualifying Linux boots. The pinned Linux library metadata is tracked under [#111](https://github.com/kuro1337WStuff/hv/issues/111); the guest firmware decision is [#116](https://github.com/kuro1337WStuff/hv/issues/116). [Bench B teardown and lock evidence](https://github.com/kuro1337WStuff/hv/issues/69) remains necessary for a live run. No change to E03/E06 or the other bench holds.
+**Boot and platform work:** [108](trials/108.md) selected the marked fallback file from synthetic media; [109](trials/109.md) verified BusyBox's declared library in the pinned Linux archive. Both implementations are on `feature/l1-handoff` at `fcc197ec`, not on `main`. Next: [which alternate-instruction sites intersect Linux's linked entry page? (#115)](https://github.com/kuro1337WStuff/hv/issues/115) and [what does existing OVMF guest firmware require from L2? (#116)](https://github.com/kuro1337WStuff/hv/issues/116). Still [0 of 2 qualifying Linux boots](trials/106.md), no Windows Setup, and [bench B remains held on teardown and lock evidence](https://github.com/kuro1337WStuff/hv/issues/69). No change to E03/E06.
 
 **Reporting:** [101](trials/101.md) publishes the [selected trial results](reports/feature-phase.svg) from source records. The project remains in feature qualification, not optimization. Windows 10 is a future offline guest in the nested lab; no Windows guest or physical boot has been qualified.
 
