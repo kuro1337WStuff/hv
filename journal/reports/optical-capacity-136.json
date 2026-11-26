@@ -1,0 +1,22 @@
+{
+  "title": "Optical capacity and read boundary",
+  "records": [
+    {
+      "label": "Reported optical capacity and last-sector read",
+      "scope": "host",
+      "status": "passed",
+      "trial": "136",
+      "commit": "031f4062e9cf",
+      "source": "journal/trials/136.md"
+    },
+    {
+      "label": "Windows Setup optical access on Q35 AHCI",
+      "scope": "nested",
+      "status": "not-run",
+      "trial": "136",
+      "commit": "031f4062e9cf",
+      "source": "journal/trials/136.md"
+    }
+  ],
+  "comparisons": []
+}
