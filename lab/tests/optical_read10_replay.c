@@ -21,9 +21,9 @@
 #define regular(mode) S_ISREG(mode)
 #endif
 
-#include "../optical_read10.h"
+#include "../optical_media.h"
 
-enum { BLOCK_BYTES = 2048, TRANSFER_BYTES = 2 * BLOCK_BYTES };
+enum { TRANSFER_BYTES = 2 * OPTICAL_BLOCK_BYTES };
 #define MEDIA_BYTES INT64_C(3839819776)
 
 typedef struct {
@@ -67,7 +67,7 @@ static int output_pipe(void)
 static const uint8_t *file_view(void *context, uint32_t lba, size_t bytes)
 {
     FileView *file = context;
-    int64_t offset = (int64_t)lba * BLOCK_BYTES;
+    int64_t offset = (int64_t)lba * OPTICAL_BLOCK_BYTES;
     if (bytes != TRANSFER_BYTES || offset > MEDIA_BYTES - TRANSFER_BYTES)
         return NULL;
 #ifdef _WIN32
@@ -95,8 +95,8 @@ int main(int argc, char **argv)
         fputs("replay requires a readable regular ISO of the trial 134 size\n", stderr);
         return 1;
     }
-    bool accepted = optical_read10(cdb, sizeof(cdb), MEDIA_BYTES / BLOCK_BYTES,
-                                   file_view, &file, response, sizeof(response));
+    const OpticalMedium media = {MEDIA_BYTES / OPTICAL_BLOCK_BYTES, file_view, &file};
+    bool accepted = optical_media_command(&media, cdb, sizeof(cdb), response, sizeof(response));
     if (file_close(file.fd) != 0 || !accepted) {
         fputs("fixed READ(10) refused\n", stderr);
         return 1;

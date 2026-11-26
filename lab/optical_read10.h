@@ -6,6 +6,8 @@
 #include <stdint.h>
 #include <string.h>
 
+enum { OPTICAL_BLOCK_BYTES = 2048 };
+
 /* Host-only view: return all bytes starting at lba, immutable until copied,
  * or NULL on any short/unavailable read. The output must be disjoint. */
 typedef const uint8_t *(*OpticalRead10View)(void *context, uint32_t lba, size_t bytes);
@@ -22,7 +24,7 @@ static inline bool optical_read10(const uint8_t *cdb, size_t cdb_size, uint64_t 
 
     const uint32_t lba = ((uint32_t)cdb[2] << 24) | ((uint32_t)cdb[3] << 16) |
                          ((uint32_t)cdb[4] << 8) | cdb[5];
-    const size_t bytes = (size_t)count * 2048;
+    const size_t bytes = (size_t)count * OPTICAL_BLOCK_BYTES;
     if ((uint64_t)lba + count > media_blocks || bytes > capacity || !view || !out)
         return false;
 
