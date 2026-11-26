@@ -8,20 +8,39 @@ from lab.linux import verify_initramfs as check
 
 
 CMD = b'console=ttyS0 rdinit=/init\0'
-# Use a *different* interpreter name and offset than the retained BusyBox.
-# A positive result must come from the program header and the named member.
-LOADER = 'lib/unit-ld.so'
+# Independent byte layout: the virtual addresses are not usable file offsets,
+# and neither the string offsets nor the program headers match the retained ELFs.
+MUSL = b'libc.musl-x86_64.so.1'
+LOADER = 'lib/ld-musl-x86_64.so.1'
+ALIAS = 'lib/' + MUSL.decode()
 INTERP = b'/' + LOADER.encode() + b'\0'
+STRINGS = b'\0wrong.so\0' + MUSL + b'\0'
+MUSL_INDEX = STRINGS.index(MUSL)
+DYN_OFF, DYN_VA = 0x240, 0x80240
+STR_OFF, STR_VA = 0x480, 0x10480
+TABLE = [(5, STR_VA), (10, len(STRINGS))]
 
 
-def elf(*, interp=None, machine=62, interp_offset=0x1a4, interp_count=1):
+def phdr(kind, offset, va, size, memsz=None):
+    return struct.pack('<IIQQQQQQ', kind, 4, offset, va, va, size, size if memsz is None else memsz, 1)
+
+
+def elf(*, interp=None, machine=62, interp_offset=0x1a4, interp_count=1, entries=None, strings=STRINGS,
+        str_load=None, dyn_header=None, extra_headers=()):
     ident = b'\x7fELF\x02\x01\x01' + bytes(9)
-    num = interp_count if interp is not None else 1
-    hdr = struct.pack('<16sHHIQQQIHHHHHH', ident, 3, machine, 1, 0, 64, 0, 0, 64, 56, num, 0, 0, 0)
-    if interp is None:
-        return hdr + bytes(56)  # PT_NULL; the check does not simulate a loader.
-    ph = struct.pack('<IIQQQQQQ', 3, 4, interp_offset, 0, 0, len(interp), len(interp), 1)
-    return (hdr + ph * num).ljust(0x1a4, b'\0') + interp
+    if entries is None:
+        name_tag = 14 if interp is None else 1  # loader SONAME or BusyBox NEEDED
+        entries = [*TABLE, (name_tag, MUSL_INDEX), (0, 0), (0, 0)]
+    dynamic = b''.join(struct.pack('<qQ', tag, value) for tag, value in entries)
+    headers = [phdr(1, DYN_OFF, DYN_VA, len(dynamic)),
+               str_load or phdr(1, STR_OFF, STR_VA, len(strings)),
+               dyn_header or phdr(2, DYN_OFF, DYN_VA, len(dynamic)), *extra_headers]
+    if interp is not None:
+        headers.extend([phdr(3, interp_offset, 0, len(interp))] * interp_count)
+    hdr = struct.pack('<16sHHIQQQIHHHHHH', ident, 3, machine, 1, 0, 64, 0, 0, 64, 56, len(headers), 0, 0, 0)
+    image = (hdr + b''.join(headers)).ljust(0x1a4, b'\0') + (interp or b'')
+    # A decoy name and a NUL outside the declared string table are not metadata.
+    return (image.ljust(DYN_OFF, b'\0') + dynamic).ljust(STR_OFF, b'\0') + strings + b'\0' + MUSL
 
 
 def record(name, mode=0, data=b'', major=0, minor=0, nlink=1):
@@ -35,6 +54,7 @@ def fixture(**changes):
     entries = {'bin': (0o040755,), 'lib': (0o040755,), 'dev': (0o040755,),
                'init': (0o100755, b'#!/bin/sh\n'), 'bin/sh': (0o120777, b'busybox'),
                'bin/busybox': (0o100755, elf(interp=INTERP)), LOADER: (0o100755, elf()),
+               ALIAS: (0o120777, b'ld-musl-x86_64.so.1'),
                'dev/console': (0o020600, b'', 5, 1), 'dev/null': (0o020666, b'', 1, 3)}
     entries.update(changes)
     return b''.join(record(name, *args) for name, args in entries.items() if args is not None) + record('TRAILER!!!')
@@ -62,10 +82,13 @@ class AdmissionTest(unittest.TestCase):
 class ChainTest(unittest.TestCase):
     def test_observations_come_from_fixture_bytes(self):
         result = check._inspect(fixture(), CMD)
-        for field in ('9 members, final TRAILER!!!', 'rdinit=/init', 'shebang=#!/bin/sh LF',
+        for field in ('10 members, final TRAILER!!!', 'rdinit=/init', 'shebang=#!/bin/sh LF',
                       '/bin/sh symlink mode=120777 -> busybox (relative) -> /bin/busybox',
                       f'PT_INTERP offset=0x1a4 size={len(INTERP)} path=/{LOADER}',
                       f'/{LOADER} regular mode=100755 ELF64 LE x86-64',
+                      '/bin/busybox dynamic metadata: DT_NEEDED=libc.musl-x86_64.so.1 DT_SONAME=(none)',
+                      f'/{ALIAS} symlink -> ld-musl-x86_64.so.1 (relative) -> /{LOADER}',
+                      f'/{LOADER} dynamic metadata: DT_SONAME=libc.musl-x86_64.so.1 DT_NEEDED=(none)',
                       '/dev/console character mode=020600 rdev=5:1', '/dev/null character mode=020666 rdev=1:3'):
             self.assertIn(field, result)
 
@@ -103,6 +126,74 @@ class ChainTest(unittest.TestCase):
                           (elf(interp=INTERP[:-1]), 'absolute NUL-terminated'),
                           (elf(interp=INTERP + b'x\0'), 'unsupported archive path')]:
             with self.subTest(reason=msg), self.assertRaisesRegex(ValueError, msg):
+                check._inspect(fixture(**{'bin/busybox': (0o100755, data)}), CMD)
+
+    def test_dependency_alias_binds_the_interp_member(self):
+        for replacement in (None, (0o100755, elf()), (0o120777, INTERP[:-1]),
+                            (0o120777, b'wrong.so'), (0o120777, b'./ld-musl-x86_64.so.1')):
+            with self.subTest(alias=replacement), self.assertRaisesRegex(ValueError, 'missing archive member|relative symlink'):
+                check._inspect(fixture(**{ALIAS: replacement}), CMD)
+        alternate = 'lib/other.so'
+        with self.assertRaisesRegex(ValueError, 'expected PT_INTERP'):
+            check._inspect(fixture(**{'bin/busybox': (0o100755, elf(interp=b'/lib/other.so\0')),
+                                      alternate: (0o100755, elf()), ALIAS: (0o120777, b'other.so')}), CMD)
+
+    def test_exact_dynamic_names_in_each_member(self):
+        needed = (1, MUSL_INDEX)
+        soname = (14, MUSL_INDEX)
+        for name, tags, message in [
+                ('bin/busybox', [], 'expected only DT_NEEDED'),
+                ('bin/busybox', [(1, 1)], 'expected only DT_NEEDED'),  # points at wrong.so
+                ('bin/busybox', [needed, needed], 'expected only DT_NEEDED'),
+                ('bin/busybox', [needed, (1, 1)], 'expected only DT_NEEDED'),
+                ('bin/busybox', [needed, soname], 'expected only DT_NEEDED'),
+                (LOADER, [], 'expected DT_SONAME'),
+                (LOADER, [(14, 1)], 'expected DT_SONAME'),
+                (LOADER, [soname, needed], 'no DT_NEEDED'),
+                (LOADER, [soname, soname], 'duplicate dynamic tag'),
+                (LOADER, [(14, len(STRINGS))], 'outside DT_STRSZ')]:
+            with self.subTest(name=name, tags=tags), self.assertRaisesRegex(ValueError, message):
+                data = elf(interp=None if name == LOADER else INTERP, entries=[*tags, *TABLE, (0, 0)])
+                check._inspect(fixture(**{name: (0o100755, data)}), CMD)
+
+    def test_dynamic_entries_and_string_framing(self):
+        name = (1, MUSL_INDEX)
+        end = (0, 0)
+        for entries, strings, message in [
+                ([*TABLE, name], STRINGS, 'missing DT_NULL'),
+                ([*TABLE, end, name], STRINGS, 'after DT_NULL'),
+                ([TABLE[0], TABLE[0], TABLE[1], name, end], STRINGS, 'duplicate dynamic tag'),
+                ([*TABLE, TABLE[1], name, end], STRINGS, 'duplicate dynamic tag'),
+                ([TABLE[1], name, end], STRINGS, 'missing DT_STRTAB'),
+                ([TABLE[0], name, end], STRINGS, 'DT_STRSZ'),
+                ([TABLE[0], (10, 0), name, end], STRINGS, 'DT_STRSZ'),
+                ([*TABLE, (1, len(STRINGS)), end], STRINGS, 'outside DT_STRSZ'),
+                ([*TABLE, name, end], STRINGS[:-1] + b'!', 'NUL-framed'),
+                ([*TABLE, name, end], b'!' + STRINGS[1:], 'NUL-framed'),
+                ([*TABLE, name, (29, 1), end], STRINGS, 'unsupported dynamic search path'),
+                ([(5, STR_OFF), TABLE[1], name, end], STRINGS, 'no file-backed PT_LOAD'),
+                ([TABLE[0], (10, 2**64-1), name, end], STRINGS, 'non-file-backed PT_LOAD')]:
+            with self.subTest(entries=entries, strings=strings), self.assertRaisesRegex(ValueError, message):
+                data = elf(interp=INTERP, entries=entries, strings=strings)
+                check._inspect(fixture(**{'bin/busybox': (0o100755, data)}), CMD)
+
+    def test_dynamic_segments_and_load_bounds(self):
+        size = len(STRINGS)
+        for overrides, message in [
+                ({'dyn_header': phdr(0, 0, 0, 0)}, 'missing PT_DYNAMIC'),
+                ({'extra_headers': [phdr(2, DYN_OFF, DYN_VA, 16)]}, 'duplicate or unsupported PT_DYNAMIC'),
+                ({'dyn_header': phdr(2, DYN_OFF, DYN_VA, 17)}, 'entry framing'),
+                ({'dyn_header': phdr(2, DYN_OFF, DYN_VA, 16, 32)}, 'unsupported PT_DYNAMIC'),
+                ({'dyn_header': phdr(2, STR_OFF, DYN_VA, 16)}, 'offsets disagree'),
+                ({'dyn_header': phdr(2, 2**64-1, DYN_VA, 16)}, 'PT_DYNAMIC: out of bounds'),
+                ({'str_load': phdr(1, STR_OFF, STR_VA, size, size-1)}, 'invalid PT_LOAD extent'),
+                ({'str_load': phdr(1, STR_OFF, 2**64-1, size)}, 'invalid PT_LOAD extent'),
+                ({'str_load': phdr(1, 2**64-1, STR_VA, size)}, 'PT_LOAD: out of bounds'),
+                ({'str_load': phdr(1, STR_OFF, STR_VA, size-1, size)}, 'non-file-backed PT_LOAD'),
+                ({'extra_headers': [phdr(1, STR_OFF, STR_VA, size)]}, 'ambiguous'),
+                ({'extra_headers': [phdr(1, 0, STR_VA+1, 0, 1)]}, 'ambiguous')]:
+            with self.subTest(overrides=overrides), self.assertRaisesRegex(ValueError, message):
+                data = elf(interp=INTERP, **overrides)
                 check._inspect(fixture(**{'bin/busybox': (0o100755, data)}), CMD)
 
     def test_character_type_permissions_and_reference_device_numbers(self):
