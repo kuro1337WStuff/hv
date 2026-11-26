@@ -1,0 +1,22 @@
+{
+  "title": "Boot media: optical and Linux library checks",
+  "records": [
+    {
+      "label": "Optical EFI section and marked file",
+      "scope": "host",
+      "status": "passed",
+      "trial": "108",
+      "commit": "fcc197ec92d8",
+      "source": "journal/trials/108.md"
+    },
+    {
+      "label": "BusyBox shared-library metadata",
+      "scope": "host",
+      "status": "passed",
+      "trial": "109",
+      "commit": "b835399ddf3f",
+      "source": "journal/trials/109.md"
+    }
+  ],
+  "comparisons": []
+}

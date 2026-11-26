@@ -4,6 +4,8 @@ Development host: Ryzen 9 9950X. Firmware runs use the `HV-SVM-L1` Hyper-V VM; h
 
 **Start here:** [Current status, feature trials and integration order](status.md). The entries below describe the integrated baseline through 041. Later feature evidence is published on `main` independently of its implementation; see [how trials are published](project-workflow.md).
 
+**[109 · BusyBox's declared library](trials/109.md):** the pinned archive supplies BusyBox's sole named dependency via a relative link to musl. The loader's own SONAME matches; it names no further libraries. Metadata only, not a PID 1 receipt. [Paired host results](reports/boot-media-109.svg) · [source records](reports/boot-media-109.json).
+
 **[108 · EFI optical file selection](trials/108.md):** the host reader found seven marked bytes in the EFI image, bypassing the BIOS decoy. A one-byte platform change stopped all image reads. This was synthetic media, not a Windows boot.
 
 **[107 · Windows optical boot path](trials/107.md):** the catalog selects a different EFI application than the same-named file in the outer filesystem. The EFI BCD points to Windows Setup. L2 has no demonstrated optical boot service; no installer ran. [Readiness figure](reports/guest-readiness-107.svg) · [source records](reports/guest-readiness-107.json).
