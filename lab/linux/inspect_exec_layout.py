@@ -16,6 +16,44 @@ KERNEL = '1e8ac7aebfab3f0fcb443eae94ad320efbbda51be91b928c32ca1740b44ebe9d'
 PHDR = struct.Struct('<IIQQQQQQ')
 SHDR = struct.Struct('<IIQQQQIIQQ')
 PAGE = 4096
+# Linux v6.18.60 arch/x86/include/asm/alternative.h: packed alt_instr and
+# ALTINSTR_ENTRY. The signed first field is relative to itself. instrlen
+# includes old-site padding; a zero label difference describes no bytes.
+ALT = struct.Struct('<i8xB1x')
+VA_LIMIT = 1 << 64
+
+
+def _report_alternatives(elf, sections, strs, page):
+    end = page + PAGE
+    if page < 0 or page % PAGE or end > VA_LIMIT:
+        raise ValueError('invalid linked entry page')
+    tables = [s for s in sections if strs[s[0]:strs.index(b'\0', s[0])] == b'.altinstructions']
+    if len(tables) != 1:
+        raise ValueError('expected one .altinstructions section')
+    _, kind, flags, addr, off, size, _, _, _, entsize = tables[0]
+    if (kind != 1 or not flags & 2 or flags & 0x800 or not size or
+            entsize not in (0, ALT.size) or size % ALT.size or
+            off + size > len(elf) or addr + size > VA_LIMIT):
+        raise ValueError('invalid .altinstructions section')
+    hits = []
+    for pos in range(0, size, ALT.size):
+        disp, length = ALT.unpack_from(elf, off + pos)
+        start = addr + pos + disp
+        stop = start + length
+        if not 0 <= start < VA_LIMIT or stop > VA_LIMIT:
+            raise ValueError('invalid alternative original VA span')
+        lo, hi = max(page, start), min(end, stop)
+        if lo < hi:
+            hits.append((lo, hi, start, stop, pos // ALT.size))
+    cursor, covered = page, 0
+    for lo, hi, start, stop, index in sorted(hits):
+        covered += max(0, hi - max(lo, cursor))
+        cursor = max(cursor, hi)
+        print(f'  alt record={index} original VA=[{start:#x},{stop:#x}) '
+              f'intersection VA=[{lo:#x},{hi:#x})')
+    print(f'.altinstructions linked VA page=[{page:#x},{end:#x}) '
+          f'records={size // ALT.size} intersecting={len(hits)} '
+          f'unique_original_starts={len({hit[2] for hit in hits})} unique_page_bytes={covered}')
 
 
 def _report_sections(elf, sections, strs, start, end):
@@ -120,6 +158,7 @@ def inspect(image):
         raise ValueError('pinned E06 counterexample not established')
     print('No-go: PT_LOAD lacks execute at the real entry. Making the RW segment executable would grant W+X. Keep Linux NX.')
     _report_page(elf, gpa, loads, sections, strs)
+    _report_alternatives(elf, sections, strs, entry_va & -PAGE)
 
 
 if __name__ == '__main__':
