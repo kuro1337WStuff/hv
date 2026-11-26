@@ -66,6 +66,11 @@ jobs:
           "$RUNNER_TEMP/optical-read10"
           gcc -std=c11 -O2 -Wall -Wextra -Werror lab/tests/optical_read10_replay.c -o "$RUNNER_TEMP/optical-replay"
           python3 -B lab/tests/check_optical_replay.py "$RUNNER_TEMP/optical-replay"
+      - name: Check reported optical capacity against the last readable sector
+        run: |
+          gcc -std=c11 -O2 -Wall -Wextra -Werror lab/tests/optical_capacity_test.c -o "$RUNNER_TEMP/optical-capacity"
+          "$RUNNER_TEMP/optical-capacity"
+          test "$("$RUNNER_TEMP/optical-capacity" --media-bytes 3839819776)" = "001c9bdf00000800"
 
   master-pic:
     name: Shared master PIC arbitration

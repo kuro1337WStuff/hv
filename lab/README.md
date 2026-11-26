@@ -249,7 +249,7 @@ Run these **host-only** steps in a Python 3.10+ virtual environment. Do not moun
 
 ### Replay the two-sector optical command on the host
 
-`lab/optical_read10.h` is a host fixture, not an AHCI controller. The replay sends `28 00 00 03 c5 15 00 00 02 00` to that fixture, never to a device. Build `lab/tests/optical_read10_replay.c` with a C11 host compiler. For example:
+`lab/optical_media.h` routes optical commands on a host fixture, not an AHCI controller. The replay sends `28 00 00 03 c5 15 00 00 02 00` through it to the existing `READ(10)` handler, never to a device. Build `lab/tests/optical_read10_replay.c` with a C11 host compiler. For example:
 
 ```
 cc -std=c11 -O2 lab/tests/optical_read10_replay.c -o optical-replay
@@ -257,3 +257,7 @@ python -B lab/replay_optical_read10.py IMAGE TRIAL_134_WITNESS_JSON ./optical-re
 ```
 
 Use the [published trial 134 receipt](https://github.com/kuro1337WStuff/hv/blob/1e12ac6ad4229c237f6252f57bd6416d9cdee50c/journal/reports/install-content-134.witness.json). The wrapper checks the ISO identity and compares the returned payload with that independent reference. Run the wrapper, not the reader executable directly: its binary stdout belongs to the wrapper, not a terminal or journal. CI uses authored bytes; it needs no installation media.
+
+### Check optical geometry without an image
+
+Build `lab/tests/optical_capacity_test.c` as C11. Run without arguments for the authored-medium checks. Run `optical-capacity --media-bytes 3839819776` for the size in trial 134's receipt. It takes a byte count, not a filename. The two big-endian words in the reply are **last addressable block** and **bytes per block**; the block count is one greater than the last address. Empty media are not reportable. A last address of `0xffffffff` or greater is reported as the `0xffffffff` sentinel; capacity discovery beyond it requires READ CAPACITY(16), which is not implemented.
