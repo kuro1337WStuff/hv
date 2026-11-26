@@ -4,6 +4,8 @@ Development host: Ryzen 9 9950X. Firmware runs use the `HV-SVM-L1` Hyper-V VM; h
 
 **Start here:** [Current status, feature trials and integration order](status.md). The entries below describe the integrated baseline through 041. Later feature evidence is published on `main` independently of its implementation; see [how trials are published](project-workflow.md).
 
+**[131 · Windows optical storage decision](trials/131.md):** target a Q35 virtual chipset with AHCI and one read-only ATAPI drive for nested rehearsal. Setup has a candidate controller driver, not a demonstrated optical driver binding or readable disc. [130–131 figure](reports/windows-rehearsal-131.svg) · [source](reports/windows-rehearsal-131.json).
+
 **[130 · Firmware reset address](trials/130.md):** one read at `0xfffffff0` returned the final 16 bytes of an inert CODE buffer. Removing its last page produced no backing reads and no output change. No firmware instructions ran.
 
 **[129 · Loaded kernel identity](trials/129.md):** the post-load check matched the full authenticated payload and caught a changed last byte. It does not establish that the pages stay unchanged. [128–129 figure](reports/linux-admission-129.svg) · [source](reports/linux-admission-129.json).

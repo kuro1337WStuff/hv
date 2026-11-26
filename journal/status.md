@@ -1,4 +1,4 @@
-# Project status · through 130
+# Project status · through 131
 
 **On `main`:** firmware baseline [041](README.md), plus CI-only [#2](https://github.com/kuro1337WStuff/hv/pull/2) at `735c8b56` after both hosted checks passed on `54bace3b`. **On `feature/l1-handoff` only:** [#4](https://github.com/kuro1337WStuff/hv/pull/4) merged at `95abe46c`; [#10](https://github.com/kuro1337WStuff/hv/pull/10) retargeted, then squashed at `44fb6247`. The resulting firmware trees matched the source trees used in 060 and 063 respectively. Revert #10 first if both must be undone; #4 is a merge commit. No ordinary Linux boot or bare-metal qualification.
 
@@ -17,7 +17,7 @@
 
 **Ordinary guest:** [128](trials/128.md) rejected stale values in each of eight stored CPU fields. [129](trials/129.md) verified every file-backed byte of the loaded compressed kernel before a denied fetch. Both were host tests. [#15](https://github.com/kuro1337WStuff/hv/issues/15) remains open: establish effective CPU-state ownership and host restoration (E03), and who can write each original or relocated page before it becomes executable (E06). Neither check grants execution. No feature code was promoted to `main`.
 
-**Windows target:** [130](trials/130.md) verified a read at the x86 reset address against the split OVMF layout, using inert bytes instead of firmware. [126](trials/126.md) covers 9950X cache sharing; [127](trials/127.md) covers the Windows Setup storage-driver inventory. Next: [#170 · choose the nested storage route](https://github.com/kuro1337WStuff/hv/issues/170). No Windows guest, firmware reset or physical boot. Linux remains at [0 of 2 qualifying boots](trials/106.md); [bench B](https://github.com/kuro1337WStuff/hv/issues/69) remains held.
+**Windows target:** [130](trials/130.md) verified the firmware reset address using inert bytes. [131](trials/131.md) selected Q35/ICH9 AHCI and one read-only ATAPI CD-ROM for nested rehearsal only. [127](trials/127.md) established a candidate controller driver in Setup; [#182](https://github.com/kuro1337WStuff/hv/issues/182) checks the optical child separately. No firmware, Windows guest or physical boot. Linux remains at [0 of 2 qualifying boots](trials/106.md); [bench B](https://github.com/kuro1337WStuff/hv/issues/69) remains held.
 
 **Reporting:** the project is qualifying features, not comparing speed. The [reporting guide](../lab/measurement/README.md) separates host, nested and physical evidence. Neither Windows boot nor full-core physical operation has been qualified on either Ryzen.
 
