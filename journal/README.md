@@ -4,6 +4,8 @@ Development host: Ryzen 9 9950X. Firmware runs use the `HV-SVM-L1` Hyper-V VM; h
 
 **Start here:** [Current status, feature trials and integration order](status.md). The entries below describe the integrated baseline through 041. Later feature evidence is published on `main` independently of its implementation; see [how trials are published](project-workflow.md).
 
+**[139 · L2 reset to OVMF SEC](trials/139.md):** on bench A, the cold reset fetch at `0xfffffff0` and the first fetch at the pinned SEC entry `0xfffd44d4` appeared in one run. W01 passed on review; the queue retained `ATTENTION` for the unpinned screen. Next: PEI to DXE, not Windows yet.
+
 **[138 · Bench A PIC recovery](trials/138.md):** one boot of the frozen 086 image showed the valid PIC initialization and the matched refusal, including all four missing refusal fields. The queue stopped at `ATTENTION` because the screen was unpinned. No Windows boot or firmware promotion.
 
 **[137 · Drive identity versus disc readiness](trials/137.md):** the same host target returned its 36-byte identity with and without media. Only the ready medium returned capacity and a known sector. An absent target returned neither identity nor data. No ISO or VM.

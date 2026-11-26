@@ -1,4 +1,4 @@
-# Project status · through 138
+# Project status · through 139
 
 **On `main`:** firmware baseline [041](README.md), plus CI-only [#2](https://github.com/kuro1337WStuff/hv/pull/2) at `735c8b56` after both hosted checks passed on `54bace3b`. **On `feature/l1-handoff` only:** [#4](https://github.com/kuro1337WStuff/hv/pull/4) merged at `95abe46c`; [#10](https://github.com/kuro1337WStuff/hv/pull/10) retargeted, then squashed at `44fb6247`. The resulting firmware trees matched the source trees used in 060 and 063 respectively. Revert #10 first if both must be undone; #4 is a merge commit. No ordinary Linux boot or bare-metal qualification.
 
@@ -6,9 +6,9 @@
 
 ## Where to resume
 
-**Next milestone: [Windows 10 boots as L2 under our standalone AMD SVM/NPT L1](https://github.com/kuro1337WStuff/hv/issues/203). BLOCKED at W01.** First missing guest observation: one cold-run trace from the pinned L2 firmware reset vector into SEC ([111](trials/111.md)). [138](trials/138.md) recovered PIC evidence only. A direct Hyper-V Windows boot does not count. Neither does WinPE/Setup alone: the final observation is an installed Windows 10 user-mode process reporting its build and system volume in that L2.
+**Next milestone: [Windows 10 boots as L2 under our standalone AMD SVM/NPT L1](https://github.com/kuro1337WStuff/hv/issues/203). W01 passed; W02 is the first unverified gate.** [139](trials/139.md) tied cold reset at `0xfffffff0` to the first fetch at the pinned OVMF SEC entry `0xfffd44d4` in one L2 run. The SEC page stayed non-executable. Next proof: PEI using guest-private memory followed by an L2-originated DXE marker in the same run. A direct Hyper-V Windows boot does not count. Neither does WinPE/Setup alone: the final observation is an installed Windows 10 user-mode process reporting its build and system volume in that L2.
 
-**A:** the single [068](trials/068.md) recovery authorization was spent on [138](trials/138.md). Preserve the unpinned 138 console and the 068 checkpoints. Before a W01 boot, review its image and reset-to-SEC observation, make a fresh #13 reservation and authorize the transition from 138. No PIC replay. **B:** identify the original session, witness teardown and independently establish release of both its handle and the board lease ([094](trials/094.md)). Each future task must name its boot gate, diagram and proving observation. [#201](https://github.com/kuro1337WStuff/hv/issues/201) and new optical fixtures are paused unless a guest trace shows the first blocking storage request. The versioned diagnostic hypercall ABI remains a separate release criterion.
+**A:** held at [139](trials/139.md). Preserve its console and pre-139 checkpoint. Review the W02 image and its PEI-to-DXE witness, reserve a fresh trial in #13 and approve the transition before any boot. No replay of [138](trials/138.md) or 139. **B:** identify the original session, witness teardown and independently establish release of both its handle and the board lease ([094](trials/094.md)). Each future task must name its boot gate, diagram and proving observation. [#201](https://github.com/kuro1337WStuff/hv/issues/201) and new optical fixtures are paused unless a guest trace shows the first blocking storage request. The versioned diagnostic hypercall ABI remains a separate release criterion.
 
 | Work item | State | Next decision |
 | --- | --- | --- |
