@@ -210,8 +210,19 @@ def service_evidence(inf, base, expand, drivers, row):
     require(install is not None, 'missing DDInstall')
     services = install + '.services'
     row.update(install_section=install, services_section=services)
-    require(not any(line.partition('=')[0].strip().lower() == 'excludeid' for line in inf[install]),
-            'unresolved DDInstall ExcludeID')
+    # ExcludeID narrows the devices this install section accepts. A specific
+    # exclusion need not destroy the declared service chain for its class.
+    exclusions = []
+    for line in inf[install]:
+        key, _, value = line.partition('=')
+        if key.strip().lower() == 'excludeid':
+            for field in value.split(','):
+                device_id = expand(field).upper()
+                require(re.fullmatch(r'[A-Z0-9_\\&.-]+', device_id), 'unresolved DDInstall ExcludeID')
+                exclusions.append(device_id)
+    if exclusions:
+        row['excluded_ids'] = exclusions
+        require(row['id'].upper() not in exclusions, 'matching model ID is explicitly excluded')
     require(services in inf, 'missing DDInstall.Services')
     assoc = []
     for key, value in pairs(inf[services]):
@@ -259,7 +270,9 @@ def inspect_inf(inf, build, product, drivers, filename):
     for section in selected:
         for _, value in pairs(inf[section]):
             install, *ids = (expand(v) for v in value.split(','))
-            require(install and ids and ids[0], 'invalid model entry: ' + section)
+            require(install and (not ids or ids[0]), 'invalid model entry: ' + section)
+            if not ids:  # A deployment-only install without an ID cannot match a PCI device.
+                continue
             count += 1
             for pos, device_id in enumerate(ids):
                 kind = role(device_id.upper())

@@ -11,6 +11,7 @@ Signature="$Windows NT$"
 [Manufacturer]
 Maker=Controllers,NTamd64...0x01,NTamd64...0x03,NTx86
 [Controllers.NTamd64...0x01]
+PublishOnly=Deploy
 AHCI=AHCI_Install,PCI\CC_010601
 [Controllers.NTamd64...0x03]
 Server=AHCI_Install,PCI\VEN_1AF4&DEV_1048
@@ -19,6 +20,7 @@ x86=AHCI_Install,PCI\VEN_1AF4&DEV_1048
 [NotModels]
 Other=AHCI_Install,PCI\VEN_1AF4&DEV_1048
 [AHCI_Install.NT]
+ExcludeID=PCI\VEN_8086&DEV_2653&SUBSYS_0F001179
 [AHCI_Install.NT.Services]
 AddService=filter,,Unrelated
 AddService=storahci,%Assoc%,StorageService
@@ -94,9 +96,17 @@ class StorageEvidenceTest(unittest.TestCase):
         self.assertEqual(report['counts']['reviewed_model_entries'], 1)
         self.assertEqual(report['literal_mentions_not_models']['VEN_1AF4'], ['mshdc.inf'])
         row, = report['evidence']
+        self.assertEqual(row['excluded_ids'], [r'PCI\VEN_8086&DEV_2653&SUBSYS_0F001179'])
         self.assertEqual((row['models'], row['services_section'], row['service'], row['binary']),
                          ('controllers.ntamd64...0x01', 'ahci_install.nt.services', 'storahci',
                           'Windows/System32/drivers/storahci.sys'))
+
+    def test_excluded_compatible_id_is_not_a_positive(self):
+        contents = CONTROL.replace(r'PCI\VEN_8086&DEV_2653&SUBSYS_0F001179', r'PCI\CC_010601')
+        (self.infs / 'mshdc.inf').write_text(contents, encoding='utf-16')
+        report = self.scan()
+        self.assertFalse(report['inbox_storahci_control'])
+        self.assertIn('explicitly excluded', report['evidence'][0]['chain_gap'])
 
     def test_modern_id_in_second_model_field_of_selected_build(self):
         self.publish(VIO)
