@@ -1,0 +1,22 @@
+{
+  "title": "Fresh CPU state and terminal device shutdown",
+  "records": [
+    {
+      "label": "Fresh private legacy FP image",
+      "scope": "host",
+      "status": "passed",
+      "trial": "118",
+      "commit": "e81d37cf762e",
+      "source": "journal/trials/118.md"
+    },
+    {
+      "label": "Shared devices after virtual S5",
+      "scope": "host",
+      "status": "passed",
+      "trial": "119",
+      "commit": "3b9af588b1f5",
+      "source": "journal/trials/119.md"
+    }
+  ],
+  "comparisons": []
+}

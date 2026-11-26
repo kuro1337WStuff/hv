@@ -4,6 +4,8 @@ Development host: Ryzen 9 9950X. Firmware runs use the `HV-SVM-L1` Hyper-V VM; h
 
 **Start here:** [Current status, feature trials and integration order](status.md). The entries below describe the integrated baseline through 041. Later feature evidence is published on `main` independently of its implementation; see [how trials are published](project-workflow.md).
 
+**[119 · Virtual S5 with pending interrupts](trials/119.md):** a busy timer, serial port and interrupt-controller pair stopped at tick 8. Its running twin granted four interrupts. [118–119 figure](reports/cold-state-and-shutdown-119.svg) · [source data](reports/cold-state-and-shutdown-119.json).
+
 **[118 · Cold legacy FP state](trials/118.md):** two different prior fills produced the same initialized 512 bytes without modifying the neighboring GPR bank. The existing CPU-floor EFI rebuilt with its reviewed `.text` digest.
 
 **[117 · Final Linux boot-input copies](trials/117.md):** the host layout contained the exact pinned command line and initramfs. Corruption after the copy failed independently of staging authentication.

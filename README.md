@@ -5,7 +5,7 @@ An x86-64 lab for **AMD Secure Virtual Machine (SVM) and Nested Page Tables (NPT
 | Evidence | Result and limit |
 |---|---|
 | **`main` firmware through [041][runtime]** | A standalone L1 took control after UEFI boot services ended, ran fixed L2 guests, and checked their registers, memory and exits. |
-| **Host checks and design reviews through [117](journal/trials/117.md)** | Earlier [feature trials][features] ran fixed guests. Recent host results cover [boot evidence](journal/reports/guest-readiness-107.svg), [entry and firmware readiness](journal/reports/entry-readiness-111.svg), and [shared timer/SCI/serial priority and final Linux boot inputs](journal/reports/linux-platform-117.svg). No ordinary OS boot. |
+| **Host checks and design reviews through [119](journal/trials/119.md)** | [118–119: fresh vCPU state and terminal device shutdown](journal/reports/cold-state-and-shutdown-119.svg). Earlier checks cover [boot evidence](journal/reports/guest-readiness-107.svg), [entry readiness](journal/reports/entry-readiness-111.svg), and [interrupt priority and Linux boot inputs](journal/reports/linux-platform-117.svg). [Earlier feature trials][features] ran fixed guests; no ordinary OS has booted. |
 | **Not qualified** | No ordinary Linux or Windows guest boot; no physical boot from removable media. The physical targets are **9950X first, then 9950X3D**; each requires separate qualification. There is no five-year AMD compatibility promise; Intel VMX/EPT is out of scope. |
 
 ## What the nested lab proves

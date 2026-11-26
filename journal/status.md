@@ -1,4 +1,4 @@
-# Project status · through 118
+# Project status · through 119
 
 **On `main`:** firmware baseline [041](README.md), plus CI-only [#2](https://github.com/kuro1337WStuff/hv/pull/2) at `735c8b56` after both hosted checks passed on `54bace3b`. **On `feature/l1-handoff` only:** [#4](https://github.com/kuro1337WStuff/hv/pull/4) merged at `95abe46c`; [#10](https://github.com/kuro1337WStuff/hv/pull/10) retargeted, then squashed at `44fb6247`. The resulting firmware trees matched the source trees used in 060 and 063 respectively. Revert #10 first if both must be undone; #4 is a merge commit. No ordinary Linux boot or bare-metal qualification.
 
@@ -15,7 +15,7 @@
 
 **Merge routing:** [Dated PR-by-PR audit](merge-audit-072.md) · [live open PRs](https://github.com/kuro1337WStuff/hv/pulls) · [workflow and rollback](project-workflow.md). #21's test merge did not promote #12. Check the actual base, scope and source revision before each integration.
 
-**Boot and platform work:** [118](trials/118.md) established a deterministic cold FP image, not a live restore. Next: [#141 · stop the shared device platform at virtual S5](https://github.com/kuro1337WStuff/hv/issues/141). Recent host results include [interrupt arbitration](trials/116.md) and [final boot-input copies](trials/117.md). Still [0 of 2 qualifying Linux boots](trials/106.md); CPU ownership, [page permissions](trials/110.md) and [bench B teardown](https://github.com/kuro1337WStuff/hv/issues/69) remain open. [Windows is deferred](trials/111.md).
+**Boot and platform work:** a fresh vCPU has [a clean private legacy FP image](trials/118.md); a stopped platform [refused device activity and interrupt grants](trials/119.md) that its running twin accepted. Both are host checks. Next: [#147 · one clock for the two PIT channels on the shared platform](https://github.com/kuro1337WStuff/hv/issues/147) and [#148 · relocated BSS byte boundaries](https://github.com/kuro1337WStuff/hv/issues/148). Still [0 of 2 qualifying Linux boots](trials/106.md); CPU ownership, [page permissions](trials/110.md) and [bench B teardown](https://github.com/kuro1337WStuff/hv/issues/69) remain open. [Windows is deferred](trials/111.md).
 
 **Reporting:** [101](trials/101.md) publishes the [selected trial results](reports/feature-phase.svg) from source records. The project remains in feature qualification, not optimization. Windows 10 is a future offline guest in the nested lab; no Windows guest or physical boot has been qualified.
 
