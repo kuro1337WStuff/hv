@@ -206,6 +206,14 @@ Offline admission checks do not boot the VM. With an archived `l1-entry-guard` I
 
 Only known firmware profiles in the isolated project VM are eligible. Each batch preserves the starting state with a checkpoint; inspect checkpoint storage as it accumulates. No host boot changes, networking changes, background source edits, automatic commits, or retries of failures. Review evidence before adding it to the [journal](../journal/README.md). Raw batch artifacts stay local.
 
+### W01: pinned guest firmware reset to SEC (bench A)
+
+`l1-w01` is an opt-in standalone AMD SVM/NPT profile, not a Windows installer. Build the split OVMF image with `bash lab/w01/build.sh` in the pinned CI container, or download `w01-split-flash` from the corresponding successful project workflow into `build/w01`. Use the CODE and VARS SHA-256 values **from that build’s log**, not values first calculated from the download.
+
+1. Run `python firmware/w01_media.py prepare --inputs build/w01 --code-sha256 CODE_DIGEST --vars-sha256 VARS_DIGEST`. Compare the reported SEC GPA to `SecMain`’s `EntryPoint` in the same build’s `SECFV.Fv.map`.
+2. Run `firmware\build.cmd l1-w01`. Before moving A, verify the EFI boot catalog selects the ESP containing the built `EFI/BOOT/BOOTX64.EFI` and the two exact flash files. Record the source revision, complete ISO hash, both guest flash hashes, and the independently derived SEC entry in the reservation.
+3. A valid observation must join the reset instruction fetch at `0xfffffff0` to a fetch at that SEC entry **in the same cold L2 run**. On a stop, record the first missing transition and the raw exit fields. Neither a host parser result nor the firmware address printed as an expected value is execution evidence. The profile has no automatic PASS screen; inspect the retained console. No Windows, storage or PEI/DXE claim follows from W01 alone.
+
 ### Re-read a task board after every result
 
 From the supervisor checkout, run `python lab/hv_plan.py status "board.md"`, then `python lab/hv_plan.py run "board.md" --max-cards 2 --minutes 15`. The two sibling runner sessions above must already be open. The supervisor has no build, elevation or deployment step. Each completed worker triggers a fresh read; independent A/B cards may overlap, but never two on the same lane. The count and time limit apply to **admissions**; previously admitted finite batches may finish. A new or edited binding needs a new invocation. It exits when nothing eligible remains.

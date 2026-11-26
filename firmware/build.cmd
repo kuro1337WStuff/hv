@@ -13,6 +13,7 @@ set "EXTRA_ASM="
 set "EXTRA_OBJS="
 set "EXTRA_ASM_FLAGS="
 set "LINUX_MEDIA="
+set "W01_MEDIA="
 if /i "%~1"=="l1-linux-admission" set "LINUX_MEDIA=1"
 if /i "%~1"=="l1-linux-inputs" set "LINUX_MEDIA=1"
 if /i "%~1"=="l1-entry-guard" set "LINUX_MEDIA=1"
@@ -35,6 +36,16 @@ if /i "%~1"=="l2" (
   set "CASE_FLAGS=/DHV_STANDALONE_L2"
   set "ASM_OBJ=build\l1_l2_asm.obj"
   set "ASM_SRC=firmware\l1_handoff.asm"
+) else if /i "%~1"=="l1-w01" (
+  set "SRC=l1_handoff"
+  set "EFI=L1W01"
+  set "ISO=hv-l1-w01"
+  set "W01_MEDIA=1"
+  set "CASE_FLAGS=/DHV_STANDALONE_L2 /DHV_W01"
+  set "ASM_OBJ=build\w01_handoff.obj"
+  set "ASM_SRC=firmware\l1_handoff.asm"
+  set "EXTRA_ASM=vcpu_gpr w01_switch"
+  if not exist build\w01_pin.h (echo Missing prepared W01 pin. & exit /b 1)
 ) else if /i "%~1"=="l1-cpuid" (
   set "SRC=l1_handoff"
   set "EFI=L1CPUID"
@@ -293,7 +304,9 @@ if defined CPUID_OBJ (
 for %%s in (%EXTRA_ASM%) do call :extra_asm %%s || exit /b 1
 cl /nologo /c /TC /std:c11 /O1 /GS- /Zl /W4 /WX %CASE_FLAGS% /I"%INC_EDK%\X64" /I"%INC_EDK%" /Fobuild\%EFI%.obj firmware\%SRC%.c || exit /b 1
 link /nologo /nodefaultlib /incremental:no /machine:x64 /subsystem:efi_application /entry:EfiMain /out:build\%EFI%.EFI build\%EFI%.obj %ASM_OBJ% %CPUID_OBJ% %EXTRA_OBJS% || exit /b 1
-if defined LINUX_MEDIA (
+if defined W01_MEDIA (
+  "%PACK%" firmware\w01_media.py pack build\L1W01.EFI build\hv-l1-w01.iso --inputs build\w01 || exit /b 1
+) else if defined LINUX_MEDIA (
   "%PACK%" firmware\linux_media.py build\%EFI%.EFI build\%ISO%.iso || exit /b 1
 ) else (
   "%PACK%" firmware\pack_iso.py build\%EFI%.EFI build\%ISO%.iso || exit /b 1
