@@ -5,6 +5,8 @@
 #include "pit_periodic.h"
 #include "uart16450.h"
 
+#include <stddef.h>
+
 /* Opt-in host fixture, decoded scalar bytes only (caller supplies uart16450.h's
  * byte/BOOLEAN types). Drive devices through io/advance so no pin transition
  * is missed. PIT's absolute pulse cursor and the UART's read-driven TX drain
@@ -19,6 +21,8 @@ typedef struct {
     Pic8259 pic;
     PitPeriodic pit;
     Uart16450 uart;
+    uint8_t *tx_bytes; /* NULL keeps the UART's fixed internal transcript */
+    size_t tx_capacity, tx_count;
     uint8_t irr, isr;
 } PitUartPic;
 
@@ -33,6 +37,8 @@ static inline void pit_uart_pic_init(PitUartPic *s)
     pic8259_init(&s->pic);
     pit_periodic_init(&s->pit);
     s->uart = idle;
+    s->tx_bytes = NULL;
+    s->tx_capacity = s->tx_count = 0;
     s->irr = s->isr = 0;
 }
 
@@ -80,8 +86,19 @@ static inline int pit_uart_pic_io(PitUartPic *s, enum PitUartPicIo form,
     if (form == PitUartPicOut && *value > UINT8_MAX) return 0;
     uint8_t byte = form == PitUartPicOut ? (uint8_t)*value : 0;
     if (port >= Uart8250Base && port <= Uart8250Base + 7) {
+        Uart8250 *b = &s->uart.base;
+        /* Busy is the UART's own refusal. Full storage refuses an otherwise
+         * writable THR, not DLL/RBR or a drain/ack. Neither refusal latches. */
+        if (s->tx_bytes && s->tx_count == s->tx_capacity && !b->busy &&
+            form == PitUartPicOut && port == Uart8250Base && !(b->lcr & 0x80)) return 0;
         int was_high = uart16450_irq4(&s->uart);
         if (!uart16450_access(&s->uart, port, form == PitUartPicIn, &byte)) return 0;
+        if (s->tx_bytes && b->count) {
+            /* Consume the accepted register-model byte, not the OUT operand.
+             * Only its transcript slot is released; TX remains busy. */
+            s->tx_bytes[s->tx_count++] = b->tx[0];
+            b->count = 0;
+        }
         if (!was_high && uart16450_irq4(&s->uart)) s->irr |= PitUartIrq4;
     } else if (port == PIC8259_MASTER_DATA || port == PIC8259_MASTER_ELCR) {
         if (form == PitUartPicIn) {
