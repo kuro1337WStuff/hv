@@ -4,6 +4,8 @@ Development host: Ryzen 9 9950X. Firmware runs use the `HV-SVM-L1` Hyper-V VM; h
 
 **Start here:** [Current status, feature trials and integration order](status.md). The entries below describe the integrated baseline through 041. Later feature evidence is published on `main` independently of its implementation; see [how trials are published](project-workflow.md).
 
+**[117 · Final Linux boot-input copies](trials/117.md):** the host layout contained the exact pinned command line and initramfs. Corruption after the copy failed independently of staging authentication.
+
 **[115 · Timer and serial interrupt priority](trials/115.md):** one master PIC retained both masked requests and accepted IRQ0 before IRQ4. MSVC and hosted GCC matched across all 27 trace lines. [Paired report](reports/device-integration-115.svg) · [source data](reports/device-integration-115.json).
 
 **[114 · Hosted checks for feature PRs](trials/114.md):** Ubuntu reproduced the Windows COM classification and quick PIT results, including the frozen-clock controls. No guest boot.
