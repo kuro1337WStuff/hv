@@ -4,6 +4,8 @@ Development host: Ryzen 9 9950X. Firmware runs use the `HV-SVM-L1` Hyper-V VM; h
 
 **Start here:** [Current status, feature trials and integration order](status.md). The entries below describe the integrated baseline through 041. Later feature evidence is published on `main` independently of its implementation; see [how trials are published](project-workflow.md).
 
+**[128 · Cold syscall state](trials/128.md):** the stored entry image passed clean and failed with each of eight stale fields. Host test only; effective CPU-state transfer is still open.
+
 **[127 · Windows Setup storage-driver inventory](trials/127.md):** boot image 2 contains an AMD64 AHCI driver. That does not establish a driver for the proposed virtio-SCSI controller, or prove that Setup can read a virtual CD. [126–127 figure](reports/cache-and-storage-127.svg) · [source](reports/cache-and-storage-127.json).
 
 **[126 · Windows L3 sharing](trials/126.md):** the 9950X had two OS-visible 32 MiB unified L3 caches, each shared by eight complete SMT cores. The observed masks cover all 32 logical processors exactly once. No 9950X3D was measured.
