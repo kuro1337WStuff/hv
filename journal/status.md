@@ -1,4 +1,4 @@
-# Project status · through 144
+# Project status · through 145
 
 **On `main`:** firmware baseline [041](README.md), plus CI-only [#2](https://github.com/kuro1337WStuff/hv/pull/2) at `735c8b56` after both hosted checks passed on `54bace3b`. **On `feature/l1-handoff` only:** [#4](https://github.com/kuro1337WStuff/hv/pull/4) merged at `95abe46c`; [#10](https://github.com/kuro1337WStuff/hv/pull/10) retargeted, then squashed at `44fb6247`. The resulting firmware trees matched the source trees used in 060 and 063 respectively. Revert #10 first if both must be undone; #4 is a merge commit. No ordinary Linux boot or bare-metal qualification.
 
@@ -8,7 +8,7 @@
 
 **Next milestone: [Windows 10 boots as L2 under standalone AMD SVM/NPT](https://github.com/kuro1337WStuff/hv/issues/203).** [139](trials/139.md) proved reset to SEC; [140](trials/140.md) proved guest-private PEI memory to DXE; [144](trials/144.md) proved the first signed Windows Boot Manager instruction retired after guest UEFI handoff. **W01–W03 passed. W04 (Windows kernel start) and W05 (installed user mode) have not been observed.** An installed process must report its Windows build and system volume for the final milestone; WinPE/Setup alone does not qualify.
 
-**A:** held at [144](trials/144.md); guest W03 PASS on review, queue `ATTENTION`. [143](trials/143.md) remains a non-run. Preserve the live 144 terminal, pre-144 checkpoint and saved 142 STOP. Next: W04, loader → build-identified L2 Windows kernel event in the same cold boot. Review the image and witness, reserve a fresh trial and approve the A transition; no W03 replay. **B:** identify the original session, witness teardown and independently establish release of its handle and board lease ([094](trials/094.md)). Each queued task must name its boot gate, diagram and proving observation. [#201](https://github.com/kuro1337WStuff/hv/issues/201) and new optical fixtures remain paused absent a guest storage blocker. The versioned diagnostic hypercall ABI remains a separate release criterion.
+**A:** still running [144](trials/144.md); [145](trials/145.md) was **not run**. Inspection verified the saved 144 checkpoint → original pre-144 Off → saved 142 STOP. [146](https://github.com/kuro1337WStuff/hv/issues/13#issuecomment-7201977253) is reserved to reuse that checkpoint, preserve all 16 current IDs and boot the frozen loader diagnostic once. It can identify a post-entry blocker or EFI call, not pass the kernel gate. **B:** identify the original session, witness teardown and independently establish release of its handle and board lease ([094](trials/094.md)). Each queued task must name its boot gate, diagram and proving observation. [#201](https://github.com/kuro1337WStuff/hv/issues/201) and new optical fixtures remain paused absent a guest storage blocker. The versioned diagnostic hypercall ABI remains a separate release criterion.
 
 | Work item | State | Next decision |
 | --- | --- | --- |
