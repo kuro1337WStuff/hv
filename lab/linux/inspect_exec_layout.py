@@ -124,14 +124,25 @@ def _report_page(elf, entry, loads, sections, strs):
     print(f'Linked page SHA256={hashlib.sha256(page).hexdigest()} length={len(page)}')
 
 
-def inspect(image):
-    if len(image) != 12649472 or hashlib.sha256(image).hexdigest() != KERNEL:
+IMAGE_BYTES = 12649472
+
+
+def extract_pinned_elf(image):
+    """Authenticate the complete bzImage before inflating its one known payload."""
+    if len(image) != IMAGE_BYTES or hashlib.sha256(image).hexdigest() != KERNEL:
         raise ValueError('unreviewed kernel; no executable layout decision')
     setup = (image[0x1f1] + 1) * 512
     off, size = struct.unpack_from('<II', image, 0x248)
-    elf = gzip.decompress(image[setup + off:setup + off + size])
+    if not size or setup + off + size > len(image):
+        raise ValueError('truncated compressed payload')
+    elf = gzip.decompress(memoryview(image)[setup + off:setup + off + size])
     if elf[:6] != b'\x7fELF\x02\x01' or struct.unpack_from('<H', elf, 18)[0] != 62:
         raise ValueError('expected x86-64 little-endian ELF')
+    return elf
+
+
+def inspect(image):
+    elf = extract_pinned_elf(image)
     gpa, phoff, shoff = struct.unpack_from('<QQQ', elf, 24)
     phsize, phnum, shsize, shnum, names = struct.unpack_from('<5H', elf, 54)
     if phsize != PHDR.size or shsize != SHDR.size:
