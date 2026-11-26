@@ -4,6 +4,10 @@ set -eo pipefail
 export LC_ALL=C TZ=UTC
 umask 022
 repo=$PWD
+# The pinned build container runs as root; allow only the checkout path for
+# this read. A failed lookup must abort, not produce a plausible empty field.
+recipe=$(git -c "safe.directory=$repo" -C "$repo" rev-parse --verify HEAD)
+[[ $recipe =~ ^[0-9a-f]{40}$ && $recipe == "${GITHUB_SHA:-$recipe}" ]]
 out=$repo/build/w02
 src=/tmp/w02-edk2
 pin=556dcfb466e9f05affeaff881d738807f8156d3c
@@ -21,7 +25,7 @@ python3 "$repo/lab/w02/profile.py"
 # Preserve the actual materialized source changes, not just a descriptive manifest.
 git diff --binary > "$out/edk2-profile.patch"
 cp -r OvmfPkg/W02 "$out/board-source"
-printf 'repo=%s\nedk2=%s\nepoch=%s\n' "$(git -C "$repo" rev-parse HEAD)" "$pin" "$SOURCE_DATE_EPOCH" > "$out/source.txt"
+printf 'repo=%s\nedk2=%s\nepoch=%s\n' "$recipe" "$pin" "$SOURCE_DATE_EPOCH" > "$out/source.txt"
 source edksetup.sh
 make -C BaseTools/Source/C -j2
 build -p OvmfPkg/OvmfPkgX64.dsc -a X64 -b RELEASE -t GCC -n 2 -D FD_SIZE_IN_KB=4096

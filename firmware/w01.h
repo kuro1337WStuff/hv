@@ -125,6 +125,9 @@ static const char *w01_trace(UINT8 *vmcb, UINT64 *gpr, W01Evidence *e)
     }
     return "ENTRY BUDGET";
 }
+#ifdef HV_W02
+#include "w02_run.h"
+#endif
 static const char *run_standalone_l2(void *reservation)
 {
     static const UINT8 code_pin[]=W01_CODE_SHA256, vars_pin[]=W01_VARS_SHA256;
@@ -141,6 +144,12 @@ static const char *run_standalone_l2(void *reservation)
     if (!(r[3]&(1u<<9)) || !(__readmsr(0x1b)&(1u<<8))) return "BSP REQUIRED";
     __cpuid(r,0x40000000);
     if (r[1]!=0x7263694d || r[2]!=0x666f736f || r[3]!=0x76482074) return "HYPER V REQUIRED";
+#ifdef HV_W02
+    __cpuid(r,0x40000003);
+    if (!(r[0]&2)) return "REFERENCE CLOCK";
+    W02State w02; __stosb((UINT8 *)&w02,0,sizeof(w02));
+    w02.start=__readmsr(0x40000020); /* Hyper-V partition reference time in 100 ns */
+#endif
     __cpuid(r,(int)0x80000000u);
     if ((UINT32)r[0]>=0x80000022u) {
         int ext[4]; __cpuid(ext,(int)0x80000022u);
@@ -169,6 +178,9 @@ static const char *run_standalone_l2(void *reservation)
     W01LoadGdtr(gdtrs+10);
     __writemsr(MSR_HSAVE,(UINTN)w01_page(vmcb,HostSave));
     const char *reason=w01_trace(vmcb,gpr,&ev);
+#ifdef HV_W02
+    if (!reason) reason=w02_run(vmcb,gpr,&ev,&w02);
+#endif
     __writecr2(cr2); __writedr(6,dr6); __writedr(7,dr7);
     __writemsr(MSR_HSAVE,old_hsave); W01LoadGdtr(gdtrs);
     __svm_stgi(); __writemsr(MSR_EFER,efer);
@@ -188,6 +200,14 @@ static const char *run_standalone_l2(void *reservation)
     pkg_observe("CR0 ",FIELD(UINT64,Cr0)); pkg_observe("CR3 ",FIELD(UINT64,Cr3));
     pkg_observe("CR4 ",FIELD(UINT64,Cr4)); pkg_observe("RAX ",FIELD(UINT64,Rax));
     pkg_observe("RCX ",gpr[1]); pkg_observe("DR6 ",FIELD(UINT64,Dr6));
+#ifdef HV_W02
+    pkg_observe("SEC FETCH ",w02.sec_pc); pkg_observe("PHASE ",w02.phase);
+    pkg_observe("FV HASHED ",w02.fvs); pkg_observe("PEI OUT PC ",w02.pei_pc);
+    pkg_observe("PEI PAGE ",w02.pei_page); pkg_observe("DXE OUT PC ",w02.dxe_pc);
+    pkg_observe("W02 OPS ",w02.ops);
+    pkg_observe("IO COUNT ",w02.io); pkg_observe("RDX ",gpr[2]); pkg_observe("RSP ",FIELD(UINT64,Rsp));
+    pkg_observe("ELAPSED100NS",__readmsr(0x40000020)-w02.start);
+#endif
     return reason;
 }
 #endif

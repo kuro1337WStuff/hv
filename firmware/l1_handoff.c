@@ -23,7 +23,10 @@ static UINTN arena_used;
 static __declspec(align(16)) UINT8 map_storage[128 * 1024];
 static volatile UINT32 *pixels;
 static UINT32 width, height, pitch;
-#if defined(HV_W01)
+#if defined(HV_W02)
+#define LOG_ROWS 39u /* launch evidence, phase markers, and first unexpected exit */
+#define LOG_Y(i) (66u + 17u * (i))
+#elif defined(HV_W01)
 #define LOG_ROWS 26u
 #define LOG_Y(i) (66u + 17u * (i))
 #elif defined(HV_STANDALONE_CONTRACT) || defined(HV_RANGE_AUDIT)
@@ -114,7 +117,7 @@ static int use_gop(EFI_GRAPHICS_OUTPUT_PROTOCOL *gop)
     EFI_GRAPHICS_OUTPUT_MODE_INFORMATION *i = m->Info;
     if (i->Version != 0 || (i->PixelFormat != PixelBlueGreenRedReserved8BitPerColor &&
         i->PixelFormat != PixelRedGreenBlueReserved8BitPerColor)) return 0;
-#if defined(HV_PACKAGE) || defined(HV_LINUX_ADMISSION) || defined(HV_W01)
+#if defined(HV_PACKAGE) || defined(HV_LINUX_ADMISSION) || defined(HV_W01) || defined(HV_W02)
     if (i->HorizontalResolution < 20u + 12u * 32u) return 0;
 #elif defined(HV_STANDALONE_L2) && defined(HV_NPT_WRITE)
     if (i->HorizontalResolution < 20u + 12u * (sizeof(NPT_INFO_LABEL) - 1u + 16u)) return 0;
@@ -208,7 +211,9 @@ static void log_hex(char *line, const char *label, UINT64 value)
 __declspec(noreturn) static void fail(const char *reason)
 {
     L1DisableInterrupts();
-#if defined(HV_W01)
+#if defined(HV_W02)
+    screen("L1 W02 STOP", reason, 0xff00ff);
+#elif defined(HV_W01)
     screen("L1 W01 FAIL", reason, 0xff00ff);
 #elif defined(HV_FLOOR_CONTRACT)
     screen("L1 CPU FLOOR FAIL", reason, 0xff00ff);
@@ -258,7 +263,7 @@ __declspec(noreturn) static void fail(const char *reason)
     L1Halt();
 }
 
-#if defined(HV_PACKAGE) || defined(HV_LINUX_ADMISSION) || defined(HV_W01)
+#if defined(HV_PACKAGE) || defined(HV_LINUX_ADMISSION) || defined(HV_W01) || defined(HV_W02)
 static void pkg_observe(const char *label, UINT64 value)
 {
     static char lines[LOG_ROWS][12 + 16 + 1];
@@ -267,6 +272,20 @@ static void pkg_observe(const char *label, UINT64 value)
     if (label[len] || logged>=LOG_ROWS) fail("OBSERVATION LIMIT");
     log_hex(lines[logged],label,value);
 }
+
+#ifdef HV_W02
+/* The first-run broker records its last frame at a fixed deadline. Leave a
+ * guest-derived breadcrumb if it expires mid-run, never a premature verdict. */
+static void w02_progress(const char *phase, UINT64 pc, UINT64 entries)
+{
+    unsigned saved=logged;
+    if (LOG_ROWS-logged<2) return;
+    pkg_observe("GUEST PC ",pc);
+    pkg_observe("ENTRIES ",entries);
+    screen("L1 W02 RUNNING",phase,0xffff00);
+    logged=saved;
+}
+#endif
 
 #endif
 #if defined(HV_PACKAGE) && !defined(HV_STANDALONE_CONTRACT)
@@ -297,7 +316,11 @@ __declspec(noreturn) void L1OwnedMain(void)
 #ifdef HV_STANDALONE_L2
     void *reservation = take_pages(StandaloneGuestPages);
     if (!reservation || (UINTN)reservation != owned_base || arena_used != ARENA_PAGES) fail("ARENA");
-#ifdef HV_W01
+#ifdef HV_W02
+    const char *reason = run_standalone_l2(reservation);
+    if (reason) fail(reason);
+    screen("L1 W02 PASS", "PEI MEMORY THEN DXE", 0x00ff00);
+#elif defined(HV_W01)
     const char *reason = run_standalone_l2(reservation);
     if (reason) fail(reason);
     screen("L1 W01 PASS", "RESET TO SEC FETCH ONLY", 0x00ff00);
@@ -451,7 +474,9 @@ EFI_STATUS EFIAPI EfiMain(EFI_HANDLE image, EFI_SYSTEM_TABLE *st)
     uart_init();
 #endif
     if (!find_screen(bs, st->ConsoleOutHandle)) {
-#if defined(HV_W01)
+#if defined(HV_W02)
+        if (st->ConOut) st->ConOut->OutputString(st->ConOut, L"L1 W02 STOP: NO DIRECT FRAMEBUFFER\r\n");
+#elif defined(HV_W01)
         if (st->ConOut) st->ConOut->OutputString(st->ConOut, L"L1 W01 FAIL: NO DIRECT FRAMEBUFFER\r\n");
 #elif defined(HV_STANDALONE_L2) && defined(HV_NPT_WRITE)
         if (st->ConOut) st->ConOut->OutputString(st->ConOut, L"L1 NPT WRITE FAIL: NO DIRECT FRAMEBUFFER\r\n");
@@ -468,7 +493,7 @@ EFI_STATUS EFIAPI EfiMain(EFI_HANDLE image, EFI_SYSTEM_TABLE *st)
     if (bs->AllocatePages(AllocateAnyPages, EfiLoaderData, TOTAL_PAGES, &owned_base) != EFI_SUCCESS ||
         !owned_base || (owned_base & (EFI_PAGE_SIZE - 1)) || owned_base > MAX_UINTN - TOTAL_PAGES * EFI_PAGE_SIZE)
         fail("RESERVATION");
-#ifdef HV_W01
+#if defined(HV_W01) || defined(HV_W02)
     const char *media_error=w01_read_media(image,st,(UINT8 *)(UINTN)owned_base);
     if (media_error) fail(media_error);
 #elif defined(HV_LINUX_ADMISSION)

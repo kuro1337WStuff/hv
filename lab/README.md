@@ -214,6 +214,26 @@ Only known firmware profiles in the isolated project VM are eligible. Each batch
 2. Run `firmware\build.cmd l1-w01`. Before moving A, verify the EFI boot catalog selects the ESP containing the built `EFI/BOOT/BOOTX64.EFI` and the two exact flash files. Record the source revision, complete ISO hash, both guest flash hashes, and the independently derived SEC entry in the reservation.
 3. A valid observation must join the reset instruction fetch at `0xfffffff0` to a fetch at that SEC entry **in the same cold L2 run**. On a stop, record the first missing transition and the raw exit fields. Neither a host parser result nor the firmware address printed as an expected value is execution evidence. The profile has no automatic PASS screen; inspect the retained console. No Windows, storage or PEI/DXE claim follows from W01 alone.
 
+### W02: PEI permanent memory followed by DXE (bench A)
+
+`l1-w02` starts from cold reset, not a saved SEC register image. Its guest OVMF contains two lab-only markers. The PEI marker identifies an allocated page; the DXE marker originates inside DXE Core, not DXE IPL. Both must come from their respective pinned module sites in one attempt. The page's first and last words must match the guest's writes, and its backing must belong to that guest. A guessed port value, a previous run's screen, or the host's firmware map cannot establish W02.
+
+Build the `w02-split-flash` artifact with `lab/w02/build.sh` in the pinned CI container. This instrumented single-BSP firmware publishes only 32–128 MiB as permanent memory and omits DXE drivers and storage. The original EDK II PEI allocator, DXE IPL loader and DXE Core are the components under test. Extract to `build/w02`; use the CODE and VARS SHA-256 values from the corresponding hosted build **log**, not just the download:
+
+```bat
+python firmware\w02_media.py prepare --inputs build\w02 --code-sha256 CODE_DIGEST --vars-sha256 VARS_DIGEST
+firmware\build.cmd l1-w02
+```
+
+`build/w02-preboot-map.json` records the section digests and marker RVAs in that flash image. From an x64 MSVC developer prompt, run the host control against those same bytes:
+
+```bat
+cl /nologo /TC /std:c11 /O1 /Ibuild\tools\edk2\MdePkg\Include\X64 /Ibuild\tools\edk2\MdePkg\Include /Fobuild\w02_evidence_test.obj /Febuild\w02_evidence_test.exe lab\tests\w02_evidence_test.c
+build\w02_evidence_test.exe build\w02\W02CODE.FD
+```
+
+Keep W01 and W02 flash and generated pins in their separate build directories. Build with `firmware\build.cmd l1-w02` after admitting the W02 firmware artifacts. Verify the boot-selected ESP, EFI, CODE and VARS hashes before staging the ISO. Use the existing bench A broker and the trial's prior-screen/checkpoint guard. There is no automatic W02 PASS screen. Retain the actual console even on a stop; distinguish an unsupported guest exit or missing marker from a broker or media failure. Do not advance to Windows Boot Manager on the basis of this test.
+
 ### Re-read a task board after every result
 
 From the supervisor checkout, run `python lab/hv_plan.py status "board.md"`, then `python lab/hv_plan.py run "board.md" --max-cards 2 --minutes 15`. The two sibling runner sessions above must already be open. The supervisor has no build, elevation or deployment step. Each completed worker triggers a fresh read; independent A/B cards may overlap, but never two on the same lane. The count and time limit apply to **admissions**; previously admitted finite batches may finish. A new or edited binding needs a new invocation. It exits when nothing eligible remains.
