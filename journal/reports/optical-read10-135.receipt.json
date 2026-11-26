@@ -1,0 +1,17 @@
+{
+  "trial": "135",
+  "scope": "host-only",
+  "source_revision": "fc340dd9cd54a25e55ec78720e6462120ecba9e4",
+  "oracle": "journal/reports/install-content-134.witness.json",
+  "cdb_hex": "28000003c51500000200",
+  "first_lba": 247061,
+  "sectors": 2,
+  "sector_bytes": 2048,
+  "response_bytes": 4096,
+  "witness_offset": 2032,
+  "witness_length": 64,
+  "media_sha256": "a11116c0645d892d6a5a7c585ecc1fa13aa66f8c7cc6b03bf1f27bd16860cc35",
+  "one_block_shift_sha256": "72776bd9740844b75785fdf3792a1368b29a09dbbdfc7c209d6eef0fe419457f",
+  "range_sha256": "8d0dd15b53bcd7a6448f5fc564381655a87356b3f19909b3123143b55f0d9461",
+  "response_sha256": "f145fbadd6feca0f3bfd7fee4e4f6c67792221604216c1b7aa708cea19c9e28a"
+}

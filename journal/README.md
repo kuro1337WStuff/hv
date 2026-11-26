@@ -4,6 +4,8 @@ Development host: Ryzen 9 9950X. Firmware runs use the `HV-SVM-L1` Hyper-V VM; h
 
 **Start here:** [Current status, feature trials and integration order](status.md). The entries below describe the integrated baseline through 041. Later feature evidence is published on `main` independently of its implementation; see [how trials are published](project-workflow.md).
 
+**[135 · Two-sector optical READ(10)](trials/135.md):** the host command returned all 4,096 expected bytes and matched [134](trials/134.md) across the sector boundary. Invalid requests left the output unchanged without a backing read. No AHCI controller or guest ran.
+
 **[134 · Windows installation bytes on optical media](trials/134.md):** the named outer file and raw sectors agreed on a 64-byte boundary-crossing range; a one-sector shift and a shortened view both failed. [Reusable host witness](reports/install-content-134.witness.json). No guest read.
 
 **[133 · Reproducible journal figures](trials/133.md):** [Functional outcomes by build](reports/functional-outcomes.svg) · [matched benchmark ledger](reports/benchmark-ledger.svg) · [input manifest](reports/analytics.json). No eligible elapsed-time cohorts yet.
