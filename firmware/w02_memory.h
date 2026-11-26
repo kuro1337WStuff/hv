@@ -14,6 +14,10 @@ typedef struct {
     UINT64 io, ops, sec_pc, start, timer;
     UINT8 jump_xmm[10][16]; /* PEI BaseLib's nonvolatile XMM6..15 jump buffer */
     BOOLEAN fvs;
+#ifdef HV_W03
+    UINT32 ready_pc, boot_base, boot_handle, boot_table, boot_rsp, boot_pc, boot_next, boot_steps;
+    UINT32 start_service; BOOLEAN saw_start;
+#endif
 } W02State;
 static BOOLEAN w02_ram(UINT64 a, UINTN n)
 {
@@ -42,6 +46,11 @@ static void w02_map(UINT8 *vmcb)
         }
         w01_link(vmcb,W01PdRam,pt,W02PtRam+pt);
     }
+#ifdef HV_W03
+    /* Reserved gap, descriptor through the entire 16 MiB file window.
+     * w02_span also requires the actual W leaf on every emulated store. */
+    for (UINT32 a=W03DescriptorGpa;a<W02Permanent;a+=W01Page) *w02_leaf(vmcb,a)&=~2ull;
+#endif
     *w01_code_leaf(vmcb,W01_RESET_GPA)|=W01_NX;
 }
 /* Below 4 GiB, four levels, supervisor long mode only. Follow private guest

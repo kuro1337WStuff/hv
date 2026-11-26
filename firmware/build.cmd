@@ -56,6 +56,16 @@ if /i "%~1"=="l2" (
   set "ASM_SRC=firmware\l1_handoff.asm"
   set "EXTRA_ASM=vcpu_gpr w01_switch"
   if not exist build\w02_pin.h (echo Missing prepared W02 pin. & exit /b 1)
+) else if /i "%~1"=="l1-w03" (
+  set "SRC=l1_handoff"
+  set "EFI=L1W03"
+  set "ISO=hv-l1-w03"
+  set "OVMF_PROFILE=w03"
+  set "CASE_FLAGS=/DHV_STANDALONE_L2 /DHV_W02 /DHV_W03"
+  set "ASM_OBJ=build\w03_handoff.obj"
+  set "ASM_SRC=firmware\l1_handoff.asm"
+  set "EXTRA_ASM=vcpu_gpr w01_switch"
+  if not exist build\w03_pin.h (echo Missing prepared W03 pin. & exit /b 1)
 ) else if /i "%~1"=="l1-cpuid" (
   set "SRC=l1_handoff"
   set "EFI=L1CPUID"

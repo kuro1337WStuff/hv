@@ -3,7 +3,10 @@
 #include <Protocol/LoadedImage.h>
 #include <Protocol/SimpleFileSystem.h>
 #include "hv_sha256.h"
-#ifdef HV_W02
+#ifdef HV_W03
+#include "../build/w03_pin.h"
+#include "w03_layout.h"
+#elif defined(HV_W02)
 #include "../build/w02_pin.h"
 #else
 #include "../build/w01_pin.h"
@@ -62,7 +65,11 @@ static const char *w01_read_media(EFI_HANDLE image, EFI_SYSTEM_TABLE *st, UINT8 
     if (bs->HandleProtocol(loaded->DeviceHandle,&fs_guid,(void **)&fs)!=EFI_SUCCESS || !fs ||
         fs->OpenVolume(fs,&root)!=EFI_SUCCESS) return "MEDIA VOLUME";
     UINT8 *flash=w01_page(vmcb,W01Flash);
-#ifdef HV_W02
+#ifdef HV_W03
+    const char *e=w01_read_fd(root,L"\\W03CODE.FD",flash+W01VarsBytes,W01CodeBytes);
+    if (!e) e=w01_read_fd(root,L"\\W03VARS.FD",flash,W01VarsBytes);
+    if (!e) e=w01_read_fd(root,L"\\WINBOOT.EFI",w01_page(vmcb,W02Ram)+W03FileGpa,W03_FILE_SIZE);
+#elif defined(HV_W02)
     const char *e=w01_read_fd(root,L"\\W02CODE.FD",flash+W01VarsBytes,W01CodeBytes);
     if (!e) e=w01_read_fd(root,L"\\W02VARS.FD",flash,W01VarsBytes);
 #else
