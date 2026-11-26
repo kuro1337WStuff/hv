@@ -4,6 +4,8 @@ Development host: Ryzen 9 9950X. Firmware runs use the `HV-SVM-L1` Hyper-V VM; h
 
 **Start here:** [Current status, feature trials and integration order](status.md). The entries below describe the integrated baseline through 041. Later feature evidence is published on `main` independently of its implementation; see [how trials are published](project-workflow.md).
 
+**[143 · Windows entry prefix corrected; VM not run](trials/143.md):** host verification accepted the exact prologue and rejected 1,020 one-byte variants. A remained running at 142: the saved checkpoint thumbnail differed from the matching live STOP, so the repaired image never booted.
+
 **[142 · DXE write fault repaired](trials/142.md):** bench A reached load-ready and transferred to the signed Windows Boot Manager entry. The entry verifier rejected the REX prefix before executing the first instruction. W03 remains open; screenshot and exact next check in the trial.
 
 **[141 · Windows Boot Manager handoff](trials/141.md):** bench A reached DXE, then faulted writing its own sealed `.text`. The Windows load-ready marker and retired entry count were both zero. W03 remains open.
