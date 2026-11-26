@@ -17,6 +17,10 @@ typedef struct {
 #ifdef HV_W03
     UINT32 ready_pc, boot_base, boot_handle, boot_table, boot_rsp, boot_pc, boot_next, boot_steps;
     UINT32 start_service; BOOLEAN saw_start;
+#ifdef HV_W04
+    UINT32 w04_steps, w04_pc, w04_target, w04_service;
+    UINT32 w04_bs; UINT8 w04_bs_digest[32]; /* measured DXE's ready-time table */
+#endif
 #endif
 } W02State;
 static BOOLEAN w02_ram(UINT64 a, UINTN n)

@@ -214,7 +214,9 @@ static void log_hex(char *line, const char *label, UINT64 value)
 __declspec(noreturn) static void fail(const char *reason)
 {
     L1DisableInterrupts();
-#if defined(HV_W03)
+#if defined(HV_W04)
+    screen("L1 W04 STOP", reason, 0xff00ff);
+#elif defined(HV_W03)
     screen("L1 W03 STOP", reason, 0xff00ff);
 #elif defined(HV_W02)
     screen("L1 W02 STOP", reason, 0xff00ff);
@@ -287,7 +289,9 @@ static void w02_progress(const char *phase, UINT64 pc, UINT64 entries)
     if (LOG_ROWS-logged<2) return;
     pkg_observe("GUEST PC ",pc);
     pkg_observe("ENTRIES ",entries);
-#ifdef HV_W03
+#ifdef HV_W04
+    screen("L1 W04 RUNNING",phase,0xffff00);
+#elif defined(HV_W03)
     screen("L1 W03 RUNNING",phase,0xffff00);
 #else
     screen("L1 W02 RUNNING",phase,0xffff00);
@@ -325,7 +329,11 @@ __declspec(noreturn) void L1OwnedMain(void)
 #ifdef HV_STANDALONE_L2
     void *reservation = take_pages(StandaloneGuestPages);
     if (!reservation || (UINTN)reservation != owned_base || arena_used != ARENA_PAGES) fail("ARENA");
-#ifdef HV_W03
+#ifdef HV_W04
+    const char *reason = run_standalone_l2(reservation);
+    /* This profile has no kernel witness; it must never display W04 PASS. */
+    screen("L1 W04 STOP", reason ? reason : "NO KERNEL WITNESS", 0xff00ff);
+#elif defined(HV_W03)
     const char *reason = run_standalone_l2(reservation);
     if (reason) fail(reason);
     screen("L1 W03 PASS", "WINDOWS EFI ENTRY RETIRED", 0x00ff00);
@@ -487,7 +495,9 @@ EFI_STATUS EFIAPI EfiMain(EFI_HANDLE image, EFI_SYSTEM_TABLE *st)
     uart_init();
 #endif
     if (!find_screen(bs, st->ConsoleOutHandle)) {
-#if defined(HV_W03)
+#if defined(HV_W04)
+        if (st->ConOut) st->ConOut->OutputString(st->ConOut, L"L1 W04 STOP: NO DIRECT FRAMEBUFFER\r\n");
+#elif defined(HV_W03)
         if (st->ConOut) st->ConOut->OutputString(st->ConOut, L"L1 W03 STOP: NO DIRECT FRAMEBUFFER\r\n");
 #elif defined(HV_W02)
         if (st->ConOut) st->ConOut->OutputString(st->ConOut, L"L1 W02 STOP: NO DIRECT FRAMEBUFFER\r\n");

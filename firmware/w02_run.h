@@ -6,6 +6,12 @@
 #ifdef HV_W03
 #include "w03_entry.h"
 #endif
+#ifdef HV_W04
+#ifndef HV_W03
+#error HV_W04 requires the unmodified W03 admission and entry witness
+#endif
+#include "w04_boot.h"
+#endif
 #include "w02_platform.h"
 
 static const char *w02_run(UINT8 *vmcb, UINT64 *g, W01Evidence *e, W02State *s)
@@ -31,7 +37,10 @@ static const char *w02_run(UINT8 *vmcb, UINT64 *g, W01Evidence *e, W02State *s)
 #ifdef HV_W03
         if (s->phase==4 && w02_inside(pc,s->boot_base,W03_IMAGE_SIZE)) {
             error=w03_entry(vmcb,g,e,s,pc);
-            break; /* never run another instruction, including on refusal */
+#ifdef HV_W04
+            if (!error) return w04_boot(vmcb,g,e,s);
+#endif
+            break; /* W03 alone never runs a second Boot Manager instruction. */
         }
 #endif
         const UINT8 *p=w02_back(vmcb,pc,15);
@@ -73,6 +82,9 @@ static const char *w02_run(UINT8 *vmcb, UINT64 *g, W01Evidence *e, W02State *s)
                 UINT32 phase=s->phase;
                 error=d.k==W02Io?w02_io(vmcb,g,s,d,p):w02_sys(vmcb,g,s,d);
                 if (error) break;
+#ifdef HV_W04
+                if (phase==3 && s->phase==4) w04_bind_services(vmcb,s);
+#endif
                 if (s->phase!=phase) {
 #ifdef HV_W03
                     w02_progress(s->phase==2?"PEI MEMORY":s->phase==3?"DXE OUT":"DXE READY",pc,e->entries);
@@ -88,7 +100,9 @@ static const char *w02_run(UINT8 *vmcb, UINT64 *g, W01Evidence *e, W02State *s)
         }
         if (!(s->ops&0x3ffff)) w02_progress(s->phase==2?"PEI MEMORY":s->fvs?"PINNED FV":"SEC RUN",pc,e->entries);
     }
-#ifdef HV_W03
+#ifdef HV_W04
+    return error?error:"W04 BEFORE ENTRY BUDGET";
+#elif defined(HV_W03)
     return error?error:s->phase==5 && s->boot_steps==1?NULL:"W03 ENTRY BUDGET";
 #else
     return error?error:s->phase==3?NULL:"W02 ENTRY BUDGET";
