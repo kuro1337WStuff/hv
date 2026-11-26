@@ -198,6 +198,19 @@ static const char *run_standalone_l2(void *reservation)
     __writecr2(cr2); __writedr(6,dr6); __writedr(7,dr7);
     __writemsr(MSR_HSAVE,old_hsave); W01LoadGdtr(gdtrs);
     __svm_stgi(); __writemsr(MSR_EFER,efer);
+#ifdef HV_W04
+    /* Absolute guest PCs and exit metadata only. Do not publish image bytes. */
+    pkg_observe("SEC FETCH ",w02.sec_pc); pkg_observe("PEI PAGE ",w02.pei_page);
+    pkg_observe("DXE OUT PC ",w02.dxe_pc); pkg_observe("READY PC ",w02.ready_pc);
+    pkg_observe("IMAGE BASE ",w02.boot_base); pkg_observe("ENTRY PC ",w02.boot_pc);
+    pkg_observe("ENTRY NEXT ",w02.boot_next); pkg_observe("ENTRY STEPS ",w02.boot_steps);
+    pkg_observe("EFI TABLE ",w02.boot_table); pkg_observe("PHASE ",w02.phase);
+    pkg_observe("POST STEPS ",w02.w04_steps); pkg_observe("POST PC ",w02.w04_pc);
+    pkg_observe("NEXT TARGET ",w02.w04_target); pkg_observe("SERVICE OFF ",w02.w04_service);
+    pkg_observe("RIP ",FIELD(UINT64,Rip)); pkg_observe("RSP ",FIELD(UINT64,Rsp));
+    pkg_observe("EXIT ",FIELD(UINT64,ExitCode)); pkg_observe("INFO1 ",FIELD(UINT64,Info1));
+    pkg_observe("INFO2 ",FIELD(UINT64,Info2)); pkg_observe("DR6 ",FIELD(UINT64,Dr6));
+#else
     if (ev.before>=W01_CODE_GPA && ev.before<=0xffffffffu) {
         const UINT8 *p=flash+(UINTN)(ev.before-W01_FLASH_GPA);
         for (unsigned i=0;i<8 && ev.before+i<=0xffffffffu;++i) ev.bytes|=(UINT64)p[i]<<(i*8);
@@ -233,6 +246,7 @@ static const char *run_standalone_l2(void *reservation)
     pkg_observe("ENTRY NEXT ",w02.boot_next); pkg_observe("EFI HANDLE ",w02.boot_handle);
     pkg_observe("EFI TABLE ",w02.boot_table); pkg_observe("ENTRY RSP ",w02.boot_rsp);
     pkg_observe("ENTRY STEPS ",w02.boot_steps);
+#endif
 #endif
 #endif
     return reason;
