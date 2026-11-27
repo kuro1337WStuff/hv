@@ -1,0 +1,22 @@
+{
+  "title": "Trial 147 scoped sender and live admission",
+  "records": [
+    {
+      "label": "W04 one-shot scoped sender controls",
+      "scope": "host",
+      "status": "passed",
+      "trial": "147",
+      "commit": "acbf2257f389",
+      "source": "journal/trials/147.md"
+    },
+    {
+      "label": "W04 ordinary sender boot admission",
+      "scope": "host",
+      "status": "held",
+      "trial": "147",
+      "commit": "acbf2257f389",
+      "source": "journal/trials/147.md"
+    }
+  ],
+  "comparisons": []
+}
