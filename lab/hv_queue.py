@@ -216,10 +216,23 @@ class SessionInput(io.RawIOBase):
 
 def session_run(path, profiles, registry, manifest):
     queue = read_limited(path / 'queue.json', 8192)
-    queue.decode('utf-8')
     checkout = hashlib.sha256(str(ROOT).lower().encode('utf-8')).hexdigest()[:20]
     program_files = Path(os.environ.get('ProgramW6432') or os.environ['ProgramFiles'])
     raw = read_limited(program_files / ('HvLabSession-' + checkout) / 'session.json', 4096)
+    return send_session_documents(path, profiles, registry, manifest, queue, raw)
+
+
+def send_session_documents(path, profiles, registry, manifest, queue, raw):
+    """Send one batch using the caller's already-read queue and session descriptor bytes.
+
+    A one-shot caller can authenticate both byte strings before claiming its run.
+    Do not reopen either path after the claim: replacement must not redirect the
+    connection or change the worklist. The loopback peer PID check still applies.
+    A transport exception leaves the caller's claim spent, not eligible for retry.
+    """
+    if not (0 < len(queue) <= 8192 and 0 < len(manifest) <= 32768 and 0 < len(raw) <= 4096):
+        raise ValueError('Session documents exceed the wire limits.')
+    queue.decode('utf-8')
     info = json.loads(raw)
     if not isinstance(info, dict) or type(info.get('pid')) is not int or not 0 < info['pid'] <= 0xffffffff or \
             type(info.get('port')) is not int or not 0 < info['port'] <= 65535 or \
