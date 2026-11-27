@@ -19,3 +19,5 @@ jobs:
             & powershell.exe -NoProfile -NonInteractive -File ".\lab\tests\$test.ps1"
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
+      - name: Frozen sender documents on disposable loopback
+        run: python -B -m unittest -v lab.tests.session_documents_test

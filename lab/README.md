@@ -10,7 +10,9 @@ The default order is `l2`, `cpuid`, `npt-write`, `npt-remap`, `npt-cross`. To re
 
 ### Bench A runner release for trial 147
 
-`release/bench-a-runner` backports the reviewed W04 receiver and its stage observer to the previously deployed `56db7a855df5` runner. It does not update the ordinary Python client, guest code, profile manifest, media, or either other VM. Use the merged release commit detached in the canonical A checkout, not a feature checkout. A checkout change does not replace a running protected stage.
+`release/bench-a-runner` backports the reviewed W04 receiver and its stage observer to the previously deployed `56db7a855df5` runner. The later ordinary-client transport change does not modify that worker, the guest, profile manifest, or either other VM. Use the merged release detached in the canonical A checkout, not a feature checkout. A client-only update does not require restarting the protected stage.
+ 
+For a one-shot submission, `hv_queue.send_session_documents` takes the already checked queue, manifest and descriptor bytes. Replacing those files after qualification cannot redirect this send. The transport still checks the connected loopback peer's PID. It does not grant admission: the caller verifies authorization and creates the exclusive reservation before sending. A missing acknowledgment is uncertain, not permission to retry.
 
 Retire the identified idle A broker through its own revoke control; verify its listener and exclusive handle are gone before launching a single fresh A session. From an ordinary PowerShell, `lab\Get-HvStageIdentity.ps1 -LaneRoot <absolute hv-lane-a path>` must report one live stage at the reviewed worker digest. The stage, frozen media, and a matching host fixture are **not** boot admission. Trial [147](https://github.com/kuro1337WStuff/hv/issues/13#issuecomment-7204015719) needs its separate one-boot decision while the original campaign STOP stays in place. See the [journal](https://github.com/kuro1337WStuff/hv/blob/main/journal/trials/147.md) for the observed disposition.
 
