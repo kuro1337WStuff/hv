@@ -1,0 +1,21 @@
+name: Bench A runner qualification
+on:
+  pull_request:
+    branches: [release/bench-a-runner]
+permissions:
+  contents: read
+jobs:
+  runner:
+    runs-on: windows-2022
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Stage identity, lane guards, W04 transaction and authority
+        shell: powershell
+        run: |
+          foreach ($test in 'stage_identity_test','lane_preflight_test','w04_receiver_test','w04_release_test') {
+            & powershell.exe -NoProfile -NonInteractive -File ".\lab\tests\$test.ps1"
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }

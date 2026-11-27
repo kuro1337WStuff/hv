@@ -8,6 +8,12 @@ python lab/hv_queue.py run
 
 The default order is `l2`, `cpuid`, `npt-write`, `npt-remap`, `npt-cross`. To rebuild and run just two profiles: `python lab/hv_queue.py run --rebuild npt-write npt-remap`. Without `--rebuild`, the runner uses the already-built ISOs in `build/`. It freezes the ordered profiles and SHA-256 digests for this batch before asking Windows to launch the visible Hyper-V worker. Building and staging use the caller's existing privileges. No change to UAC, no service and no per-test approval. An operator must still authorize elevation when Windows requires it.
 
+### Bench A runner release for trial 147
+
+`release/bench-a-runner` backports the reviewed W04 receiver and its stage observer to the previously deployed `56db7a855df5` runner. It does not update the ordinary Python client, guest code, profile manifest, media, or either other VM. Use the merged release commit detached in the canonical A checkout, not a feature checkout. A checkout change does not replace a running protected stage.
+
+Retire the identified idle A broker through its own revoke control; verify its listener and exclusive handle are gone before launching a single fresh A session. From an ordinary PowerShell, `lab\Get-HvStageIdentity.ps1 -LaneRoot <absolute hv-lane-a path>` must report one live stage at the reviewed worker digest. The stage, frozen media, and a matching host fixture are **not** boot admission. Trial [147](https://github.com/kuro1337WStuff/hv/issues/13#issuecomment-7204015719) needs its separate one-boot decision while the original campaign STOP stays in place. See the [journal](https://github.com/kuro1337WStuff/hv/blob/main/journal/trials/147.md) for the observed disposition.
+
 ### One launch for a supervised session
 
 From the checkout, run **once** and approve the Windows elevation prompt:
