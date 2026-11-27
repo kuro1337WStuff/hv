@@ -4,7 +4,7 @@ Development host: Ryzen 9 9950X. Firmware runs use the `HV-SVM-L1` Hyper-V VM; h
 
 **Start here:** [Current status, feature trials and integration order](status.md). The entries below describe the integrated baseline through 041. Later feature evidence is published on `main` independently of its implementation; see [how trials are published](project-workflow.md).
 
-**[147 · HandleProtocol return witness reserved; NOT RUN](trials/147.md).** A was verified Off with the 146 terminal preserved. The frozen media matched, but no boot was admitted or submitted. No return, status or timing was measured.
+**[147 · HandleProtocol return witness reserved; NOT RUN](trials/147.md).** The sender passed its host controls, but the installed worker accepted an empty DVD in an Off-VM fixture. A stayed Off with the actual 146 loader DVD and saved terminal intact. No guest return, EFI status or timing.
 
 **[146 · Boot Manager called the HandleProtocol entry](trials/146.md).** After 23 post-entry instructions A stopped before executing the firmware routine. A follow-up matched the register call and the exact DXE entry using the frozen inputs. Neither a service return nor a Windows kernel start was observed.
 

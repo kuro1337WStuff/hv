@@ -2,6 +2,22 @@
   "title": "W04 HandleProtocol return witness",
   "records": [
     {
+      "label": "W04 one-shot request on isolated loopback",
+      "scope": "host",
+      "status": "passed",
+      "trial": "147",
+      "commit": "56db7a855df5",
+      "source": "journal/trials/147.md"
+    },
+    {
+      "label": "W04 receiver refuses empty prior DVD",
+      "scope": "host",
+      "status": "failed",
+      "trial": "147",
+      "commit": "56db7a855df5",
+      "source": "journal/trials/147.md"
+    },
+    {
       "label": "UEFI HandleProtocol return witness",
       "scope": "nested",
       "status": "not-run",
