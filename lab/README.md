@@ -10,6 +10,21 @@ python lab/hv_queue.py run
 
 The default order is `l2`, `cpuid`, `npt-write`, `npt-remap`, `npt-cross`. To rebuild and run just two profiles: `python lab/hv_queue.py run --rebuild npt-write npt-remap`. Without `--rebuild`, the runner uses the already-built ISOs in `build/`. It freezes the ordered profiles and SHA-256 digests for this batch before asking Windows to launch the visible Hyper-V worker. Building and staging use the caller's existing privileges. No change to UAC, no service and no per-test approval. An operator must still authorize elevation when Windows requires it.
 
+### Reserved W04 boot on bench A
+
+Trial [147](https://github.com/kuro1337WStuff/hv/issues/13#issuecomment-7204015719) is a one-shot firmware diagnostic, not a regression profile. The worker recognizes the reserved run ID, profile **or** ISO digest and refuses unless all three agree, the queue contains only that image, and neither the prior loader nor the return witness has an approved PASS screen. Ordinary regression profiles keep their existing DVD rules.
+
+Under the A mutex, the worker verifies the protected 146 release against the Off VM, the live and Saved DVDs, the parent relationship, and the complete checkpoint inventory. It locks the two staged images before writing an exclusive intent. A new Standard checkpoint gets its own identity receipt; every subsequent operation rechecks the live state, one-boot authority and run STOP. A partial intent or receipt is evidence to reconcile, never permission to retry. A diagnostic frame still needs independent review.
+
+Boot admission is separate from installation. The receiver reads a separately enrolled owner decision from the protected broker root; it cannot create that decision. The commitment binds the frozen release, staged worker and companion, dispatch policy and original campaign STOP generation. Keep the root STOP in place. A missing, expired or revoked decision is a refusal, not a request to use the generic launcher. No credential, protected selector or grant is distributed in this repository.
+
+Host-only checks (Windows PowerShell 5.1, no VM or broker):
+
+```powershell
+powershell.exe -NoProfile -NonInteractive -File lab\tests\w04_receiver_test.ps1
+powershell.exe -NoProfile -NonInteractive -File lab\tests\w04_release_test.ps1
+```
+
 ### Windows-visible core and SMT inventory (host only)
 
 From the project root, use an ordinary local x64 Windows shell with x64 Python 3.11+. The first command runs synthetic binary fixtures only; the second inventories the current host. Neither needs Hyper-V, elevation, affinity changes, a driver, or firmware access.

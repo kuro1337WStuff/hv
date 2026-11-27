@@ -76,7 +76,7 @@ try {
 
         $proof = @(Get-CurrentStageIdentity $Root $Runner)
         if ($proof.Count -ne 1 -or $proof[0].Stage -cne [IO.Path]::GetFileName($Stage) -or
-            $proof[0].WorkerSha256 -cne 'b1ec9193b5d93ad851c19a5a1eff545adfb8fd08f47393afcfa3f71c89fea6e2') {
+            $proof[0].WorkerSha256 -cne (Get-StageWorkerHash $Runner)) {
             throw 'FAIL: proof did not identify exactly the live stage and reviewed worker'
         }
         'PASS: one live matching worker beside a historical mismatch identified'

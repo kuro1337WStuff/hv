@@ -17,6 +17,7 @@ $images = @{}
 $events = $null
 $mutex = $null
 $ownsMutex = $false
+$abandonedLease = $false
 $interactive = $false
 $activeProfile = ''
 $finalState = 'ERROR'
@@ -274,6 +275,117 @@ function Wait-ConsoleResult($Item) {
     Request-Attention "No console frame to save within 60 seconds: $lastIssue"
 }
 
+function Test-W04Request([string]$RunId, $Queue) {
+    # A renamed profile must not move the same frozen bytes onto the ordinary checkpoint path.
+    if ($RunId -ieq '1f0eceeb4492541ab6a0b8bc6b49bd17') { return $true }
+    foreach ($item in $Queue) {
+        if ($item.Profile -ieq 'l1-w04-return' -or
+            $item.Digest -ieq 'd4f15d71d3866648983ecb5298afbe69ae50e9a49c1b3e82452d03e40645de0e') { return $true }
+    }
+    return $false
+}
+
+function Assert-W04Lineage($Release, $View, [guid]$NewId, [string]$PriorPath) {
+    # Under the A mutex: before checkpoint expect exactly the released set; afterward
+    # allow only the new Off child and require it to be the VM's current parent.
+    $all = @(Get-VMSnapshot -VM $View.VM)
+    $expected = @($Release.Ids)
+    $parent = [guid]$Release.SavedId
+    if ($expected.Count -ne 18 -or $expected -notcontains $parent.ToString() -or
+        $expected -notcontains ([guid]$Release.SavedParent).ToString()) { throw 'Invalid released inventory.' }
+    if ($NewId -ne [guid]::Empty) {
+        if ($expected -contains $NewId.ToString()) { throw 'Checkpoint is not new.' }
+        $expected += $NewId.ToString()
+        $parent = $NewId
+    }
+    $actual = @($all | ForEach-Object { ([guid]$_.Id).ToString() })
+    if ($View.VM.Id -ne $Release.VmId -or $View.VM.ParentSnapshotId -ne $parent -or
+        $actual.Count -ne $expected.Count -or @($all | Where-Object VMId -ne $Release.VmId).Count -or
+        @(Compare-Object $expected $actual).Count) { throw 'Released VM parent or inventory changed.' }
+    $saved = @($all | Where-Object Id -eq $Release.SavedId)
+    if ($saved.Count -ne 1 -or $saved[0].Name -cne 'W04 146-R2 recovery' -or
+        $saved[0].ParentSnapshotId -ne $Release.SavedParent -or [string]$saved[0].State -cne 'Saved' -or
+        [string]$saved[0].SnapshotType -cne 'Standard') { throw 'Saved release lineage changed.' }
+    $children = @($all | Where-Object Name -eq $point)
+    if ($NewId -eq [guid]::Empty) {
+        if ($children.Count) { throw 'The reserved checkpoint name is already in use.' }
+    } elseif ($children.Count -ne 1 -or $children[0].Id -ne $NewId -or
+        $children[0].ParentSnapshotId -ne $Release.SavedId -or [string]$children[0].State -cne 'Off' -or
+        [string]$children[0].SnapshotType -cne 'Standard') { throw 'Wrong pre-boot checkpoint child.' }
+    foreach ($snap in ($saved + $children)) {
+        $dvd = @(Get-VMDvdDrive -VMSnapshot $snap)
+        if ($dvd.Count -ne 1 -or $dvd[0].Path -ine $priorPath) { throw 'Wrong checkpoint DVD.' }
+    }
+}
+
+function Invoke-W04Boot {
+    # Session-only one-shot transaction. The caller holds the same mutex used by
+    # ordinary batches. Never power off/restore, retry, or infer PASS from a boot.
+    $prior = 'd4ae62551bed9d40024fb8572183d88fcc6cc67db3b37a11c7509c4c18710e98'
+    $candidate = 'd4f15d71d3866648983ecb5298afbe69ae50e9a49c1b3e82452d03e40645de0e'
+    $profile = 'l1-w04-return'
+    if (!$ownsMutex -or $abandonedLease -or !$sessionMode -or $vmName -cne 'HV-SVM-L1-A' -or
+        $runId -cne '1f0eceeb4492541ab6a0b8bc6b49bd17' -or $queue.Count -ne 1 -or
+        $queue[0].Profile -cne $profile -or $queue[0].Digest -ine $candidate -or $profiles.Count -ne 2) {
+        throw 'Not the reserved bench A return-witness request.'
+    }
+    foreach ($name in 'l1-w04-loader',$profile) {
+        if (!$profiles.ContainsKey($name) -or $profiles[$name].stem -cne "hv-$name" -or
+            $null -ne $profiles[$name].pass) { throw 'Expected the two diagnostic profiles with no PASS pin.' }
+    }
+    $priorPath = Open-FrozenImage 'l1-w04-loader' $prior
+    $target = Open-FrozenImage $profile $candidate
+    if ($queue[0].Path -ine $target) { throw 'Candidate path differs from the staged image.' }
+    $release = Open-W04Release -SessionRoot ([IO.Path]::GetDirectoryName($PSScriptRoot)) `
+        -Operations (Join-Path ([IO.Path]::GetDirectoryName([IO.Path]::GetDirectoryName($lab))) 'hv-operations') -WorkerPath $PSCommandPath
+    if ($vmId -ne $release.VmId) { throw 'Release is for another VM.' }
+    $view = Get-LabView 'Off' $priorPath
+    Assert-W04Lineage $release $view ([guid]::Empty) $priorPath
+    Assert-W04Authority -Release $release
+    Assert-QueueActive
+    Write-W04Receipt -Release $release -Phase intent
+    $view = Get-LabView 'Off' $priorPath
+    Assert-W04Lineage $release $view ([guid]::Empty) $priorPath
+    Write-QueueEvent 'CHECKPOINT' "Saving the verified release as '$point'."
+    Assert-W04Authority -Release $release
+    Assert-QueueActive
+    $new = @(Checkpoint-VM -VM $view.VM -SnapshotName $point -Passthru -Confirm:$false)
+    if ($new.Count -ne 1 -or !$new[0].Id -or [guid]$new[0].Id -eq [guid]::Empty) {
+        throw 'Checkpoint identity uncertain; retain intent. Do not retry.'
+    }
+    $id = [guid]$new[0].Id
+    # The cmdlet's returned GUID is not a verified child. Re-read first, even
+    # after revocation: this observes a completed action and permits no new one.
+    $view = Get-LabView 'Off' $priorPath
+    Assert-W04Lineage $release $view $id $priorPath
+    Write-W04Receipt -Release $release -Phase checkpoint -CheckpointId $id
+    Write-QueueEvent 'NEXT' 'Five seconds to stop before mounting the reserved image.'
+    Wait-Interruptible 5000
+    $view = Get-LabView 'Off' $priorPath
+    Assert-W04Lineage $release $view $id $priorPath
+    Write-QueueEvent 'MOUNT' "Mounting the frozen $profile media; SHA256=$candidate"
+    Assert-W04Authority -Release $release
+    Assert-QueueActive
+    Set-VMDvdDrive -VMDvdDrive $view.DVD -Path $target -Confirm:$false
+    $view = Get-LabView 'Off' $target
+    Write-W04Receipt -Release $release -Phase mount -CheckpointId $id
+    Assert-W04Lineage $release $view $id $priorPath
+    Assert-W04Authority -Release $release
+    Assert-QueueActive
+    Set-VMFirmware -VM $view.VM -FirstBootDevice $view.DVD -Confirm:$false
+    $view = Get-LabView 'Off' $target
+    $order = @((Get-VMFirmware -VM $view.VM).BootOrder)
+    if (!$order.Count -or $order[0].Device.Id -ne $driveId) { throw 'Firmware did not select the reserved DVD.' }
+    Write-W04Receipt -Release $release -Phase firmware -CheckpointId $id
+    Assert-W04Lineage $release $view $id $priorPath
+    Write-QueueEvent 'BOOT' 'Starting the reserved W04 return witness once.'
+    Assert-W04Authority -Release $release
+    Assert-QueueActive
+    Start-VM -VM $view.VM -Confirm:$false
+    $null = Get-LabView 'Running' $target
+    Write-W04Receipt -Release $release -Phase boot -CheckpointId $id
+}
+
 try {
     $lab = $PSScriptRoot
     if ($sessionMode) {
@@ -323,7 +435,7 @@ try {
     $events.AutoFlush = $true
     $mutex = [Threading.Mutex]::new($false, "Global\HvQueue-$vmName")
     try { $ownsMutex = $mutex.WaitOne(0) }
-    catch [Threading.AbandonedMutexException] { $ownsMutex = $true }
+    catch [Threading.AbandonedMutexException] { $ownsMutex = $true; $abandonedLease = $true }
     if (!$ownsMutex) { Request-Attention 'Another worker owns the lab VM. No changes made.' }
 
     $interactive = $Host.Name -eq 'ConsoleHost' -and [Environment]::UserInteractive -and ![Console]::IsInputRedirected
@@ -342,6 +454,17 @@ try {
     Assert-PlainPath $manifest
     $profiles = Read-HvProfiles $manifest
     $queue = @(Read-Worklist)
+    if (Test-W04Request $runId $queue) {
+        if (!$sessionMode -or $vmName -cne 'HV-SVM-L1-A') { throw 'W04 requires the dedicated A session.' }
+        . (Join-Path $PSScriptRoot 'HvW04Release.ps1')
+        $point = "HvQueue before $runId"
+        $driveId = $view.DVD.Id
+        $activeProfile = 'l1-w04-return'
+        Invoke-W04Boot
+        Write-QueueEvent 'WATCHING' 'Retaining the first bounded diagnostic frame; no approved PASS screen.'
+        Wait-ConsoleResult $queue[0]
+        Request-Attention 'Review the W04 guest evidence; no automatic PASS.'
+    }
     if ('l1-handoff' -in $queue.Profile) {
         if ($dedicatedLane) { Request-Attention 'Serial handoff is disabled on lane VMs. No VM changes.' }
         $com = Get-VMComPort -VM $view.VM -Number 1
