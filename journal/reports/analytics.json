@@ -11,7 +11,8 @@
     "optical-capacity-136.json",
     "optical-discovery-137.json",
     "w04-loader-146.json",
-    "w04-return-147.json"
+    "w04-return-147.json",
+    "w04-worker-147.json"
   ],
   "benchmarks": []
 }

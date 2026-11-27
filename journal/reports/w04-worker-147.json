@@ -1,0 +1,22 @@
+{
+  "title": "W04 receiver repair on the host",
+  "records": [
+    {
+      "label": "W04 receiver refuses empty prior DVD",
+      "scope": "host",
+      "status": "passed",
+      "trial": "147",
+      "commit": "3523847a6c03",
+      "source": "journal/trials/147.md"
+    },
+    {
+      "label": "W04 revocation after checkpoint prevents mount",
+      "scope": "host",
+      "status": "passed",
+      "trial": "147",
+      "commit": "3523847a6c03",
+      "source": "journal/trials/147.md"
+    }
+  ],
+  "comparisons": []
+}
