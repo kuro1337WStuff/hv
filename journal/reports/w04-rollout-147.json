@@ -1,0 +1,22 @@
+{
+  "title": "Trial 147 bench A rollout and ordinary sender",
+  "records": [
+    {
+      "label": "W04 single live A worker after cutover",
+      "scope": "host",
+      "status": "passed",
+      "trial": "147",
+      "commit": "608d64e4a665",
+      "source": "journal/trials/147.md"
+    },
+    {
+      "label": "W04 ordinary sender boot admission",
+      "scope": "host",
+      "status": "held",
+      "trial": "147",
+      "commit": "608d64e4a665",
+      "source": "journal/trials/147.md"
+    }
+  ],
+  "comparisons": []
+}

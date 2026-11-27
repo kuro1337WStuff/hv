@@ -4,7 +4,7 @@ Development host: Ryzen 9 9950X. Firmware runs use the `HV-SVM-L1` Hyper-V VM; h
 
 **Start here:** [Current status, feature trials and integration order](status.md). The entries below describe the integrated baseline through 041. Later feature evidence is published on `main` independently of its implementation; see [how trials are published](project-workflow.md).
 
-**[147 · HandleProtocol return witness reserved; NOT RUN](trials/147.md).** The repaired worker rejected the empty DVD that the installed worker accepted in a host fixture. The frozen ISO is staged; A stayed Off with the 146 Saved checkpoint and all 18 checkpoint IDs. A-only rollout and one-boot admission are still required. No guest return or timing.
+**[147 · New bench A worker live; guest NOT RUN](trials/147.md).** The ordinary sender verified the new stage and frozen media but refused the retained STOP. No one-boot decision was enrolled. A remains Off with the same 18 checkpoints; the reservation is unspent.
 
 **[146 · Boot Manager called the HandleProtocol entry](trials/146.md).** After 23 post-entry instructions A stopped before executing the firmware routine. A follow-up matched the register call and the exact DXE entry using the frozen inputs. Neither a service return nor a Windows kernel start was observed.
 
