@@ -47,7 +47,7 @@ function Test-StageWriter([string]$Path) {
 # Internal fixture seam: SessionRoot must already be a trusted broker root.
 function Get-CurrentStageIdentity([string]$SessionRoot,[string]$RunnerWorker) {
     $ErrorActionPreference = 'Stop'
-    $reviewed = 'b1ec9193b5d93ad851c19a5a1eff545adfb8fd08f47393afcfa3f71c89fea6e2'
+    $reviewed = '3ed1922d5add73b2c8e2e653a7084c5078dd1aea5fab374ffe9055637a281938'
     Assert-StagePlainPath $SessionRoot
     $selected = $null
     $selectedGuard = $null
