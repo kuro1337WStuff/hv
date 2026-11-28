@@ -170,8 +170,20 @@ function Read-Worklist {
 }
 
 # All mutations use a fresh view of the originally selected VM and DVD, never a later name match.
-function Get-LabView([string]$ExpectedState, [string]$ExpectedPath) {
+# For the W04 transaction only, snapshot the observed identity into the caller's
+# event context. Clear the preceding view before querying; a failed read is unknown.
+function Get-LabView([string]$ExpectedState, [string]$ExpectedPath, $CheckpointEvidence) {
+    if ($null -ne $CheckpointEvidence) {
+        $CheckpointEvidence.viewStage = $CheckpointEvidence.stage
+        $CheckpointEvidence.observedVmId = $null
+        $CheckpointEvidence.liveParent = $null
+        $CheckpointEvidence.inventory = $null
+    }
     $vm = Get-VM -Id $vmId
+    if ($null -ne $CheckpointEvidence) {
+        $CheckpointEvidence.observedVmId = ConvertTo-W04Guid $vm.Id
+        $CheckpointEvidence.liveParent = ConvertTo-W04Guid $vm.ParentSnapshotId
+    }
     $location = [IO.Path]::GetFullPath($vm.ConfigurationLocation).TrimEnd('\')
     if ($vm.Id -ne $vmId -or $vm.Name -ne $vmName -or $vm.Generation -ne 2 -or
         ($location -ine $store -and !$location.StartsWith($store + '\', [StringComparison]::OrdinalIgnoreCase))) {
@@ -285,23 +297,72 @@ function Test-W04Request([string]$RunId, $Queue) {
     return $false
 }
 
-function Assert-W04Lineage($Release, $View, [guid]$NewId, [string]$PriorPath) {
-    # Under the A mutex: before checkpoint expect exactly the released set; afterward
-    # allow only the new Off child and require it to be the VM's current parent.
-    $all = @(Get-VMSnapshot -VM $View.VM)
-    $expected = @($Release.Ids)
-    $parent = [guid]$Release.SavedId
-    if ($expected.Count -ne 18 -or $expected -notcontains $parent.ToString() -or
-        $expected -notcontains ([guid]$Release.SavedParent).ToString()) { throw 'Invalid released inventory.' }
-    if ($NewId -ne [guid]::Empty) {
-        if ($expected -contains $NewId.ToString()) { throw 'Checkpoint is not new.' }
-        $expected += $NewId.ToString()
-        $parent = $NewId
+function ConvertTo-W04Guid($Value) {
+    # Only a scalar identity, never another property (e.g. VMId in place of Id),
+    # an enumerated collection, Guid.Empty, or arbitrary provider text.
+    if ($Value -is [guid]) {
+        if ($Value -ne [guid]::Empty) { return $Value }
+    } elseif ($Value -is [string]) {
+        $parsed = [guid]::Empty
+        if ([guid]::TryParseExact($Value,'D',[ref]$parsed) -and $parsed -ne [guid]::Empty) { return $parsed }
     }
-    $actual = @($all | ForEach-Object { ([guid]$_.Id).ToString() })
-    if ($View.VM.Id -ne $Release.VmId -or $View.VM.ParentSnapshotId -ne $parent -or
-        $actual.Count -ne $expected.Count -or @($all | Where-Object VMId -ne $Release.VmId).Count -or
-        @(Compare-Object $expected $actual).Count) { throw 'Released VM parent or inventory changed.' }
+}
+
+function Assert-W04Lineage($Release, $View, [guid]$NewId, [string]$PriorPath, $CheckpointEvidence) {
+    $priorIds = [Collections.Generic.HashSet[guid]]::new([guid[]]$Release.Ids)
+    if ($Release.Ids.Count -ne 18 -or $priorIds.Count -ne 18 -or !$priorIds.Contains($Release.SavedId) -or
+        !$priorIds.Contains($Release.SavedParent)) { throw 'Invalid released inventory.' }
+    $after = $NewId -ne [guid]::Empty
+    $expectedParent = if ($after) { $NewId } else { $Release.SavedId }
+    $all = @(Get-VMSnapshot -VM $View.VM)
+    $seenIds = [Collections.Generic.HashSet[guid]]::new()
+    # Deltas are relative to the pinned pre-release set, NOT a name match or
+    # a post-hoc reconstruction. Counts remain exact even beyond the sample cap.
+    $cap = 19
+    $d = [ordered]@{
+        count=$all.Count; addedCount=0; missingCount=0; foreignCount=0; duplicateCount=0
+        invalidIdCount=0; invalidOwnerCount=0; returnedOccurrences=0
+        addedIds=[Collections.Generic.List[guid]]::new(); missingIds=[Collections.Generic.List[guid]]::new()
+        foreign=[Collections.Generic.List[object]]::new(); duplicateIds=[Collections.Generic.List[guid]]::new()
+    }
+    foreach ($snap in $all) {
+        $snapId = ConvertTo-W04Guid $snap.Id
+        $ownerId = ConvertTo-W04Guid $snap.VMId
+        if ($null -eq $ownerId) { ++$d.invalidOwnerCount }
+        elseif ($ownerId -ne $Release.VmId) {
+            if ($d.foreignCount -lt $cap) { $d.foreign.Add([ordered]@{ id=$snapId; vmId=$ownerId }) }
+            ++$d.foreignCount
+        }
+        if ($null -eq $snapId) { ++$d.invalidIdCount; continue }
+        if ($after -and $snapId -eq $NewId) { ++$d.returnedOccurrences }
+        if (!$seenIds.Add($snapId)) {
+            if ($d.duplicateCount -lt $cap) { $d.duplicateIds.Add($snapId) }
+            ++$d.duplicateCount
+        } elseif (!$priorIds.Contains($snapId)) {
+            if ($d.addedCount -lt $cap) { $d.addedIds.Add($snapId) }
+            ++$d.addedCount
+        }
+    }
+    foreach ($priorId in $priorIds) {
+        if (!$seenIds.Contains($priorId)) {
+            $d.missingIds.Add($priorId) # released set is exactly 18
+            ++$d.missingCount
+        }
+    }
+    if ($null -ne $CheckpointEvidence) {
+        $CheckpointEvidence.inventory = $d
+        $observedId = $CheckpointEvidence.observedVmId
+        $observedParent = $CheckpointEvidence.liveParent
+    } else {
+        $observedId = ConvertTo-W04Guid $View.VM.Id
+        $observedParent = ConvertTo-W04Guid $View.VM.ParentSnapshotId
+    }
+    if ($observedId -ne $Release.VmId -or $observedParent -ne $expectedParent -or
+        $all.Count -ne (18 + [int]$after) -or $d.addedCount -ne [int]$after -or $d.missingCount -or
+        $d.foreignCount -or $d.duplicateCount -or $d.invalidIdCount -or $d.invalidOwnerCount -or
+        ($after -and ($priorIds.Contains($NewId) -or $d.returnedOccurrences -ne 1))) {
+        throw 'Released VM parent or inventory changed.'
+    }
     $saved = @($all | Where-Object Id -eq $Release.SavedId)
     if ($saved.Count -ne 1 -or $saved[0].Name -cne 'W04 146-R2 recovery' -or
         $saved[0].ParentSnapshotId -ne $Release.SavedParent -or [string]$saved[0].State -cne 'Saved' -or
@@ -349,41 +410,69 @@ function Invoke-W04Boot {
     Write-QueueEvent 'CHECKPOINT' "Saving the verified release as '$point'."
     Assert-W04Authority -Release $release
     Assert-QueueActive
-    $new = @(Checkpoint-VM -VM $view.VM -SnapshotName $point -Passthru -Confirm:$false)
-    if ($new.Count -ne 1 -or !$new[0].Id -or [guid]$new[0].Id -eq [guid]::Empty) {
-        throw 'Checkpoint identity uncertain; retain intent. Do not retry.'
+    # Error evidence is an ordinary run event, not a protected receipt. Null
+    # means not observed or not a usable GUID; never read the host in the catch.
+    $evidence = [ordered]@{
+        stage='checkpoint.call'; returnCount=$null; returnedId=$null; returnedVmId=$null
+        expectedVmId=$release.VmId; savedId=$release.SavedId; releasedCount=$release.Ids.Count
+        expectedCount=($release.Ids.Count + 1); expectedAddedCount=1
+        viewStage=$null; observedVmId=$null; liveParent=$null; inventory=$null
     }
-    $id = [guid]$new[0].Id
-    # The cmdlet's returned GUID is not a verified child. Re-read first, even
-    # after revocation: this observes a completed action and permits no new one.
-    $view = Get-LabView 'Off' $priorPath
-    Assert-W04Lineage $release $view $id $priorPath
-    Write-W04Receipt -Release $release -Phase checkpoint -CheckpointId $id
-    Write-QueueEvent 'NEXT' 'Five seconds to stop before mounting the reserved image.'
-    Wait-Interruptible 5000
-    $view = Get-LabView 'Off' $priorPath
-    Assert-W04Lineage $release $view $id $priorPath
-    Write-QueueEvent 'MOUNT' "Mounting the frozen $profile media; SHA256=$candidate"
-    Assert-W04Authority -Release $release
-    Assert-QueueActive
-    Set-VMDvdDrive -VMDvdDrive $view.DVD -Path $target -Confirm:$false
-    $view = Get-LabView 'Off' $target
-    Write-W04Receipt -Release $release -Phase mount -CheckpointId $id
-    Assert-W04Lineage $release $view $id $priorPath
-    Assert-W04Authority -Release $release
-    Assert-QueueActive
-    Set-VMFirmware -VM $view.VM -FirstBootDevice $view.DVD -Confirm:$false
-    $view = Get-LabView 'Off' $target
-    $order = @((Get-VMFirmware -VM $view.VM).BootOrder)
-    if (!$order.Count -or $order[0].Device.Id -ne $driveId) { throw 'Firmware did not select the reserved DVD.' }
-    Write-W04Receipt -Release $release -Phase firmware -CheckpointId $id
-    Assert-W04Lineage $release $view $id $priorPath
-    Write-QueueEvent 'BOOT' 'Starting the reserved W04 return witness once.'
-    Assert-W04Authority -Release $release
-    Assert-QueueActive
-    Start-VM -VM $view.VM -Confirm:$false
-    $null = Get-LabView 'Running' $target
-    Write-W04Receipt -Release $release -Phase boot -CheckpointId $id
+    try {
+        $new = @(Checkpoint-VM -VM $view.VM -SnapshotName $point -Passthru -Confirm:$false)
+        $evidence.stage = 'checkpoint.return'
+        $evidence.returnCount = $new.Count
+        if ($new.Count -eq 1) {
+            $evidence.returnedId = ConvertTo-W04Guid $new[0].Id
+            $evidence.returnedVmId = ConvertTo-W04Guid $new[0].VMId
+        }
+        if ($null -eq $evidence.returnedId) { throw 'Checkpoint identity uncertain; retain intent. Do not retry.' }
+        $id = $evidence.returnedId
+        # Verify even after revocation: observing a completed action permits no new one.
+        $evidence.stage = 'checkpoint.verify'
+        $view = Get-LabView 'Off' $priorPath $evidence
+        Assert-W04Lineage $release $view $id $priorPath $evidence
+        if ($evidence.returnedVmId -ne $release.VmId) { throw 'Uncorroborated checkpoint return owner.' }
+        $evidence.stage = 'checkpoint.receipt'
+        Write-W04Receipt -Release $release -Phase checkpoint -CheckpointId $id
+        $evidence.stage = 'mount.guard'
+        Write-QueueEvent 'NEXT' 'Five seconds to stop before mounting the reserved image.'
+        Wait-Interruptible 5000
+        $view = Get-LabView 'Off' $priorPath $evidence
+        Assert-W04Lineage $release $view $id $priorPath $evidence
+        Write-QueueEvent 'MOUNT' "Mounting the frozen $profile media; SHA256=$candidate"
+        Assert-W04Authority -Release $release
+        Assert-QueueActive
+        $evidence.stage = 'mount.call'
+        Set-VMDvdDrive -VMDvdDrive $view.DVD -Path $target -Confirm:$false
+        $evidence.stage = 'mount.verify'
+        $view = Get-LabView 'Off' $target $evidence
+        Write-W04Receipt -Release $release -Phase mount -CheckpointId $id
+        Assert-W04Lineage $release $view $id $priorPath $evidence
+        $evidence.stage = 'firmware.guard'
+        Assert-W04Authority -Release $release
+        Assert-QueueActive
+        $evidence.stage = 'firmware.call'
+        Set-VMFirmware -VM $view.VM -FirstBootDevice $view.DVD -Confirm:$false
+        $evidence.stage = 'firmware.verify'
+        $view = Get-LabView 'Off' $target $evidence
+        $order = @((Get-VMFirmware -VM $view.VM).BootOrder)
+        if (!$order.Count -or $order[0].Device.Id -ne $driveId) { throw 'Firmware did not select the reserved DVD.' }
+        Write-W04Receipt -Release $release -Phase firmware -CheckpointId $id
+        Assert-W04Lineage $release $view $id $priorPath $evidence
+        $evidence.stage = 'boot.guard'
+        Write-QueueEvent 'BOOT' 'Starting the reserved W04 return witness once.'
+        Assert-W04Authority -Release $release
+        Assert-QueueActive
+        $evidence.stage = 'boot.call'
+        Start-VM -VM $view.VM -Confirm:$false
+        $evidence.stage = 'boot.verify'
+        $null = Get-LabView 'Running' $target $evidence
+        Write-W04Receipt -Release $release -Phase boot -CheckpointId $id
+    } catch {
+        Write-QueueEvent 'W04_OBSERVATION' (ConvertTo-Json -InputObject $evidence -Depth 5 -Compress)
+        throw
+    }
 }
 
 try {

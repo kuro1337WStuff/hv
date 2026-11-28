@@ -8,7 +8,7 @@ $worker = [IO.Path]::Combine([IO.Path]::GetDirectoryName($PSScriptRoot), 'Invoke
 $tokens = $errors = $null
 $ast = [Management.Automation.Language.Parser]::ParseFile($worker, [ref]$tokens, [ref]$errors)
 if ($errors.Count) { throw ($errors -join "`n") }
-foreach ($name in 'Request-Attention','Get-LabView','Test-W04Request','Assert-W04Lineage','Invoke-W04Boot') {
+foreach ($name in 'Request-Attention','Write-QueueEvent','Get-LabView','Test-W04Request','ConvertTo-W04Guid','Assert-W04Lineage','Invoke-W04Boot') {
     $def = @($ast.EndBlock.Statements | Where-Object {
         $_ -is [Management.Automation.Language.FunctionDefinitionAst] -and $_.Name -ceq $name
     })
@@ -39,7 +39,11 @@ foreach ($r in @(
 
 # Model reads independently of what the production guard expects. Only the synthetic
 # VM changes when a mutator runs. Log attempts BEFORE validating their arguments.
-function Get-VM($Id) { if ($Id -ne $fx.VM.Id) { throw 'Fixture: wrong VM lookup' }; $fx.VM }
+function Get-VM($Id) {
+    if ($Id -ne $fx.VM.Id) { throw 'Fixture: wrong VM lookup' }
+    ++$fx.VmReads
+    $fx.VM
+}
 function Assert-PlainPath($Path) { if ($Path -ine $store) { throw 'Fixture: unexpected store' } }
 function Get-VMProcessor($VM) { [pscustomobject]@{ Count=2; ExposeVirtualizationExtensions=$true } }
 function Get-VMNetworkAdapter($VM) {}
@@ -48,6 +52,7 @@ function Get-VMComPort($VM) {}
 function Get-VMFirmware($VM) { [pscustomobject]@{ SecureBoot='Off'; BootOrder=@([pscustomobject]@{ Device=$fx.First }) } }
 function Get-VMSnapshot($VM) {
     if ($VM -ne $fx.VM) { throw 'Fixture: wrong snapshot lookup' }
+    ++$fx.SnapshotReads
     $fx.Snapshots.ToArray()
 }
 function Get-VMDvdDrive($VM,$VMSnapshot) {
@@ -91,9 +96,6 @@ function Write-W04Receipt($Release,$Phase,$CheckpointId) {
     $fx.Receipts.Add($Phase)
     $fx.Trace.Add("receipt:$Phase")
 }
-function Write-QueueEvent($State,$Detail) {
-    if ($State -eq 'PASS') { throw 'Fixture: boot is not a console verdict' }
-}
 function New-Snapshot($Id,$Parent,$State,$Name,$Path) {
     [pscustomobject]@{ Id=$Id; VMId=$fx.VM.Id; ParentSnapshotId=$Parent; State=$State;
         SnapshotType='Standard'; Name=$Name; DvdPath=$Path }
@@ -103,6 +105,25 @@ function Checkpoint-VM($VM,$SnapshotName,[switch]$Passthru,$Confirm) {
     if ($VM -ne $fx.VM -or !$Passthru -or $SnapshotName -cne $point) { throw 'Fixture: wrong checkpoint arguments' }
     $s = New-Snapshot ([guid]::NewGuid()) $VM.ParentSnapshotId $VM.State $SnapshotName $fx.Disc.Path
     $fx.Snapshots.Add($s); $VM.ParentSnapshotId = $s.Id
+    $fx.CreatedId = $s.Id
+    switch ($fx.Case) {
+        'post foreign owner' { $fx.Snapshots[0].VMId = $fx.OtherId }
+        'post substituted ID' { $fx.Snapshots[0].Id = $fx.OtherId }
+        'post duplicate ID' { $fx.Snapshots[0].Id = $fx.Snapshots[1].Id }
+        'post stale parent' { $VM.ParentSnapshotId = $s.ParentSnapshotId }
+        'post excess rows' {
+            for ($j = 0; $j -lt 24; ++$j) { $fx.Snapshots.Add($fx.Snapshots[0]) }
+        }
+        'post unknown owner' { $fx.Snapshots[0].VMId = $null }
+        'post malformed ID' { $fx.Snapshots[0].Id = 'private-provider-data' }
+        'post different returned ID' { return [pscustomobject]@{ Id=$fx.OtherId; VMId=$VM.Id } }
+        'post foreign return' { return [pscustomobject]@{ Id=$s.Id; VMId=$fx.OtherId } }
+        'post unknown return' { return [pscustomobject]@{ VMId=$VM.Id; SnapshotName=$SnapshotName } }
+        'post invalid return' { return [pscustomobject]@{ Id='private-provider-data'; VMId=$VM.Id } }
+        'post collection return' { return [pscustomobject]@{ Id=[guid[]]@($s.Id); VMId=$VM.Id } }
+        'post ambiguous return' { return $s,$fx.Snapshots[0] }
+        'post cmdlet error' { throw 'Synthetic provider exception after checkpoint effect' }
+    }
     if ($fx.RevokeAtCheckpoint) { $fx.Revoked = $true }
     if ($fx.ReturnStaleId) { return $fx.Snapshots[0] }
     $s
@@ -131,8 +152,10 @@ function Invoke-Case($Case) {
     $priorPath = Join-Path $media ("hv-$loader-" + $loaderHash.ToUpperInvariant() + '.iso')
     $returnPath = Join-Path $media ("hv-$candidate-" + $returnHash.ToUpperInvariant() + '.iso')
     $queue = @([pscustomobject]@{ Profile=$candidate; Digest=$returnHash; Path=$returnPath })
+    $events = [IO.StringWriter]::new()
     $fx = @{
         Authorized=$true; Revoked=$false; Stopped=$false; Spent=$false; RevokeAtCheckpoint=$false
+        Case=$Case; OtherId=[guid]::NewGuid(); VmReads=0; SnapshotReads=0
         Actions=[Collections.Generic.List[string]]::new(); Trace=[Collections.Generic.List[string]]::new()
         Receipts=[Collections.Generic.List[string]]::new(); Snapshots=[Collections.Generic.List[object]]::new()
         Disc=[pscustomobject]@{ Id=$driveId; Path=$priorPath }
@@ -149,6 +172,7 @@ function Invoke-Case($Case) {
     $fx.Snapshots.Add($saved); $fx.VM.ParentSnapshotId = $saved.Id
     $fx.Release = @{ Ids=[string[]]$ids; VmId=$vmId; SavedId=$ids[17]; SavedParent=$ids[16] }
     switch ($Case) {
+        'valid typed IDs' { $fx.Release.Ids = [guid[]]$ids }
         'empty drive' { $fx.Disc.Path = '' }
         'different DVD' { $fx.Disc.Path = $returnPath }
         'same stem wrong digest' { $fx.Disc.Path = Join-Path $media "hv-$loader-$otherHash.iso" }
@@ -184,21 +208,69 @@ function Invoke-Case($Case) {
     }
     $point = "HvQueue before $runId"
     $failed = $false
-    try { Invoke-W04Boot } catch {
-        if ($Case -eq 'valid' -or $_.FullyQualifiedErrorId -ne $_.Exception.Message -or $_.Exception.Message -like 'Fixture:*') { throw }
+    try { Invoke-W04Boot 6>$null } catch {
+        if ($Case -like 'valid*' -or $_.FullyQualifiedErrorId -ne $_.Exception.Message -or $_.Exception.Message -like 'Fixture:*') { throw }
         if ($Case -eq 'revoke after checkpoint' -and $_.Exception.Message -cne 'Synthetic missing or revoked authority') { throw }
         $failed = $true
     }
+    $rows = @($events.ToString().Split([char]10) | Where-Object { $_.Trim() } | ForEach-Object { ConvertFrom-Json $_ })
+    $events.Dispose()
+    if (@($rows | Where-Object state -ceq 'PASS').Count) { throw 'Boot is not a console verdict' }
+    $obs = @($rows | Where-Object state -ceq 'W04_OBSERVATION')
     $actions = $fx.Actions -join ':'
-    if ($Case -eq 'valid') {
+    if ($Case -like 'valid*') {
+        if ($obs.Count) { throw 'Unexpected failure evidence for ordered transition' }
         $expected = 'receipt:intent:checkpoint:receipt:checkpoint:mount:receipt:mount:firmware:receipt:firmware:boot:receipt:boot'
         if (!$fx.Waited -or ($fx.Trace -join ':') -cne $expected -or $fx.VM.State -cne 'Running' -or $fx.Disc.Path -ine $returnPath) {
             throw "Invalid successful transition: $($fx.Trace -join ':')"
         }
-    } elseif ($Case -eq 'ambiguous child receipt') {
-        if (!$failed -or ($fx.Trace -join ':') -cne 'receipt:intent:checkpoint') {
-            throw 'Uncorroborated checkpoint result received a durable identity receipt'
+    } elseif ($Case -like 'post *' -or $Case -eq 'ambiguous child receipt') {
+        if (!$failed -or ($fx.Trace -join ':') -cne 'receipt:intent:checkpoint' -or !$fx.CreatedId -or
+            $fx.VM.State -cne 'Off' -or $fx.Disc.Path -ine $priorPath -or $obs.Count -ne 1) {
+            throw "Checkpoint effect not contained and recorded once: $Case"
         }
+        if ($obs[0].detail.Contains('private-provider-data')) { throw "Unbounded provider text in observation: $Case" }
+        $e = ConvertFrom-Json $obs[0].detail
+        if ($e.expectedVmId -ne $vmId.ToString() -or $e.savedId -ne $ids[17].ToString() -or
+            $e.releasedCount -ne 18 -or $e.expectedCount -ne 19 -or $e.expectedAddedCount -ne 1) {
+            throw "Wrong release baseline in observation: $Case"
+        }
+        if ($Case -in 'post cmdlet error','post ambiguous return','post invalid return','post collection return','post unknown return') {
+            $stage = if ($Case -eq 'post cmdlet error') { 'checkpoint.call' } else { 'checkpoint.return' }
+            $n = switch ($Case) { 'post cmdlet error' { $null }; 'post ambiguous return' { 2 }; default { 1 } }
+            if ($e.stage -cne $stage -or $e.returnCount -ne $n -or $null -ne $e.returnedId -or
+                $null -ne $e.viewStage -or $null -ne $e.observedVmId -or $null -ne $e.liveParent -or $null -ne $e.inventory -or
+                $fx.VmReads -ne 2 -or $fx.SnapshotReads -ne 2) { throw "Invented readback or identity for $Case" }
+            return
+        }
+        $returned = switch ($Case) {
+            'ambiguous child receipt' { $ids[0] }; 'post different returned ID' { $fx.OtherId }; default { $fx.CreatedId }
+        }
+        $returnOwner = if ($Case -eq 'post foreign return') { $fx.OtherId } else { $vmId }
+        $liveParent = if ($Case -eq 'post stale parent') { $ids[17] } else { $fx.CreatedId }
+        if ($e.stage -cne 'checkpoint.verify' -or $e.viewStage -cne $e.stage -or $e.returnCount -ne 1 -or
+            $e.returnedId -ne $returned.ToString() -or $e.returnedVmId -ne $returnOwner.ToString() -or
+            $e.observedVmId -ne $vmId.ToString() -or $e.liveParent -ne $liveParent.ToString() -or
+            $fx.VmReads -ne 3 -or $fx.SnapshotReads -ne 3) { throw "Wrong point-in-time readback for $Case" }
+        $d = $e.inventory
+        $extra = if ($Case -eq 'post excess rows') { 24 } else { 0 }
+        $added = if ($Case -eq 'post substituted ID') { @($fx.OtherId,$fx.CreatedId) } else { $fx.CreatedId }
+        $missing = $Case -in 'post substituted ID','post duplicate ID','post malformed ID'
+        $duplicates = $extra + [int]($Case -eq 'post duplicate ID')
+        if ($d.count -ne (19 + $extra) -or $d.addedCount -ne @($added).Count -or
+            ($d.addedIds -join ':') -ne ($added -join ':') -or $d.missingCount -ne [int]$missing -or
+            $d.missingIds.Length -ne [int]$missing -or ($missing -and $d.missingIds[0] -ne $ids[0].ToString()) -or
+            $d.returnedOccurrences -ne [int]($Case -ne 'post different returned ID') -or
+            $d.duplicateCount -ne $duplicates -or $d.duplicateIds.Length -ne [Math]::Min(19,$duplicates) -or
+            $d.invalidIdCount -ne [int]($Case -eq 'post malformed ID') -or $d.invalidOwnerCount -ne [int]($Case -eq 'post unknown owner') -or
+            $d.foreignCount -ne [int]($Case -eq 'post foreign owner') -or $d.foreign.Length -ne $d.foreignCount) {
+            throw "Wrong released-set deltas for $Case"
+        }
+        if ($d.foreignCount -and ($d.foreign[0].id -ne $ids[0].ToString() -or $d.foreign[0].vmId -ne $fx.OtherId.ToString())) {
+            throw 'Foreign snapshot or its owner misidentified'
+        }
+        $dupId = if ($extra) { $ids[0] } else { $ids[1] }
+        foreach ($v in $d.duplicateIds) { if ($v -ne $dupId.ToString()) { throw "Wrong duplicate ID: $Case" } }
     } elseif ($Case -eq 'revoke after checkpoint') {
         if (!$failed -or ($fx.Trace -join ':') -cne 'receipt:intent:checkpoint:receipt:checkpoint') {
             throw "Checkpoint revocation was not contained: $($fx.Trace -join ':')"
@@ -209,7 +281,10 @@ foreach ($c in 'valid','empty drive','different DVD','same stem wrong digest','e
     'wrong saved parent','wrong live parent','wrong saved DVD','wrong VM','wrong snapshot owner','running VM',
     'unapproved','revoked','run STOP','busy mutex','abandoned mutex','spent intent','intent race','prior run checkpoint','wrong run','wrong digest',
     'direct mode','different lane','diagnostic PASS pin','occupied lease',
-    'wrong candidate path','wrong profile','extra item','bad loader bytes','bad return bytes','ambiguous child receipt','revoke after checkpoint') {
+    'wrong candidate path','wrong profile','extra item','bad loader bytes','bad return bytes','ambiguous child receipt','revoke after checkpoint',
+    'valid typed IDs','post foreign owner','post substituted ID','post duplicate ID','post excess rows','post stale parent',
+    'post different returned ID','post foreign return','post unknown return','post invalid return','post collection return',
+    'post ambiguous return','post unknown owner','post malformed ID','post cmdlet error') {
     Invoke-Case $c
 }
-'W04 isolated receiver: routing, four ordered mutations and receipts, zero-action refusals and checkpoint revocation verified.'
+'W04 isolated receiver: ordered mutations and receipts, zero-action refusals, bounded checkpoint observations and partial-state containment verified.'
