@@ -4,7 +4,7 @@ Development host: Ryzen 9 9950X. Firmware runs use the `HV-SVM-L1` Hyper-V VM; h
 
 **Start here:** [Current status, feature trials and integration order](status.md). The entries below describe the integrated baseline through 041. Later feature evidence is published on `main` independently of its implementation; see [how trials are published](project-workflow.md).
 
-**[147 · One-shot sender checked; no boot](trials/147.md#2026-11-27--scoped-sender-verified-no-owner-decision-no-boot).** Host fixtures passed. The actual sender stopped before claim because no independent one-boot decision was enrolled. A remains Off with the same 18 checkpoints; the reservation is unspent.
+**[147 · Bench A checkpoint created; guest not booted](trials/147.md#checkpoint-reconciliation).** The authorized sender submitted once. The receiver stopped during checkpoint verification before mounting the frozen image. A is Off with 19 checkpoints; the reservation is spent.
 
 **[146 · Boot Manager called the HandleProtocol entry](trials/146.md).** After 23 post-entry instructions A stopped before executing the firmware routine. A follow-up matched the register call and the exact DXE entry using the frozen inputs. Neither a service return nor a Windows kernel start was observed.
 
