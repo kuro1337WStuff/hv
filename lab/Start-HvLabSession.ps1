@@ -268,7 +268,7 @@ public static class HvSessionDirectory {
     $directoryLocks.Add((Lock-Directory (Join-Path $root 'build\runs')))
     $worker = Join-Path $private 'Invoke-HvQueue.ps1'
     $trusted = @{
-        'Invoke-HvQueue.ps1'='3ed1922d5add73b2c8e2e653a7084c5078dd1aea5fab374ffe9055637a281938'
+        'Invoke-HvQueue.ps1'='d2690c4b671405134e431f4066791b8ccb77d9d53e42c28a6fc965dbee347a70'
         'HvW04Release.ps1'='bb8efcd85f1095d0b405e8f095017efc073a9ab94f5702b63a9e850a4b1756b7'
         'Receive-HvHandoff.ps1'='87780e5797d51dd3f74ba1815491dbcf52f74d767d8a301f6b9fd2eb1084641b'
         'HvConsole.ps1'='921c4638be60b02d76930a7a881bb376a8fe599c61c6d8f5b3b3d36ca2510275'
